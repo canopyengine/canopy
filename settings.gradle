@@ -1,0 +1,15 @@
+plugins {
+  // Applies the foojay-resolver plugin to allow automatic download of JDKs.
+  id("org.gradle.toolchains.foojay-resolver-convention") version "1.0.0"
+}
+
+// Main modules
+include 'core'
+include 'input'
+include 'graphics'
+include 'physics'
+include 'io'
+
+// Backends - to be removed in future phases
+include 'lwjgl3'
+include 'libgdx'

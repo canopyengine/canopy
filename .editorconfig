@@ -1,0 +1,25 @@
+root = true
+
+[*]
+indent_style = space
+end_of_line = lf
+charset = utf-8
+trim_trailing_whitespace = true
+insert_final_newline = true
+
+[*.{java,scala,groovy,kt,kts}]
+indent_size = 4
+ij_continuation_indent_size = 4
+max_line_length = 120
+ij_kotlin_allow_trailing_comma = true
+ij_kotlin_imports_layout = *,java.**,javax.**,kotlin.**
+ktlint_standard_no-wildcard-imports = disabled
+ktlint_standard_no-consecutive-comments = disabled
+
+[*.md]
+trim_trailing_whitespace = false
+
+[*.gradle]
+indent_size = 2
+# Default import ordering rule
+ktlint_standard_import-ordering = enabled
