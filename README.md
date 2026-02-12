@@ -1,9 +1,19 @@
-# Canopy
-Canopy Engine - node-driven game engine powered by Kotlin.
 
-[//]: # ([![GitHub Actions Build Status]&#40;https://img.shields.io/github/actions/workflow/status/libgdx/libgdx/build-publish.yml?branch=master&label=GitHub%20Actions&#41;]&#40;https://github.com/libgdx/libgdx/actions?query=workflow%3A%22Build+and+Publish%22&#41;)
+<p align="center">
+  <a href="https://github.com/canopyengine/canopy">
+    <img src="docs/assets/canopy-logo.png" width="500" alt="Canopy Engine logo">
+  </a>
+</p>
 
-[//]: # ([![Latest Version]&#40;https://img.shields.io/nexus/r/com.badlogicgames.gdx/gdx?nexusVersion=2&server=https%3A%2F%2Foss.sonatype.org&label=Version&#41;]&#40;https://search.maven.org/artifact/com.badlogicgames.gdx/gdx&#41;)
+# Canopy Engine -
+[![License](https://img.shields.io/badge/license-MIT-blue.svg)](https://github.com/canopyengine/canopy#license)
 
-[//]: # ([![Snapshots]&#40;https://img.shields.io/nexus/s/com.badlogicgames.gdx/gdx?server=https%3A%2F%2Foss.sonatype.org&label=Snapshots&#41;]&#40;https://oss.sonatype.org/#nexus-search;gav~com.badlogicgames.gdx~gdx~~~~kw,versionexpand&#41;)
+[//]: # ([![Crates.io]&#40;https://img.shields.io/crates/v/bevy.svg&#41;]&#40;https://crates.io/crates/bevy&#41;)
+[//]: # ([![Downloads]&#40;https://img.shields.io/crates/d/bevy.svg&#41;]&#40;https://crates.io/crates/bevy&#41;)
+[//]: # ([![Docs]&#40;https://docs.rs/bevy/badge.svg&#41;]&#40;https://docs.rs/bevy/latest/bevy/&#41;)
+[![CI](https://github.com/bevyengine/bevy/workflows/CI/badge.svg)](https://github.com/canopyengine/canopy/actions)
+
+---
+
+# License
 
