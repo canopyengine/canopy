@@ -4,12 +4,13 @@ plugins {
 }
 
 // Main modules
-include 'core'
-include 'input'
-include 'graphics'
-include 'physics'
-include 'io'
+include 'canopy-core'
+include 'canopy-input'
+include 'canopy-graphics'
+include 'canopy-physics'
 
 // Backends - to be removed in future phases
-include 'lwjgl3'
-include 'libgdx'
+include 'canopy-backends'
+
+include 'canopy-utils'
+include 'canopy-data'
