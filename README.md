@@ -27,6 +27,8 @@
 It's designed to be a **Kotlin-native** game engine built on **declarative** and **composition**-based principles, and to provide a **simple yet 
 powerful** set of tools for developing your own games!
 
+Check the [docs](docs/technical/index.md)!
+
 ## ⚠️ Work in progress ⚠️
 
 Canopy is still a work in progress, and the **current version** is still unusable. Following the next weeks, the goal will be to
@@ -61,7 +63,30 @@ Each node has its own purpose, so you can have:
 * **Much more**!
 * Even you can create **custom nodes** if need be!
 
-You can then mix-and-match nodes to form the structure of your scene
+You can then weave them together to create your game, and even reuse them across different scenes!
+
+```kotlin
+// 0. Create a scene with a root node
+EmptyNode("root") {
+    // 1. Import custom nodes and scenes
+    Player(position = Vector2(10f, 10f))
+
+    // Static Logo
+    StaticBody2D(
+        // 2. Set nodes properties
+        "static-logo-area",
+        position = Vector2(-200f, 200f),
+        // ...
+    ) {
+        // 3. Add child nodes
+        Collider2D("collider", shape = CircleShape2D(50f))
+        
+        Sprite2D("logo-2", texture = image)
+    }
+
+    StaticBody2D(/* props... */) {/* children... */}
+}
+```
 
 **Minimum Supported Kotlin Version**: **2.3.10**
 
