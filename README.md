@@ -4,16 +4,14 @@
 
 <p align="center">
   <a href="https://github.com/canopyengine/canopy">
-    <img src="docs/assets/canopy-logo.png" width="501" alt="Canopy Engine logo">
+    <img src="docs/assets/canopy-logo.png" width="400" alt="Canopy Engine logo">
   </a>
 </p>
 
 ## 🌲 Node-based declarative game engine built in Kotlin 🌲 
 
-[![License](https://img.shields.io/badge/license-MIT-blue.svg)](https://github.com/canopyengine/canopy#license) 
-[![Kotlin](https://img.shields.io/github/v/release/JetBrains/kotlin?label=kotlin&logo=kotlin)](https://github.com/JetBrains/kotlin/releases/tag/v2.3.10)
-
-
+[![License](https://img.shields.io/badge/license-MIT-blue.svg)](https://github.com/canopyengine/canopy#license)
+![Version](https://img.shields.io/badge/version-0.0.1-red.svg)
 
 [//]: # ([![Crates.io]&#40;https://img.shields.io/crates/v/bevy.svg&#41;]&#40;https://crates.io/crates/bevy&#41;)
 [//]: # ([![Downloads]&#40;https://img.shields.io/crates/d/bevy.svg&#41;]&#40;https://crates.io/crates/bevy&#41;)
@@ -22,78 +20,38 @@
 
 ---
 
-**[Canopy](https://github.com/canopyengine/canopy) is a node-based, declarative game engine built in 
-[Kotlin](https://kotlinlang.org/), on top of the [LibGDX](https://libgdx.com/) framework and inspired by [Godot](https://godotengine.org).** 
-It's designed to be a **Kotlin-native** game engine built on **declarative** and **composition**-based principles, and to provide a **simple yet 
-powerful** set of tools for developing your own games!
+**[Canopy](https://github.com/canopyengine/canopy) is a node-based, declarative 2D game engine built in 
+[Kotlin](https://kotlinlang.org/), on top of the [LibGDX](https://libgdx.com/) framework and inspired by [Godot](https://godotengine.org).**
+It's designed to be **Kotlin-native**, built with declarative APIs, node composition, and reactive patterns in mind to
+create games in a clean, expressive, and maintainable way.
 
-Check the [docs](docs/technical/index.md)!
+**Canopy** focuses on delivering a **simple yet powerful** experience, giving developers the flexibility to build complex 
+systems without sacrificing clarity or control.
+
+[Oficial docs](http://github.com/canopyengine/canopy-docs)
+
+---
+
+## Design Goals
+
+* Capable: Offer a complete set of 2D tools.
+* Simple: Easy for beginners, flexible for experienced users.
+* Modular: Use only what you need, replace what you don't.
+* Fast: Your game should feel quick and snappy.
+* Productive: Dev experience should be quick, and not bound by long compilation times.
+
+---
 
 ## ⚠️ Work in progress ⚠️
 
-Canopy is still a work in progress, and the **current version** is still unusable. Following the next weeks, the goal will be to
-release a **Headless Version** capable of running the core features in the **terminal**.
+**Canopy** is still a **work in progress**, and the **current version** is still unusable as is. Following the next weeks, the goal 
+will be to release a **Headless Version** capable of running the core features in the **terminal**.
 
-### Previous Stable Version(As part of a project, not yet a library)
+---
 
-For documentation purposes, the **latest stable version** of **Canopy** was as part of code on a **LibGDX-Kotlin game project**.
-There, we designed the first versions of the following features:
-
-### Scenes and Nodes (Welcome Godot lovers)
-Every level, character, object, UI, menu, and even text can be described as a Scene. Think of it as a container for a part
-of your game. 
-
-Equivalent to:
-* **_Unity and Unreal_**: levels/prefabs 
-* **_Godot_**: scenes
-
-A scene is made of a number of components is a **tree-hierarchy**, so you can have **children-parent** relations between
-them. These components are called **Nodes**!
-
-Equivalent to:
-* **_Unity_**: GameObjects with Components
-* **_Unreal_**: Actors/Components hierarchy
-* **_Godot_**: nodes
-
-Each node has its own purpose, so you can have:
-
-* **Animation** nodes - for managing and playing animations 🎞️
-* **Physics** nodes - for handling things like collisions, area detections, or even ray-casts 💥
-* **Visual** nodes - for displaying things like sprites
-* **Much more**!
-* Even you can create **custom nodes** if need be!
-
-You can then weave them together to create your game, and even reuse them across different scenes!
-
-```kotlin
-// 0. Create a scene with a root node
-EmptyNode("root") {
-    // 1. Import custom nodes and scenes
-    Player(position = Vector2(10f, 10f))
-
-    // Static Logo
-    StaticBody2D(
-        // 2. Set nodes properties
-        "static-logo-area",
-        position = Vector2(-200f, 200f),
-        // ...
-    ) {
-        // 3. Add child nodes
-        Collider2D("collider", shape = CircleShape2D(50f))
-        
-        Sprite2D("logo-2", texture = image)
-    }
-
-    StaticBody2D(/* props... */) {/* children... */}
-}
-```
-
-**Minimum Supported Kotlin Version**: **2.3.10**
+#### **Minimum Supported Kotlin Version**: **2.3.10**
 
 > **Canopy** development aims to follow **Kotlin**'s improvements, so the minimum 
 supported version will usually be the latest **stable** version.
 
----
-
-# License
 
