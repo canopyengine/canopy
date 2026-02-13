@@ -4,7 +4,7 @@
 
 <p align="center">
   <a href="https://github.com/canopyengine/canopy">
-    <img src="docs/assets/canopy-logo.png" width="400" alt="Canopy Engine logo">
+    <img src="docs/assets/canopy-logo-no-bg.png" width="350" alt="Canopy Engine logo">
   </a>
 </p>
 
@@ -44,8 +44,9 @@ systems without sacrificing clarity or control.
 
 ## ⚠️ Work in progress ⚠️
 
-**Canopy** is still a **work in progress**, and the **current version** is still unusable as is. Following the next weeks, the goal 
-will be to release a **Headless Version** capable of running the core features in the **terminal**.
+**Canopy** is still a **work in progress**, and the **current version** is still unusable as is. Following the next weeks, 
+the goal will be to release a **Headless Version** capable of running the core features in the **terminal**. 
+See more details [here](https://github.com/canopyengine/canopy-docs/blob/main/docs/roadmap.md).
 
 ---
 
