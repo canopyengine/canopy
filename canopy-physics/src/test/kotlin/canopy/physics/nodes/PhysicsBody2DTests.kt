@@ -1,8 +1,6 @@
 package canopy.physics.nodes
 
 import canopy.backends.test.TestHeadlessCanopyGame
-import canopy.core.managers.InjectionManager
-import canopy.core.managers.ManagersRegistry
 import canopy.core.nodes.SceneManager
 import canopy.physics.nodes.body.DynamicBody2D
 import canopy.physics.nodes.fixture.Area2D
@@ -21,25 +19,17 @@ class PhysicsBody2DTests {
     companion object {
         @BeforeAll
         @JvmStatic
-        fun setup() {
+        fun setupHeadlessApplication() {
             val sceneManager =
                 SceneManager {
                     PhysicsSystem()
                 }
-            ManagersRegistry.apply {
-                register(InjectionManager())
-                register(sceneManager)
-            }
-
-            sceneManager.setup()
-
-            sceneManager.getSystem(PhysicsSystem::class).replaceWorld()
-        }
-
-        @BeforeAll
-        @JvmStatic
-        fun setupHeadlessApplication() {
-            TestHeadlessCanopyGame().launch()
+            TestHeadlessCanopyGame(
+                sceneManager,
+                onCreate = {
+                    it.getSystem(PhysicsSystem::class).replaceWorld()
+                },
+            ).launch()
         }
     }
 

@@ -1,7 +1,8 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<testsuite name="canopy.physics.nodes.PhysicsBody2DTests" tests="1" skipped="0" failures="0" errors="0" timestamp="2026-02-16T14:25:52.204Z" hostname="APOLLO" time="0.159">
+<testsuite name="canopy.physics.nodes.PhysicsBody2DTests" tests="1" skipped="0" failures="0" errors="0" timestamp="2026-02-16T19:35:18.016Z" hostname="APOLLO" time="0.144">
   <properties/>
-  <testcase name="fixture should add shape()" classname="canopy.physics.nodes.PhysicsBody2DTests" time="0.046"/>
-  <system-out><![CDATA[]]></system-out>
+  <testcase name="fixture should add shape()" classname="canopy.physics.nodes.PhysicsBody2DTests" time="0.045"/>
+  <system-out><![CDATA[[INFO] canopy.core.managers.ManagersRegistry - Bootstrapping managers[registered: 2]...
+]]></system-out>
   <system-err><![CDATA[]]></system-err>
 </testsuite>

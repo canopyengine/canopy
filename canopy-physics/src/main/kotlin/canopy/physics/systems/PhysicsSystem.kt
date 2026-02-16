@@ -10,8 +10,9 @@ import com.badlogic.gdx.physics.box2d.World
 import ktx.box2d.createWorld
 import ktx.log.logger
 
-class PhysicsSystem :
-    TreeSystem(
+class PhysicsSystem(
+    gravity: Vector2 = Vector2.Zero,
+) : TreeSystem(
         phase = UpdatePhase.PhysicsPre,
         0,
         PhysicsBody2D::class,
@@ -20,9 +21,13 @@ class PhysicsSystem :
     val debugRenderer: Box2DDebugRenderer? =
         if (GameManager.onDebugMode()) Box2DDebugRenderer() else null
 
-    // Physics world
-    private var world: World? = null
     private val contactListener = PhysicsContactListener()
+
+    // Physics world
+    private var world: World =
+        createWorld(gravity).apply {
+            setContactListener(contactListener)
+        }
 
     override fun onRegister() {
         injectionManager.registerInjectable(World::class) { world }
@@ -35,14 +40,14 @@ class PhysicsSystem :
     }
 
     override fun onNodeRemoved(node: Node<*>) {
-        world?.destroyBody((node as PhysicsBody2D).body)
+        world.destroyBody((node as PhysicsBody2D).body)
     }
 
     fun replaceWorld(gravity: Vector2 = Vector2.Zero) {
-        world?.dispose()
+        world.dispose()
+
         world =
             createWorld(gravity).apply {
-                // Contact callbacks
                 setContactListener(contactListener)
             }
     }

@@ -3,6 +3,7 @@ package canopy.core.app
 import canopy.core.backend.CanopyBackend
 import canopy.core.backend.CanopyBackendConfig
 import canopy.core.backend.CanopyBackendHandle
+import canopy.core.managers.InjectionManager
 import canopy.core.managers.ManagersRegistry
 import canopy.core.nodes.SceneManager
 import ktx.app.KtxGame
@@ -35,10 +36,16 @@ abstract class CanopyGame<C : CanopyBackendConfig>(
      */
     override fun create() {
         KtxAsync.initiate()
-        ManagersRegistry.register(sceneManager)
-        ManagersRegistry.setup()
+
+        // Register core managers
+        ManagersRegistry
+            .apply {
+                register(InjectionManager())
+                register(sceneManager)
+            }.setup()
 
         onCreate(sceneManager)
+        super.create()
     }
 
     /**
@@ -48,6 +55,7 @@ abstract class CanopyGame<C : CanopyBackendConfig>(
         width: Int,
         height: Int,
     ) {
+        super.resize(width, height)
         sceneManager.resize(width, height)
         onResize(sceneManager, width, height)
     }
@@ -58,6 +66,7 @@ abstract class CanopyGame<C : CanopyBackendConfig>(
     override fun dispose() {
         ManagersRegistry.teardown()
         onDispose(sceneManager)
+        super.dispose()
     }
 
     abstract fun defaultConfig(): C

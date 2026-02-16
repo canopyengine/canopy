@@ -20,18 +20,6 @@ object TestHeadlessBackend : CanopyBackend<CanopyBackendConfig> {
             override fun exit() {
                 // Stop loop + dispose listener
                 headless.exit()
-
-                headless.applicationListener.dispose()
-                // Make tests isolated (LibGDX uses statics)
-                Gdx.app = null
-                Gdx.graphics = null
-                Gdx.gl = null
-                Gdx.gl20 = null
-                Gdx.gl30 = null
-                Gdx.files = null
-                Gdx.audio = null
-                Gdx.input = null
-                Gdx.net = null
             }
         }
     }

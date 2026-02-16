@@ -2,6 +2,8 @@ package canopy.backends.test
 
 import canopy.core.backend.CanopyBackendConfig
 import canopy.core.app.CanopyGame
+import canopy.core.managers.InjectionManager
+import canopy.core.managers.ManagersRegistry
 import canopy.core.nodes.SceneManager
 
 class TestHeadlessCanopyGame(
@@ -18,6 +20,10 @@ class TestHeadlessCanopyGame(
     ) {
 
     override fun create() {
+        ManagersRegistry.apply {
+            register(sceneManager)
+            register(InjectionManager())
+        }.setup()
         onCreate(sceneManager)
     }
 
