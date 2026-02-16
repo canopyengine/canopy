@@ -15,7 +15,7 @@ interface SaveModule<T : @Serializable Any> {
 }
 
 fun <T : @Serializable Any> registerSaveModule(
-    destination: SaveDestination,
+    destination: String,
     id: String,
     serializer: KSerializer<T>,
     onSave: () -> T,
@@ -39,5 +39,5 @@ fun <T : @Serializable Any> registerSaveModule(
         """.trimIndent()
     }
 
-    ManagersRegistry.get(SaveManager::class).register(destination, saveModule)
+    ManagersRegistry.get(SaveManager::class).registerSaveModule(destination, saveModule)
 }

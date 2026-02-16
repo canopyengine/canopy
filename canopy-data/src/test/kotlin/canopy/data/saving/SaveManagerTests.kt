@@ -1,9 +1,6 @@
-package anchors.framework.utils.saving
+package canopy.data.saving
 
 import canopy.core.managers.ManagersRegistry
-import canopy.data.saving.SaveDestination
-import canopy.data.saving.SaveManager
-import canopy.data.saving.registerSaveModule
 import com.badlogic.gdx.files.FileHandle
 import kotlinx.serialization.builtins.serializer
 import org.junit.jupiter.api.AfterEach
@@ -17,7 +14,7 @@ class SaveManagerTests {
     companion object {
         val saveManager =
             SaveManager(
-                SaveDestination.PlayerData to { slot ->
+                "player" to { slot ->
                     val file = File("src/test/output/test-$slot.json")
                     FileHandle(file)
                 },
@@ -36,13 +33,13 @@ class SaveManagerTests {
 
     @AfterEach
     fun cleanup() {
-        ManagersRegistry.get(SaveManager::class).cleanModules(SaveDestination.PlayerData)
+        ManagersRegistry.get(SaveManager::class).cleanModules("player")
     }
 
     @Test
     fun `should write empty file`() {
         // Act
-        saveManager.save(SaveDestination.PlayerData, 0)
+        saveManager.save("player", 0)
         // Assert
         val file = FileHandle(File("src/test/output/test-0.json"))
         assertTrue { !file.exists() }
@@ -54,7 +51,7 @@ class SaveManagerTests {
         var intData = 0
 
         registerSaveModule(
-            SaveDestination.PlayerData,
+            "player",
             id = "test-int",
             serializer = Int.serializer(),
             onSave = { 5 },
@@ -63,16 +60,16 @@ class SaveManagerTests {
 
         var stringData = ""
         registerSaveModule(
-            SaveDestination.PlayerData,
+            "player",
             id = "test-string",
             serializer = String.serializer(),
             onSave = { "abc" },
             onLoad = { stringData = it },
         )
         // Act
-        saveManager.save(SaveDestination.PlayerData, 1)
+        saveManager.save("player", 1)
         // Assert
-        saveManager.load(SaveDestination.PlayerData, 1)
+        saveManager.load("player", 1)
         assertEquals(5, intData)
         assertEquals("abc", stringData)
     }

@@ -2,18 +2,12 @@ package canopy.data.saving
 
 import canopy.core.managers.Manager
 import canopy.data.parsers.JsonParser
-import com.badlogic.gdx.Gdx
 import com.badlogic.gdx.files.FileHandle
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.JsonObject
 import kotlin.reflect.KClass
 
 const val SAVE_LOCATION = "saves"
-
-enum class SaveDestination {
-    PlayerData,
-    InputBinding,
-}
 
 /**
  * Responsible for handling data saving and loading.
@@ -23,37 +17,26 @@ enum class SaveDestination {
  * @see SaveModule
  */
 class SaveManager(
-    vararg destinations: Pair<SaveDestination, (slot: Int) -> FileHandle>,
+    vararg destinations: Pair<String, (slot: Int) -> FileHandle>,
 ) : Manager {
-    private val destinationsMap: MutableMap<SaveDestination, (slot: Int) -> FileHandle> =
-        if (destinations.isEmpty()) {
-            mutableMapOf(
-                SaveDestination.PlayerData to { slot ->
-                    Gdx.files.local("$SAVE_LOCATION/player_save_$slot.json")
-                },
-                SaveDestination.InputBinding to { _ ->
-                    Gdx.files.local("$SAVE_LOCATION/input_bindings.json")
-                },
-            )
-        } else {
-            mutableMapOf(*destinations)
-        }
+    private val destinationsMap: MutableMap<String, (slot: Int) -> FileHandle> =
+        mutableMapOf(*destinations)
 
     /** Holds module info, and maps to data to be saved */
     private val dataRegistry:
-        MutableMap<SaveDestination, MutableMap<SaveModule<*>, @Serializable Any>> =
+        MutableMap<String, MutableMap<SaveModule<*>, @Serializable Any>> =
         mutableMapOf()
 
     // Register new save module
-    fun register(
-        destination: SaveDestination,
+    internal fun registerSaveModule(
+        destination: String,
         module: SaveModule<*>,
     ) {
         val registry = dataRegistry.getOrPut(destination) { mutableMapOf() }
         registry[module] = Unit // placeholder
     }
 
-    fun cleanModules(destination: SaveDestination) {
+    fun cleanModules(destination: String) {
         dataRegistry[destination] = mutableMapOf()
     }
 
@@ -64,7 +47,7 @@ class SaveManager(
      */
     @Suppress("UNCHECKED_CAST")
     fun load(
-        destination: SaveDestination,
+        destination: String,
         slot: Int,
     ) {
         val fileLocation = destinationsMap[destination]?.invoke(slot) ?: return
@@ -90,7 +73,7 @@ class SaveManager(
      */
     @Suppress("UNCHECKED_CAST")
     fun <T : Any> loadData(
-        destination: SaveDestination,
+        destination: String,
         clazz: KClass<T>,
     ): T {
         val registry =
@@ -108,7 +91,7 @@ class SaveManager(
      * Data to be saved on each module is defined by the return value of the **onSave** method.
      */
     fun save(
-        destination: SaveDestination,
+        destination: String,
         slot: Int,
     ) {
         val fileLocation = destinationsMap[destination]?.invoke(slot) ?: return
@@ -130,10 +113,10 @@ class SaveManager(
     }
 
     fun saveAll(slot: Int) {
-        SaveDestination.entries.forEach { save(it, slot) }
+        destinationsMap.keys.forEach { save(it, slot) }
     }
 
     fun loadAll(slot: Int) {
-        SaveDestination.entries.forEach { load(it, slot) }
+        destinationsMap.keys.forEach { it -> load(it, slot) }
     }
 }
