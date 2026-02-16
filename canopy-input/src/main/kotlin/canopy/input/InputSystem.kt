@@ -1,14 +1,18 @@
-package anchors.framework.input
+package canopy.input
 
-import anchors.framework.managers.Manager
-import anchors.framework.nodes.core.GlobalNodeSystem
-import anchors.framework.nodes.core.UpdatePhase
+import anchors.framework.input.ButtonInputEvent
+import anchors.framework.input.InputBind
+import anchors.framework.input.InputEvent
+import anchors.framework.input.InputState
+import canopy.core.managers.Manager
+import canopy.core.nodes.core.TreeSystem
+import canopy.input.nodes.InputListener
 import com.badlogic.gdx.math.Vector2
 import ktx.log.logger
 
 class InputSystem(
     vararg pairs: Pair<String, List<InputBind>>,
-) : GlobalNodeSystem(UpdatePhase.Input),
+) : TreeSystem(UpdatePhase.PhysicsPre, 10, InputListener),
     Manager {
     private val logger = logger<InputSystem>()
     private val mapper = InputMapper()
@@ -89,7 +93,7 @@ class InputSystem(
         events: List<InputEvent>,
         delta: Float,
     ) {
-        events.forEach { sceneManager.onInput(it, delta) }
+        node
     }
 
     private fun getState(action: String) = actionsState[action] ?: InputState.Released

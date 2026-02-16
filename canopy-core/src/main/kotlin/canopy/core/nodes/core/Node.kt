@@ -26,7 +26,7 @@ abstract class Node<N : Node<N>> protected constructor(
     /** Node name (unique among siblings) */
     val name: String,
     /** Optional behavior script attached to the node */
-    script: (node: N) -> Behavior<N>?,
+    behavior: (node: N) -> Behavior<N>?,
     /** Local position in 2D space */
     open var position: Vector2 = Vector2.Zero,
     /** Local scale in 2D space */
@@ -47,7 +47,7 @@ abstract class Node<N : Node<N>> protected constructor(
     private var isPrefab: Boolean = false
 
     /** Behavior script instance */
-    private val script: Behavior<N>? = script(this as N)
+    private val behavior: Behavior<N>? = behavior(this as N)
 
     /** Parent node reference */
     private var _parent: Node<*>? = null
@@ -121,7 +121,7 @@ abstract class Node<N : Node<N>> protected constructor(
         if (child.isPrefab) return
 
         // Lifecycle setup for runtime node
-        child.enterTree()
+        child.nodeEnterTree()
         child.nodeReady()
     }
 
@@ -130,7 +130,7 @@ abstract class Node<N : Node<N>> protected constructor(
         check(child.parent == this) { "Node '${child.name}' is not a child of '$name'!" }
 
         // Lifecycle teardown
-        child.exitTree()
+        child.nodeExitTree()
         _children.remove(child.name)
         child._parent = null
 
@@ -234,7 +234,7 @@ abstract class Node<N : Node<N>> protected constructor(
 
     /** Builds the tree and calls lifecycle methods */
     fun buildTree() {
-        enterTree() // top-down attach
+        nodeEnterTree() // top-down attach
         nodeReady() // bottom-up initialization
     }
 
@@ -245,22 +245,22 @@ abstract class Node<N : Node<N>> protected constructor(
     /** Called after the node and its children are fully initialized */
     open fun nodeReady() {
         children.values.forEach { it.nodeReady() }
-        script?.onReady()
+        behavior?.onReady()
     }
 
     /** Called when node enters the tree */
-    open fun enterTree() {
+    open fun nodeEnterTree() {
         // Update initial groups
         groups.forEach { sceneManager.addToGroup(it, this) }
         // Traverse tree
-        script?.onEnterTree()
-        children.values.forEach { it.enterTree() }
+        behavior?.onEnterTree()
+        children.values.forEach { it.nodeEnterTree() }
     }
 
     /** Called when node exits the tree */
-    open fun exitTree() {
-        children.values.forEach { it.exitTree() }
-        script?.onExitTree()
+    open fun nodeExitTree() {
+        children.values.forEach { it.nodeExitTree() }
+        behavior?.onExitTree()
     }
 
     // ===============================
@@ -270,13 +270,13 @@ abstract class Node<N : Node<N>> protected constructor(
     /** Called every frame */
     open fun nodeUpdate(delta: Float) {
         children.values.forEach { it.nodeUpdate(delta) }
-        script?.onUpdate(delta)
+        behavior?.onUpdate(delta)
     }
 
     /** Called every physics tick */
     open fun nodePhysicsUpdate(delta: Float) {
         children.values.forEach { it.nodePhysicsUpdate(delta) }
-        script?.onPhysicsUpdate(delta)
+        behavior?.onPhysicsUpdate(delta)
     }
 
     infix fun child(node: Node<*>) = addChild(node)
@@ -289,5 +289,15 @@ operator fun Node<*>.plus(node: Node<*>): Node<*> {
 
 operator fun Node<*>.unaryPlus(): Node<*> {
     parent?.addChild(this)
+    return this
+}
+
+/*
+* Utility function to automatically replace the scene root with this node.
+* Useful for cleaner DSL scene building without needing to reference the scene manager directly.
+*/
+fun Node<*>.asSceneRoot() : Node<*>{
+    val sceneManager = ManagersRegistry.get(SceneManager::class)
+    sceneManager.currScene = this
     return this
 }

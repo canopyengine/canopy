@@ -41,7 +41,7 @@ class Collider2D(
     val bodyEntered = createSignal<Collider2D>()
     val bodyExited = createSignal<Collider2D>()
 
-    override fun enterTree() {
+    override fun nodeEnterTree() {
         val parentBody = (parent as? PhysicsBody2D)?.body ?: return
         fixture =
             shape.shapeFactory(
@@ -57,7 +57,7 @@ class Collider2D(
             )
     }
 
-    override fun exitTree() {
+    override fun nodeExitTree() {
         val parentBody = (parent as? PhysicsBody2D)?.body ?: return
         val fixtureSnapshot = fixture ?: return
         parentBody.destroyFixture(fixtureSnapshot)

@@ -8,6 +8,7 @@ plugins {
 dependencies {
   // Canopy Projects
   implementation project(':canopy-core')
+  implementation project(':canopy-data')
 
   // REFLECTION
   implementation "org.jetbrains.kotlin:kotlin-reflect:$kotlinVersion"

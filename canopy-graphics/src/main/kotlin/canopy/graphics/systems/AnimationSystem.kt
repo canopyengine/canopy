@@ -1,16 +1,16 @@
 package canopy.graphics.systems
 
-import canopy.core.nodes.core.GlobalNodeSystem
+import canopy.core.nodes.core.TreeSystem
 import canopy.core.nodes.core.Node
-import canopy.core.nodes.core.UpdatePhase
+import canopy.core.nodes.core.TreeSystemUpdatePhase
 import canopy.graphics.nodes.animation.AnimationPlayer
 import canopy.utils.UnstableApi
 import ktx.log.logger
 
 @UnstableApi
 class AnimationSystem :
-    GlobalNodeSystem(
-        UpdatePhase.AnimationBeforeScene,
+    TreeSystem(
+        TreeSystemUpdatePhase.AnimationBeforeScene,
         AnimationPlayer::class,
     ) {
     private val logger = logger<AnimationSystem>()

@@ -1,6 +1,7 @@
 package anchors.framework.input
 
 import anchors.framework.data.registry.IdEntry
+import canopy.input.InputMapper
 import kotlinx.serialization.Serializable
 
 @Serializable

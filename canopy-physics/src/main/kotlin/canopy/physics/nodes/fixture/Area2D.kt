@@ -40,7 +40,7 @@ class Area2D(
     val areaEntered = createSignal<Area2D>()
     val areaExited = createSignal<Area2D>()
 
-    override fun enterTree() {
+    override fun nodeEnterTree() {
         val parentBody = (parent as? PhysicsBody2D)?.body ?: return
         fixture =
             shape.shapeFactory(
@@ -56,7 +56,7 @@ class Area2D(
             )
     }
 
-    override fun exitTree() {
+    override fun nodeExitTree() {
         val parentBody = (parent as? PhysicsBody2D)?.body ?: return
         val fixtureSnapshot = fixture ?: return
         parentBody.destroyFixture(fixtureSnapshot)

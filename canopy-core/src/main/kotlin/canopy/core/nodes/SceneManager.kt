@@ -1,9 +1,9 @@
 package canopy.core.nodes
 
 import canopy.core.managers.Manager
-import canopy.core.nodes.core.GlobalNodeSystem
+import canopy.core.nodes.core.TreeSystem
 import canopy.core.nodes.core.Node
-import canopy.core.nodes.core.UpdatePhase
+import canopy.core.nodes.core.TreeSystem.UpdatePhase
 import canopy.core.signals.asSignalVal
 import canopy.core.signals.createSignal
 import com.badlogic.gdx.math.Vector2
@@ -25,11 +25,6 @@ class SceneManager(
     block: SceneManager.() -> Unit = {},
 ) : Manager {
     private val logger = logger<SceneManager>()
-
-    // =============================
-    //      Dependency Injection
-    // =============================
-    private val dependenciesMap = mutableMapOf<KClass<*>, () -> Any?>()
 
     private val flatTree = mutableMapOf<String, Node<*>>()
 
@@ -65,9 +60,9 @@ class SceneManager(
     // ===============================
     //         SYSTEMS
     // ===============================
-    private val systems: MutableMap<UpdatePhase, MutableList<GlobalNodeSystem>> = mutableMapOf()
+    private val systems: MutableMap<TreeSystem.UpdatePhase, MutableList<TreeSystem>> = mutableMapOf()
 
-    private val systemsByType = mutableMapOf<KClass<out Node<*>>, MutableList<GlobalNodeSystem>>()
+    private val systemsByType = mutableMapOf<KClass<out Node<*>>, MutableList<TreeSystem>>()
 
     // ===============================
     //          GROUPS
@@ -78,23 +73,7 @@ class SceneManager(
         block(this)
     }
 
-    // ===============================
-    //      DEPENDENCY INJECTION
-    // ===============================
-    fun <T : Any> registerInjectable(
-        kClass: KClass<T>,
-        injectable: () -> T?,
-    ) {
-        require(kClass !in dependenciesMap) {}
-        dependenciesMap[kClass] = injectable
-    }
 
-    @Suppress("UNCHECKED_CAST")
-    fun <T : Any> inject(kClass: KClass<T>): T {
-        val entry = dependenciesMap[kClass]
-        requireNotNull(entry) { "" }
-        return entry() as T
-    }
 
     // ===============================
     //      SCENE MANAGEMENT
@@ -103,7 +82,7 @@ class SceneManager(
         val oldScene = _currScene
 
         oldScene?.let {
-            it.exitTree()
+            it.nodeExitTree()
             unregisterSubtree(it)
         }
 
@@ -142,19 +121,26 @@ class SceneManager(
     // ===============================
     //      SYSTEM MANAGEMENT
     // ===============================
-    fun addSystem(system: GlobalNodeSystem) {
-        systems.getOrPut(system.phase) { mutableListOf() }.add(system)
+    fun addSystem(system: TreeSystem) {
+        systems.getOrPut(system.phase) { mutableListOf() }.let { list ->
+            list += system
+            list.sortBy(TreeSystem::priority)
+        }
         system.requiredTypes.forEach { type ->
             systemsByType.computeIfAbsent(type) { mutableListOf() }.add(system)
         }
     }
 
-    fun removeSystem(system: GlobalNodeSystem) {
-        systems[system.phase]?.remove(system)
+    fun removeSystem(system: TreeSystem) {
+        systems[system.phase]?.apply {
+            remove(system)
+            system.requiredTypes.forEach { type -> systemsByType[type]?.remove(system) }
+            sortBy(TreeSystem::priority)
+        }
     }
 
     @Suppress("UNCHECKED_CAST")
-    fun <T : GlobalNodeSystem> getSystem(clazz: KClass<T>): T =
+    fun <T : TreeSystem> getSystem(clazz: KClass<T>): T =
         systems.values.flatten().firstOrNull { clazz.isInstance(it) } as? T
             ?: throw IllegalStateException(
                 """
@@ -166,7 +152,7 @@ class SceneManager(
                 """.trimIndent(),
             )
 
-    fun <T : GlobalNodeSystem> hasSystem(clazz: KClass<T>): Boolean =
+    fun <T : TreeSystem> hasSystem(clazz: KClass<T>): Boolean =
         systems.values.flatten().firstOrNull { clazz.isInstance(it) } != null
 
     // ===============================
@@ -202,19 +188,15 @@ class SceneManager(
     fun tick(delta: Float) {
         val root = currScene ?: return
 
-        systems[UpdatePhase.Input]?.forEach { it.tick(delta) }
-
         if (isPhysicsFrame(delta)) {
-            systems[UpdatePhase.PhysicsBeforeScene]?.forEach { it.tick(physicsStep) }
+            systems[UpdatePhase.PhysicsPre]?.forEach { it.tick(physicsStep) }
             root.nodePhysicsUpdate(physicsStep)
-            systems[UpdatePhase.PhysicsAfterScene]?.forEach { it.tick(physicsStep) }
+            systems[UpdatePhase.PhysicsPost]?.forEach { it.tick(physicsStep) }
         }
 
-        systems[UpdatePhase.AnimationBeforeScene]?.forEach { it.tick(delta) }
-        systems[UpdatePhase.FrameBeforeScene]?.forEach { it.tick(delta) }
+        systems[UpdatePhase.FramePre]?.forEach { it.tick(delta) }
         root.nodeUpdate(delta)
-        systems[UpdatePhase.AnimationAfterScene]?.forEach { it.tick(delta) }
-        systems[UpdatePhase.FrameAfterScene]?.forEach { it.tick(delta) }
+        systems[UpdatePhase.FramePost]?.forEach { it.tick(delta) }
     }
 
     fun resize(
@@ -237,10 +219,10 @@ class SceneManager(
     //        LIFECYCLE HOOKS
     // ===============================
     override fun setup() {
-        systems.values.flatten().forEach(GlobalNodeSystem::onSystemInit)
+        systems.values.flatten().forEach(TreeSystem::onRegister)
     }
 
     override fun teardown() {
-        systems.values.flatten().forEach(GlobalNodeSystem::onSystemClose)
+        systems.values.flatten().forEach(TreeSystem::onUnregister)
     }
 }

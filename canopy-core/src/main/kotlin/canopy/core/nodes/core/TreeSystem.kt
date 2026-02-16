@@ -5,33 +5,6 @@ import canopy.core.nodes.SceneManager
 import kotlin.reflect.KClass
 
 // ===============================
-//        UPDATE PHASE ENUM
-// ===============================
-
-/**
- * Defines when a global node system should be executed.
- */
-enum class UpdatePhase {
-    /** Runs before any event */
-    Input,
-
-    /** Runs before physics is processed for the scene */
-    PhysicsBeforeScene,
-
-    /** Runs after physics is processed for the scene */
-    PhysicsAfterScene,
-
-    /** Runs before scene frame updates */
-    FrameBeforeScene,
-
-    /** Runs after scene frame updates */
-    FrameAfterScene,
-
-    AnimationBeforeScene,
-    AnimationAfterScene,
-}
-
-// ===============================
 //      GLOBAL NODE SYSTEM BASE
 // ===============================
 
@@ -40,26 +13,23 @@ enum class UpdatePhase {
  *
  * @param requiredTypes The types of nodes this system should operate on.
  */
-abstract class GlobalNodeSystem(
+abstract class TreeSystem(
     internal val phase: UpdatePhase,
+    val priority: Int = 0,
     vararg val requiredTypes: KClass<out Node<*>>,
 ) {
     // ===============================
     //        CORE PROPERTIES
     // ===============================
 
-    /** Reference to the scene manager (set automatically on init) */
-    protected val sceneManager: SceneManager by lazy { ManagersRegistry.get(SceneManager::class) }
+    protected val sceneManager : SceneManager get() =
+        SceneManager.currentParent.get() ?: error("You're trying to create a TreeSystem outside of a SceneManager context.")
 
     /** Nodes currently matching the system's type requirements */
     protected val matchingNodes = mutableListOf<Node<*>>()
 
     init {
-        val parent =
-            SceneManager.currentParent.get()
-                ?: error("Key must be inside a track")
-
-        parent.addSystem(this)
+        sceneManager.addSystem(this)
     }
 
     // ===============================
@@ -70,10 +40,10 @@ abstract class GlobalNodeSystem(
      * Called once before updates begin.
      * Automatically sets up the scene manager reference.
      */
-    open fun onSystemInit() {}
+    open fun onRegister() {}
 
     /** Called when the system is being closed / disposed. Override if needed. */
-    open fun onSystemClose() {}
+    open fun onUnregister() {}
 
     // ===============================
     //         NODE REGISTRATION
@@ -146,4 +116,61 @@ abstract class GlobalNodeSystem(
         node: Node<*>,
         delta: Float,
     ) {}
+
+    // ===============================
+//        UPDATE PHASE ENUM
+// ===============================
+
+    /**
+     * Defines when a global node system should be executed.
+     */
+    enum class UpdatePhase {
+        /** Runs before physics is processed for the scene */
+        PhysicsPre,
+
+        /** Runs after physics is processed for the scene */
+        PhysicsPost,
+
+        /** Runs before scene frame updates */
+        FramePre,
+
+        /** Runs after scene frame updates */
+        FramePost,
+    }
+}
+
+fun treeSystem(
+    phase: TreeSystem.UpdatePhase,
+    priority: Int = 0,
+    vararg requiredTypes: KClass<out Node<*>>,
+    onRegister: TreeSystem.() -> Unit = {},
+    onUnregister: TreeSystem.() -> Unit = {},
+    beforeProcess: TreeSystem.(delta: Float) -> Unit = {},
+    afterProcess: TreeSystem.(delta: Float) -> Unit = {},
+    processNode: TreeSystem.(node: Node<*>, delta: Float) -> Unit = { _, _ -> },
+) {
+    object : TreeSystem(phase, priority, *requiredTypes) {
+        override fun onRegister() {
+            onRegister()
+        }
+
+        override fun onUnregister() {
+            onUnregister()
+        }
+
+        override fun beforeProcess(delta: Float) {
+            beforeProcess(delta)
+        }
+
+        override fun afterProcess(delta: Float) {
+            afterProcess(delta)
+        }
+
+        override fun processNode(
+            node: Node<*>,
+            delta: Float,
+        ) {
+            processNode(node, delta)
+        }
+    }
 }

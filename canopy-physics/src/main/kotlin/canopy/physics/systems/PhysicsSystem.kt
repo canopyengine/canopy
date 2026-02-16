@@ -1,9 +1,9 @@
 package canopy.physics.systems
 
 import canopy.core.managers.GameManager
-import canopy.core.nodes.core.GlobalNodeSystem
+import canopy.core.nodes.core.TreeSystem
 import canopy.core.nodes.core.Node
-import canopy.core.nodes.core.UpdatePhase
+import canopy.core.nodes.core.TreeSystemUpdatePhase
 import canopy.physics.nodes.body.PhysicsBody2D
 import com.badlogic.gdx.math.Vector2
 import com.badlogic.gdx.physics.box2d.Box2DDebugRenderer
@@ -12,8 +12,8 @@ import ktx.box2d.createWorld
 import ktx.log.logger
 
 class PhysicsSystem :
-    GlobalNodeSystem(
-        phase = UpdatePhase.PhysicsBeforeScene,
+    TreeSystem(
+        phase = TreeSystemUpdatePhase.PhysicsBeforeScene,
         PhysicsBody2D::class,
     ) {
     private val logger = logger<PhysicsSystem>()

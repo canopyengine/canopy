@@ -1,8 +1,8 @@
 package canopy.graphics.systems
 
 import canopy.core.managers.ManagersRegistry
-import canopy.core.nodes.core.GlobalNodeSystem
-import canopy.core.nodes.core.UpdatePhase
+import canopy.core.nodes.core.TreeSystem
+import canopy.core.nodes.core.TreeSystemUpdatePhase
 import canopy.graphics.managers.CameraManager
 import canopy.graphics.nodes.visual.AnimatedSprite2D
 import canopy.graphics.nodes.visual.Sprite2D
@@ -14,8 +14,8 @@ import ktx.log.logger
 class RenderSystem(
     worldWidth: Float,
     worldHeight: Float,
-) : GlobalNodeSystem(
-        UpdatePhase.FrameAfterScene,
+) : TreeSystem(
+        TreeSystemUpdatePhase.FrameAfterScene,
         Sprite2D::class,
         AnimatedSprite2D::class,
     ) {
@@ -69,7 +69,8 @@ class RenderSystem(
         }
     }
 
-    override fun onSystemInit() {
+    override fun onRegister() {
+        super.onRegister()
         cameraManager.activeCamera.connect { updateViewportCamera() }
 
         // Hook into scene manager
@@ -80,8 +81,8 @@ class RenderSystem(
         viewport.apply()
     }
 
-    override fun onSystemClose() {
-        super.onSystemClose()
+    override fun onUnregister() {
+        super.onUnregister()
         batch.dispose()
     }
 }

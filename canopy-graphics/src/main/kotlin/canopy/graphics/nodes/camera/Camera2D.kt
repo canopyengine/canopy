@@ -49,8 +49,8 @@ class Camera2D(
     // Managers
     private val cameraManager = ManagersRegistry.get(CameraManager::class)
 
-    override fun enterTree() {
-        super.enterTree()
+    override fun nodeEnterTree() {
+        super.nodeEnterTree()
 
         active.connect {
             if (it) {
@@ -61,8 +61,8 @@ class Camera2D(
         }
     }
 
-    override fun exitTree() {
-        super.exitTree()
+    override fun nodeExitTree() {
+        super.nodeExitTree()
         cameraManager.unregisterCamera(this)
     }
 
