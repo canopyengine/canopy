@@ -1,4 +1,4 @@
-package anchors.framework.input
+package canopy.input
 
 import com.badlogic.gdx.Gdx
 import kotlinx.serialization.Serializable

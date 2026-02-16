@@ -2,7 +2,6 @@ package canopy.graphics.systems
 
 import canopy.core.managers.ManagersRegistry
 import canopy.core.nodes.core.TreeSystem
-import canopy.core.nodes.core.TreeSystemUpdatePhase
 import canopy.graphics.managers.CameraManager
 import canopy.graphics.nodes.visual.AnimatedSprite2D
 import canopy.graphics.nodes.visual.Sprite2D
@@ -15,7 +14,8 @@ class RenderSystem(
     worldWidth: Float,
     worldHeight: Float,
 ) : TreeSystem(
-        TreeSystemUpdatePhase.FrameAfterScene,
+        UpdatePhase.FramePost,
+        0,
         Sprite2D::class,
         AnimatedSprite2D::class,
     ) {

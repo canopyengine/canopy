@@ -2,13 +2,17 @@ package canopy.graphics.nodes.animation
 
 import canopy.core.nodes.core.Behavior
 import canopy.core.nodes.core.Node
+import canopy.core.signals.createSignal
+import canopy.graphics.systems.AnimationSystem
+import canopy.utils.UnstableApi
 import com.badlogic.gdx.math.Vector2
 import ktx.log.logger
 import kotlin.math.abs
 
+@UnstableApi
 class AnimationPlayer(
     name: String,
-    script: (node: AnimationPlayer) -> Behavior<AnimationPlayer>? = { null },
+    behavior: (node: AnimationPlayer) -> Behavior<AnimationPlayer>? = { null },
     position: Vector2 = Vector2.Zero,
     scale: Vector2 = Vector2(1f, 1f),
     rotation: Float = 0f,
@@ -16,7 +20,7 @@ class AnimationPlayer(
     block: AnimationPlayer.() -> Unit = {},
 ) : Node<AnimationPlayer>(
         name,
-        script,
+        behavior,
         position,
         scale,
         rotation,

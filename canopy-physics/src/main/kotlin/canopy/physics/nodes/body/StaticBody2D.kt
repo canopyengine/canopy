@@ -1,5 +1,6 @@
 package canopy.physics.nodes.body
 
+import canopy.core.nodes.core.Behavior
 import canopy.physics.systems.PhysicsSystem
 import com.badlogic.gdx.math.Vector2
 import com.badlogic.gdx.physics.box2d.BodyDef

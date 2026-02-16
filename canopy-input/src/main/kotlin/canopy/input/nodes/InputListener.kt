@@ -1,12 +1,12 @@
 package canopy.input.nodes
 
-import anchors.framework.input.InputEvent
 import canopy.core.nodes.core.Node
+import canopy.input.InputEvent
 
 abstract class InputListener<N : Node<N>>(
     private val children: Map<String, *>,
     private val script: InputBehavior<N>?,
-)  {
+) {
     open fun nodeInput(
         event: InputEvent,
         delta: Float = 0F,

@@ -19,6 +19,7 @@ apply plugin: 'org.jetbrains.kotlin.jvm'
 
 
 import io.github.fourlastor.construo.Target
+import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 
 sourceSets.main.resources.srcDirs += [ rootProject.file('assets').path ]
 application.mainClass = 'io.github.canopyengine.lwjgl3.Lwjgl3Launcher'
@@ -29,23 +30,38 @@ java.targetCompatibility = 8
 if (JavaVersion.current().isJava9Compatible()) {
         compileJava.options.release.set(8)
 }
-kotlin.compilerOptions.jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_1_8)
+kotlin.compilerOptions.jvmTarget.set(JvmTarget.JVM_1_8)
 
 dependencies {
+  // Canopy Projects
+  implementation project(":canopy-core")
+
+  // KTX & LibGDX
   implementation "com.badlogicgames.gdx-controllers:gdx-controllers-desktop:$gdxControllersVersion"
-  implementation "com.badlogicgames.gdx:gdx-backend-lwjgl3:$gdxVersion"
+  api "com.badlogicgames.gdx:gdx-backend-lwjgl3:$gdxVersion"
   implementation "com.badlogicgames.gdx:gdx-box2d-platform:$gdxVersion:natives-desktop"
   implementation "com.badlogicgames.gdx:gdx-freetype-platform:$gdxVersion:natives-desktop"
   implementation "com.badlogicgames.gdx:gdx-platform:$gdxVersion:natives-desktop"
   implementation "de.tomgrill.gdxdialogs:gdx-dialogs-desktop:$dialogsVersion"
-  implementation project(':canopy-core')
+
+  //Testing
+  // Testing
+  testImplementation "org.jetbrains.kotlin:kotlin-test-junit5:$kotlinVersion"
+  testImplementation "org.junit.jupiter:junit-jupiter:5.13.4"
+  testImplementation 'org.assertj:assertj-core:3.27.7'
+  testImplementation "org.mockito:mockito-core:5.16.1"
+  testImplementation "org.junit.jupiter:junit-jupiter-api:5.10.0"
+  testRuntimeOnly "org.junit.jupiter:junit-jupiter-engine:5.10.0"
+  testImplementation "org.mockito.kotlin:mockito-kotlin:5.1.0"
+  implementation "com.badlogicgames.gdx:gdx-backend-headless:$gdxVersion"
+  testRuntimeOnly "com.badlogicgames.gdx:gdx-platform:$gdxVersion:natives-desktop"
 
   if(enableGraalNative == 'true') {
     implementation "io.github.berstanio:gdx-svmhelper-backend-lwjgl3:$graalHelperVersion"
-      implementation "io.github.berstanio:gdx-svmhelper-extension-box2d:$graalHelperVersion"
-      implementation "io.github.berstanio:gdx-svmhelper-extension-freetype:$graalHelperVersion"
+    implementation "io.github.berstanio:gdx-svmhelper-extension-box2d:$graalHelperVersion"
+    implementation "io.github.berstanio:gdx-svmhelper-extension-freetype:$graalHelperVersion"
 
-    }
+  }
 }
 
 def os = System.properties['os.name'].toLowerCase(Locale.ROOT)
@@ -123,6 +139,10 @@ tasks.register("jarWin") {
   }
 }
 
+tasks.test {
+  useJUnitPlatform() // <- important! tells Gradle to use JUnit 5 platform
+}
+
 construo {
     // name of the executable
     name.set(appName)
@@ -171,18 +191,17 @@ distributions {
   main {
     contents {
       into('libs') {
-        project.configurations.runtimeClasspath.files.findAll { file ->
-          file.getName() != project.tasks.jar.outputs.files.singleFile.name
-        }.each { file ->
-          exclude file.name
+        from(configurations.runtimeClasspath)
+        // If you want to exclude your own fat jar from being duplicated:
+        exclude { details -> details.file.name == tasks.jar.archiveFileName.get() }
         }
       }
     }
-  }
 }
 
+
 startScripts.dependsOn(':canopy-backends:jar')
-startScripts.classpath = project.tasks.jar.outputs.files
+startScripts.classpath = tasks.jar.outputs.files
 
 if(enableGraalNative == 'true') {
   apply from: file("nativeimage.gradle")
