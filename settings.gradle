@@ -14,3 +14,5 @@ include 'canopy-backends'
 
 include 'canopy-utils'
 include 'canopy-data'
+
+include 'canopy-test'

@@ -1,7 +1,5 @@
 package canopy.core.nodes.types.empty
 
-import canopy.core.managers.ManagersRegistry
-import canopy.core.nodes.SceneManager
 import canopy.core.nodes.core.Behavior
 import canopy.core.nodes.core.Node
 import com.badlogic.gdx.math.Vector2
@@ -15,11 +13,11 @@ class EmptyNode(
     groups: MutableList<String> = mutableListOf(),
     block: EmptyNode.() -> Unit = {},
 ) : Node<EmptyNode>(
-    name,
-    behavior,
-    position,
-    scale,
-    rotation,
-    groups,
-    block,
-)
+        name,
+        behavior,
+        position,
+        scale,
+        rotation,
+        groups,
+        block,
+    )

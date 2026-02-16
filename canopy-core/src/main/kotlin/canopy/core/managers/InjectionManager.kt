@@ -4,7 +4,6 @@ import kotlin.collections.set
 import kotlin.reflect.KClass
 
 class InjectionManager : Manager {
-
     private val dependenciesMap = mutableMapOf<KClass<*>, () -> Any?>()
 
     // ===============================
@@ -24,5 +23,4 @@ class InjectionManager : Manager {
         requireNotNull(entry) { "" }
         return entry() as T
     }
-
 }

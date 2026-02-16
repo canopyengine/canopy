@@ -1,5 +1,6 @@
 package canopy.core.nodes.core
 
+import canopy.core.managers.InjectionManager
 import canopy.core.managers.ManagersRegistry
 import canopy.core.nodes.SceneManager
 import com.badlogic.gdx.math.Vector2
@@ -42,6 +43,7 @@ abstract class Node<N : Node<N>> protected constructor(
     // ===============================
     /** Reference to the scene manager (set automatically on init) */
     protected val sceneManager: SceneManager by lazy { ManagersRegistry.get(SceneManager::class) }
+    protected val injectionManager: InjectionManager by lazy { ManagersRegistry.get(InjectionManager::class) }
 
     /** Whether this node is a prefab (not active until instantiated) */
     private var isPrefab: Boolean = false
@@ -296,7 +298,7 @@ operator fun Node<*>.unaryPlus(): Node<*> {
 * Utility function to automatically replace the scene root with this node.
 * Useful for cleaner DSL scene building without needing to reference the scene manager directly.
 */
-fun Node<*>.asSceneRoot() : Node<*>{
+fun Node<*>.asSceneRoot(): Node<*> {
     val sceneManager = ManagersRegistry.get(SceneManager::class)
     sceneManager.currScene = this
     return this

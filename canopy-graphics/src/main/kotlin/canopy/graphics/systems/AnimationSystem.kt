@@ -1,8 +1,7 @@
 package canopy.graphics.systems
 
-import canopy.core.nodes.core.TreeSystem
 import canopy.core.nodes.core.Node
-import canopy.core.nodes.core.TreeSystemUpdatePhase
+import canopy.core.nodes.core.TreeSystem
 import canopy.graphics.nodes.animation.AnimationPlayer
 import canopy.utils.UnstableApi
 import ktx.log.logger
@@ -10,7 +9,8 @@ import ktx.log.logger
 @UnstableApi
 class AnimationSystem :
     TreeSystem(
-        TreeSystemUpdatePhase.AnimationBeforeScene,
+        UpdatePhase.FramePre,
+        1,
         AnimationPlayer::class,
     ) {
     private val logger = logger<AnimationSystem>()

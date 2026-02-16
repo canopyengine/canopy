@@ -1,9 +1,8 @@
 package canopy.physics.systems
 
 import canopy.core.managers.GameManager
-import canopy.core.nodes.core.TreeSystem
 import canopy.core.nodes.core.Node
-import canopy.core.nodes.core.TreeSystemUpdatePhase
+import canopy.core.nodes.core.TreeSystem
 import canopy.physics.nodes.body.PhysicsBody2D
 import com.badlogic.gdx.math.Vector2
 import com.badlogic.gdx.physics.box2d.Box2DDebugRenderer
@@ -13,7 +12,8 @@ import ktx.log.logger
 
 class PhysicsSystem :
     TreeSystem(
-        phase = TreeSystemUpdatePhase.PhysicsBeforeScene,
+        phase = UpdatePhase.PhysicsPre,
+        0,
         PhysicsBody2D::class,
     ) {
     private val logger = logger<PhysicsSystem>()
@@ -24,8 +24,8 @@ class PhysicsSystem :
     private var world: World? = null
     private val contactListener = PhysicsContactListener()
 
-    override fun onSystemInit() {
-        sceneManager.registerInjectable(World::class) { world }
+    override fun onRegister() {
+        injectionManager.registerInjectable(World::class) { world }
     }
 
     override fun afterProcess(delta: Float) {

@@ -1,8 +1,8 @@
 package canopy.input.nodes
 
-import anchors.framework.input.InputEvent
 import canopy.core.nodes.core.Behavior
 import canopy.core.nodes.core.Node
+import canopy.input.InputEvent
 
 abstract class InputBehavior<N : Node<N>>(
     override val node: N? = null,

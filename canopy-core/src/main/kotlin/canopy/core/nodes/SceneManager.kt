@@ -1,8 +1,8 @@
 package canopy.core.nodes
 
 import canopy.core.managers.Manager
-import canopy.core.nodes.core.TreeSystem
 import canopy.core.nodes.core.Node
+import canopy.core.nodes.core.TreeSystem
 import canopy.core.nodes.core.TreeSystem.UpdatePhase
 import canopy.core.signals.asSignalVal
 import canopy.core.signals.createSignal
@@ -72,8 +72,6 @@ class SceneManager(
     init {
         block(this)
     }
-
-
 
     // ===============================
     //      SCENE MANAGEMENT

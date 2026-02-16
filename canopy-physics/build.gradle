@@ -8,6 +8,8 @@ plugins {
 dependencies {
   // Canopy
   implementation project(':canopy-core')
+  implementation project(':canopy-test')
+  implementation project(':canopy-backends')
 
   // REFLECTION
   implementation "org.jetbrains.kotlin:kotlin-reflect:$kotlinVersion"

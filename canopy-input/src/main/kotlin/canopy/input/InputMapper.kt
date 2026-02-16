@@ -1,8 +1,5 @@
 package canopy.input
 
-import anchors.framework.input.InputBind
-import anchors.framework.input.InputData
-import anchors.framework.input.asData
 import canopy.data.saving.SaveDestination
 import canopy.data.saving.registerSaveModule
 import com.badlogic.gdx.Input

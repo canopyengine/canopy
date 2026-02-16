@@ -1,5 +1,6 @@
 package canopy.core.nodes.core
 
+import canopy.core.managers.InjectionManager
 import canopy.core.managers.ManagersRegistry
 import canopy.core.nodes.SceneManager
 import kotlin.reflect.KClass
@@ -22,8 +23,11 @@ abstract class TreeSystem(
     //        CORE PROPERTIES
     // ===============================
 
-    protected val sceneManager : SceneManager get() =
-        SceneManager.currentParent.get() ?: error("You're trying to create a TreeSystem outside of a SceneManager context.")
+    protected val sceneManager: SceneManager get() =
+        SceneManager.currentParent.get()
+            ?: error("You're trying to create a TreeSystem outside of a SceneManager context.")
+
+    protected val injectionManager: InjectionManager by lazy { ManagersRegistry.get(InjectionManager::class) }
 
     /** Nodes currently matching the system's type requirements */
     protected val matchingNodes = mutableListOf<Node<*>>()

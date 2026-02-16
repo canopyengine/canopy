@@ -35,7 +35,7 @@ abstract class PhysicsBody2D<T : PhysicsBody2D<T>>(
     // ==========================
     //          Physics
     // ==========================
-    private val world = sceneManager.inject(World::class)
+    private val world = injectionManager.inject(World::class)
     val body =
         world.body(bodyType) {
             this.position.set(globalPosition)
