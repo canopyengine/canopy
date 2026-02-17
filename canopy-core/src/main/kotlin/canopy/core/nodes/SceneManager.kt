@@ -22,7 +22,7 @@ import kotlin.reflect.KClass
  */
 class SceneManager(
     private var physicsStep: Float = 1f / 60f,
-    block: SceneManager.() -> Unit = {},
+    private val block: SceneManager.() -> Unit = {},
 ) : Manager {
     private val logger = logger<SceneManager>()
 
@@ -68,10 +68,6 @@ class SceneManager(
     //          GROUPS
     // ===============================
     val groups: MutableMap<String, MutableList<Node<*>>> = mutableMapOf()
-
-    init {
-        block(this)
-    }
 
     // ===============================
     //      SCENE MANAGEMENT
@@ -217,6 +213,7 @@ class SceneManager(
     //        LIFECYCLE HOOKS
     // ===============================
     override fun setup() {
+        this.block()
         systems.values.flatten().forEach(TreeSystem::onRegister)
     }
 

@@ -23,9 +23,7 @@ abstract class TreeSystem(
     //        CORE PROPERTIES
     // ===============================
 
-    protected val sceneManager: SceneManager get() =
-        SceneManager.currentParent.get()
-            ?: error("You're trying to create a TreeSystem outside of a SceneManager context.")
+    protected val sceneManager: SceneManager by lazy { ManagersRegistry.get(SceneManager::class) }
 
     protected val injectionManager: InjectionManager by lazy { ManagersRegistry.get(InjectionManager::class) }
 

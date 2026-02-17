@@ -1,50 +1,21 @@
-package canopy.backends.test
+package canopy.backends.terminal
 
 import canopy.core.app.CanopyGame
 import canopy.core.backend.CanopyBackendConfig
-import canopy.core.managers.InjectionManager
-import canopy.core.managers.ManagersRegistry
 import canopy.core.nodes.SceneManager
 
-class TestHeadlessCanopyGame(
+class TerminalCanopyGame(
     sceneManager: SceneManager = SceneManager(),
     onCreate: (CanopyGame<CanopyBackendConfig>) -> Unit = {},
     onResize: (CanopyGame<CanopyBackendConfig>, width: Int, height: Int) -> Unit = { _, _, _ -> },
     onDispose: (CanopyGame<CanopyBackendConfig>) -> Unit = {},
 ) : CanopyGame<CanopyBackendConfig>(
         sceneManager,
-        TestHeadlessBackend,
+        TerminalCanopyBackend,
         onCreate,
         onResize,
         onDispose,
     ) {
-    override fun create() {
-        ManagersRegistry
-            .apply {
-                register(InjectionManager())
-                register(sceneManager)
-                setup()
-            }
-        onCreate(this)
-    }
-
-    override fun resize(
-        width: Int,
-        height: Int,
-    ) {
-        onResize(this, width, height)
-    }
-
-    override fun render() {}
-
-    override fun pause() {}
-
-    override fun resume() {}
-
-    override fun dispose() {
-        onDispose(this)
-    }
-
     override fun defaultConfig(): CanopyBackendConfig =
         CanopyBackendConfig(
             width = 800,

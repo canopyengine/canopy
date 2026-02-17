@@ -10,7 +10,7 @@ class Lwjgl3Config(
     val icons: List<String> = listOf("libgdx128.png", "libgdx64.png", "libgdx32.png", "libgdx16.png"),
     val configure: Lwjgl3ApplicationConfiguration.() -> Unit = {},
 ) : CanopyBackendConfig(
-    width = size.x.toInt(),
-    height = size.y.toInt(),
-    title = title
-)
+        width = size.x.toInt(),
+        height = size.y.toInt(),
+        title = title,
+    )

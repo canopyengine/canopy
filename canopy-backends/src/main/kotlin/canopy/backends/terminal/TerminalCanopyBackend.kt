@@ -1,4 +1,4 @@
-package canopy.backends.test
+package canopy.backends.terminal
 
 import canopy.core.app.CanopyGame
 import canopy.core.backend.CanopyBackend
@@ -7,7 +7,7 @@ import canopy.core.backend.CanopyBackendHandle
 import com.badlogic.gdx.backends.headless.HeadlessApplication
 import com.badlogic.gdx.backends.headless.HeadlessApplicationConfiguration
 
-object TestHeadlessBackend : CanopyBackend<CanopyBackendConfig> {
+object TerminalCanopyBackend : CanopyBackend<CanopyBackendConfig> {
     override fun launch(
         app: CanopyGame<CanopyBackendConfig>,
         config: CanopyBackendConfig,

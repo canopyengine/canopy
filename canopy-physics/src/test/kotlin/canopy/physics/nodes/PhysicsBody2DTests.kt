@@ -1,6 +1,7 @@
 package canopy.physics.nodes
 
 import canopy.backends.test.TestHeadlessCanopyGame
+import canopy.core.managers.ManagersRegistry
 import canopy.core.nodes.SceneManager
 import canopy.physics.nodes.body.DynamicBody2D
 import canopy.physics.nodes.fixture.Area2D
@@ -12,24 +13,32 @@ import com.badlogic.gdx.math.Vector2
 import com.badlogic.gdx.physics.box2d.Shape
 import org.junit.jupiter.api.BeforeAll
 import org.junit.jupiter.api.assertNotNull
+import java.util.concurrent.CountDownLatch
 import kotlin.test.Test
 import kotlin.test.assertEquals
 
 class PhysicsBody2DTests {
     companion object {
+        private val started = CountDownLatch(1)
+
         @BeforeAll
         @JvmStatic
         fun setupHeadlessApplication() {
-            val sceneManager =
-                SceneManager {
-                    PhysicsSystem()
-                }
+            val sceneManager = SceneManager { PhysicsSystem() }
+
             TestHeadlessCanopyGame(
                 sceneManager,
                 onCreate = {
-                    it.getSystem(PhysicsSystem::class).replaceWorld()
+                    ManagersRegistry
+                        .get(SceneManager::class)
+                        .getSystem(PhysicsSystem::class)
+                        .replaceWorld()
+
+                    started.countDown()
                 },
             ).launch()
+
+            started.await()
         }
     }
 

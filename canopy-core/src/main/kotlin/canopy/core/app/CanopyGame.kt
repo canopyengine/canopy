@@ -27,9 +27,9 @@ abstract class CanopyGame<C : CanopyBackendConfig>(
     protected val sceneManager: SceneManager = SceneManager(),
     private val backend: CanopyBackend<C>,
     // Lifecycle callbacks
-    val onCreate: (SceneManager) -> Unit = {},
-    val onResize: (SceneManager, width: Int, height: Int) -> Unit = { _, _, _ -> },
-    val onDispose: (SceneManager) -> Unit = {},
+    val onCreate: (CanopyGame<C>) -> Unit = {},
+    val onResize: (CanopyGame<C>, width: Int, height: Int) -> Unit = { _, _, _ -> },
+    val onDispose: (CanopyGame<C>) -> Unit = {},
 ) : KtxGame<CanopyScreen>() {
     /**
      * Initializes the game, setting up the scene manager and managers registry, then calling the onCreate callback.
@@ -44,7 +44,7 @@ abstract class CanopyGame<C : CanopyBackendConfig>(
                 register(sceneManager)
             }.setup()
 
-        onCreate(sceneManager)
+        onCreate(this)
         super.create()
     }
 
@@ -57,7 +57,7 @@ abstract class CanopyGame<C : CanopyBackendConfig>(
     ) {
         super.resize(width, height)
         sceneManager.resize(width, height)
-        onResize(sceneManager, width, height)
+        onResize(this, width, height)
     }
 
     /**
@@ -65,7 +65,7 @@ abstract class CanopyGame<C : CanopyBackendConfig>(
      */
     override fun dispose() {
         ManagersRegistry.teardown()
-        onDispose(sceneManager)
+        onDispose(this)
         super.dispose()
     }
 

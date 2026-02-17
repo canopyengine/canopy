@@ -1,26 +1,23 @@
 import org.jlleitschuh.gradle.ktlint.reporter.ReporterType
 
 plugins {
-  id 'org.jetbrains.kotlin.plugin.serialization' version "2.2.21"
-  id 'org.jlleitschuh.gradle.ktlint' version "$ktlintVersion"
+  id 'org.jlleitschuh.gradle.ktlint'
 }
 
 dependencies {
   // Canopy
-  implementation project(':canopy-core')
-  implementation project(':canopy-data')
-  implementation project(':canopy-utils')
-  implementation project(':canopy-test')
-  implementation project(':canopy-backends')
+  implementation project(":canopy-core")
+  implementation project(":canopy-data")
+  implementation project(":canopy-utils")
+  implementation project(":canopy-test")
+  implementation project(":canopy-backends")
+
 
   // Reflection
-  implementation "org.jetbrains.kotlin:kotlin-reflect:$kotlinVersion"
-  // ECS
-  implementation 'io.github.quillraven.fleks:Fleks:2.12'
   // Testing
   testImplementation "org.jetbrains.kotlin:kotlin-test-junit5:$kotlinVersion"
   testImplementation "org.junit.jupiter:junit-jupiter:5.13.4"
-  testImplementation "org.assertj:assertj-core:3.24.2"
+  testImplementation 'org.assertj:assertj-core:3.27.7'
   testImplementation "org.mockito:mockito-core:5.16.1"
   testImplementation "org.junit.jupiter:junit-jupiter-api:5.10.0"
   testRuntimeOnly "org.junit.jupiter:junit-jupiter-engine:5.10.0"
@@ -33,61 +30,23 @@ dependencies {
   // Required to load natives in tests
   testImplementation("com.badlogicgames.gdx:gdx-backend-lwjgl3:$gdxVersion")
   // JSON
-  implementation 'org.jetbrains.kotlinx:kotlinx-serialization-json:1.6.0'
-  implementation "org.jetbrains.kotlinx:kotlinx-serialization-core:1.6.3"
+  implementation "org.jetbrains.kotlinx:kotlinx-serialization-json:$kotlinxSerializationJsonVersion"
+  implementation "org.jetbrains.kotlinx:kotlinx-serialization-core:$kotlinxSerializationCoreVersion"
   // KTX & LibGDX
-  api "com.badlogicgames.ashley:ashley:$ashleyVersion"
-  api "com.badlogicgames.box2dlights:box2dlights:$box2dlightsVersion"
-  api "com.badlogicgames.gdx-controllers:gdx-controllers-core:$gdxControllersVersion"
-  api "com.badlogicgames.gdx:gdx-ai:$aiVersion"
-  api "com.badlogicgames.gdx:gdx-box2d:$gdxVersion"
   api "com.badlogicgames.gdx:gdx-freetype:$gdxVersion"
   api "com.badlogicgames.gdx:gdx:$gdxVersion"
   api "com.bladecoder.ink:blade-ink:$bladeInkVersion"
-  api "com.crashinvaders.lml:gdx-autumn-mvc:$lmlVersion"
-  api "com.crashinvaders.lml:gdx-autumn:$lmlVersion"
-  api "com.crashinvaders.lml:gdx-kiwi:$lmlVersion"
-  api "com.crashinvaders.lml:gdx-lml:$lmlVersion"
   api "com.crashinvaders.vfx:gdx-vfx-core:$gdxVfxCoreVersion"
   api "com.crashinvaders.vfx:gdx-vfx-effects:$gdxVfxEffectsVersion"
-  api "com.github.crykn.guacamole:core:$guacamoleVersion"
-  api "com.github.crykn.guacamole:gdx:$guacamoleVersion"
-  api "com.github.czyzby:noise4j:$noise4jVersion"
-  api "com.github.tommyettinger:anim8-gdx:$anim8Version"
-  api "com.github.tommyettinger:regexodus:$regExodusVersion"
-  api "com.kotcrab.vis:vis-ui:$visUiVersion"
-  api "com.rafaskoberg.gdx:typing-label:$typingLabelVersion"
-  api "com.squidpony:squidlib-extra:$squidlibExtraVersion"
-  api "com.squidpony:squidlib-util:$squidlibUtilVersion"
-  api "com.squidpony:squidlib:$squidlibVersion"
-  api "de.golfgl.gdxcontrollerutils:gdx-controllerutils-mapping:$controllerMappingVersion"
   api "io.github.libktx:ktx-actors:$ktxVersion"
-  api "io.github.libktx:ktx-ai:$ktxVersion"
   api "io.github.libktx:ktx-app:$ktxVersion"
-  api "io.github.libktx:ktx-artemis:$ktxVersion"
-  api "io.github.libktx:ktx-ashley:$ktxVersion"
   api "io.github.libktx:ktx-assets-async:$ktxVersion"
   api "io.github.libktx:ktx-assets:$ktxVersion"
   api "io.github.libktx:ktx-async:$ktxVersion"
-  api "io.github.libktx:ktx-box2d:$ktxVersion"
   api "io.github.libktx:ktx-collections:$ktxVersion"
-  api "io.github.libktx:ktx-freetype-async:$ktxVersion"
-  api "io.github.libktx:ktx-freetype:$ktxVersion"
   api "io.github.libktx:ktx-graphics:$ktxVersion"
-  api "io.github.libktx:ktx-i18n:$ktxVersion"
-  api "io.github.libktx:ktx-inject:$ktxVersion"
-  api "io.github.libktx:ktx-json:$ktxVersion"
-  api "io.github.libktx:ktx-log:$ktxVersion"
-  api "io.github.libktx:ktx-math:$ktxVersion"
-  api "io.github.libktx:ktx-preferences:$ktxVersion"
   api "io.github.libktx:ktx-reflect:$ktxVersion"
   api "io.github.libktx:ktx-scene2d:$ktxVersion"
-  api "io.github.libktx:ktx-style:$ktxVersion"
-  api "io.github.libktx:ktx-tiled:$ktxVersion"
-  api "io.github.libktx:ktx-vis-style:$ktxVersion"
-  api "io.github.libktx:ktx-vis:$ktxVersion"
-  api "io.github.quillraven.fleks:Fleks:$fleksVersion"
-  api "net.onedaybeard.artemis:artemis-odb:$artemisOdbVersion"
   api "org.jetbrains.kotlin:kotlin-stdlib:$kotlinVersion"
   api "org.jetbrains.kotlinx:kotlinx-coroutines-core:$kotlinxCoroutinesVersion"
   api "org.mini2Dx:universal-tween-engine:$universalTweenVersion"
@@ -122,3 +81,5 @@ tasks.named("build") {
 tasks.test {
   useJUnitPlatform() // <- important! tells Gradle to use JUnit 5 platform
 }
+
+
