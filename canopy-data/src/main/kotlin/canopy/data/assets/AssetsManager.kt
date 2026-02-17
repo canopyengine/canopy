@@ -10,17 +10,10 @@ import ktx.assets.toInternalFile
 import ktx.assets.toLocalFile
 
 class AssetsManager : Manager {
-    fun loadTexture(
-        path: String,
-        source: FileSource,
-        customOptions: Texture.() -> Unit = {},
-    ): Texture = Texture(loadFile(path, source)).apply { customOptions() }
+    fun loadTexture(path: String, source: FileSource, customOptions: Texture.() -> Unit = {}): Texture =
+        Texture(loadFile(path, source)).apply { customOptions() }
 
-    fun loadFile(
-        path: String,
-        source: FileSource,
-        customOptions: FileHandle.() -> Unit = {},
-    ) = when (source) {
+    fun loadFile(path: String, source: FileSource, customOptions: FileHandle.() -> Unit = {}) = when (source) {
         FileSource.Internal -> path.toInternalFile()
         FileSource.External -> path.toExternalFile()
         FileSource.Classpath -> path.toClasspathFile()

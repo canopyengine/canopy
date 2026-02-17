@@ -1,12 +1,12 @@
 package canopy.core.signals
 
+import kotlin.concurrent.atomics.AtomicInt
+import kotlin.concurrent.atomics.ExperimentalAtomicApi
+import kotlin.test.Test
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.joinAll
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
-import kotlin.concurrent.atomics.AtomicInt
-import kotlin.concurrent.atomics.ExperimentalAtomicApi
-import kotlin.test.Test
 
 class SignalsTests {
     @Test
@@ -62,30 +62,29 @@ class SignalsTests {
 
     @OptIn(ExperimentalAtomicApi::class)
     @Test
-    fun `test signal thread-safety`() =
-        runBlocking {
-            val container = AtomicInt(0)
+    fun `test signal thread-safety`() = runBlocking {
+        val container = AtomicInt(0)
 
-            val signal = createSignal<Int>()
-            val callback: (Int) -> Unit = { value -> container.addAndFetch(value) }
+        val signal = createSignal<Int>()
+        val callback: (Int) -> Unit = { value -> container.addAndFetch(value) }
 
-            // Connect listener
-            signal connect callback // signal.connect(callback)
+        // Connect listener
+        signal connect callback // signal.connect(callback)
 
-            // Launch multiple concurrent producers on different threads
-            val producers =
-                List(10) {
-                    launch(Dispatchers.Default) {
-                        repeat(1000) {
-                            signal.emit(1)
-                        }
+        // Launch multiple concurrent producers on different threads
+        val producers =
+            List(10) {
+                launch(Dispatchers.Default) {
+                    repeat(1000) {
+                        signal.emit(1)
                     }
                 }
-            // Wait for all producers to finish
-            producers.joinAll()
-            // Verify result
-            assert(container.load() == 10_000) { "Container should be 10000 but was ${container.load()}" }
-        }
+            }
+        // Wait for all producers to finish
+        producers.joinAll()
+        // Verify result
+        assert(container.load() == 10_000) { "Container should be 10000 but was ${container.load()}" }
+    }
 
     @Test
     fun `test signal clear`() {

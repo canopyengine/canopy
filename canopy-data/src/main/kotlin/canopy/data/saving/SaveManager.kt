@@ -1,11 +1,11 @@
 package canopy.data.saving
 
+import kotlin.reflect.KClass
 import canopy.core.managers.Manager
 import canopy.data.parsers.JsonParser
 import com.badlogic.gdx.files.FileHandle
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.JsonObject
-import kotlin.reflect.KClass
 
 const val SAVE_LOCATION = "saves"
 
@@ -16,9 +16,7 @@ const val SAVE_LOCATION = "saves"
  *
  * @see SaveModule
  */
-class SaveManager(
-    vararg destinations: Pair<String, (slot: Int) -> FileHandle>,
-) : Manager {
+class SaveManager(vararg destinations: Pair<String, (slot: Int) -> FileHandle>) : Manager {
     private val destinationsMap: MutableMap<String, (slot: Int) -> FileHandle> =
         mutableMapOf(*destinations)
 
@@ -28,10 +26,7 @@ class SaveManager(
         mutableMapOf()
 
     // Register new save module
-    internal fun registerSaveModule(
-        destination: String,
-        module: SaveModule<*>,
-    ) {
+    internal fun registerSaveModule(destination: String, module: SaveModule<*>) {
         val registry = dataRegistry.getOrPut(destination) { mutableMapOf() }
         registry[module] = Unit // placeholder
     }
@@ -46,10 +41,7 @@ class SaveManager(
      * Each registered module has its onLoad method called, with the parsed data passed directly.
      */
     @Suppress("UNCHECKED_CAST")
-    fun load(
-        destination: String,
-        slot: Int,
-    ) {
+    fun load(destination: String, slot: Int) {
         val fileLocation = destinationsMap[destination]?.invoke(slot) ?: return
         if (!fileLocation.exists()) return
 
@@ -72,10 +64,7 @@ class SaveManager(
      * Loads specific data - useful for reading data after initial load.
      */
     @Suppress("UNCHECKED_CAST")
-    fun <T : Any> loadData(
-        destination: String,
-        clazz: KClass<T>,
-    ): T {
+    fun <T : Any> loadData(destination: String, clazz: KClass<T>): T {
         val registry =
             dataRegistry[destination]
                 ?: error("No registry for destination $destination")
@@ -90,10 +79,7 @@ class SaveManager(
      *
      * Data to be saved on each module is defined by the return value of the **onSave** method.
      */
-    fun save(
-        destination: String,
-        slot: Int,
-    ) {
+    fun save(destination: String, slot: Int) {
         val fileLocation = destinationsMap[destination]?.invoke(slot) ?: return
         val registry = dataRegistry[destination] ?: return
 
@@ -105,7 +91,7 @@ class SaveManager(
                     val data = typedModule.onSave()
                     put(
                         typedModule.id,
-                        JsonParser.encodeJsonElement(typedModule.serializer, data),
+                        JsonParser.encodeJsonElement(typedModule.serializer, data)
                     )
                 }
             }

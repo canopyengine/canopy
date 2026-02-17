@@ -1,7 +1,8 @@
 package canopy.core.managers
 
-import ktx.log.logger
 import kotlin.reflect.KClass
+import canopy.core.logging.logger
+import canopy.core.managers.ManagersRegistry.managers
 
 /**
  * ManagersPipeline is responsible for managing a collection of Manager instances.
@@ -21,6 +22,7 @@ object ManagersRegistry {
      * @param manager The manager instance to register.
      */
     fun <T : Manager> register(manager: T) {
+        require(managers[manager::class] == null) { "Manager ${manager::class.simpleName} is already registered" }
         managers[manager::class] = manager
     }
 
@@ -33,17 +35,16 @@ object ManagersRegistry {
      * @throws NoSuchElementException if no manager of the specified type is registered.
      */
     @Suppress("UNCHECKED_CAST")
-    fun <T : Manager> get(clazz: KClass<T>): T =
-        managers[clazz] as? T
-            ?: throw IllegalStateException(
-                """
+    fun <T : Manager> get(clazz: KClass<T>): T = managers[clazz] as? T
+        ?: throw IllegalStateException(
+            """
 
                 [MANAGERS REGISTRY]
                 No ${clazz.simpleName} registered!
                 To fix this: register it into the Managers Registry!
 
-                """.trimIndent(),
-            )
+            """.trimIndent()
+        )
 
     /**
      * Sets up all registered managers by invoking their setup methods.
@@ -62,5 +63,17 @@ object ManagersRegistry {
         logger.info { "Tearing down managers[registered: ${managers.size}]..." }
         managers.values.forEach { it.teardown() }
         managers.clear()
+    }
+
+    /**
+     * Convenience method to use a specific set of managers within a scope.
+     * It tears down all currently registered managers, registers the provided managers, and sets them up
+     * This is useful for testing or scenarios where you want to temporarily switch to a different set of managers.
+     * @param managers The managers to be used within the scope.
+     */
+    fun withScope(block: ManagersRegistry.() -> Unit) {
+        teardown()
+        block()
+        setup()
     }
 }

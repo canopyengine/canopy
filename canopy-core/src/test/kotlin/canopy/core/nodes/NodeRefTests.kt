@@ -1,15 +1,12 @@
 package canopy.core.nodes
 
-import canopy.core.managers.ManagersRegistry
-import canopy.core.nodes.core.Behavior
-import canopy.core.nodes.core.Node
-import canopy.core.nodes.core.NodeRef
-import canopy.core.nodes.core.behavior
-import canopy.core.nodes.core.nodeRef
-import canopy.core.nodes.types.empty.EmptyNode
-import org.junit.jupiter.api.BeforeAll
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import canopy.core.managers.ManagersRegistry
+import canopy.core.managers.SceneManager
+import canopy.core.nodes.core.*
+import canopy.core.nodes.types.empty.EmptyNode
+import org.junit.jupiter.api.BeforeAll
 
 class NodeRefTests {
     private class NeedsRef(
@@ -18,16 +15,18 @@ class NodeRefTests {
         val external: NodeRef<*>,
         block: Node<*>.() -> Unit = {},
     ) : Node<NeedsRef>(
-            name,
-            script,
-            block = block,
-        )
+        name,
+        script,
+        block = block
+    )
 
     companion object {
         @BeforeAll
         @JvmStatic
         fun setup() {
-            ManagersRegistry.register(SceneManager())
+            ManagersRegistry.withScope {
+                register(SceneManager())
+            }
         }
     }
 
@@ -41,11 +40,11 @@ class NodeRefTests {
                     name = "referrer",
                     external = nodeRef("$/external"),
                     script =
-                        behavior(
-                            onReady = {
-                                referencedNode = external.get(this).name
-                            },
-                        ),
+                    behavior(
+                        onReady = {
+                            referencedNode = external.get(this).name
+                        }
+                    )
                 )
                 EmptyNode(name = "external")
             }

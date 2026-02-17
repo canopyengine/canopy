@@ -1,7 +1,10 @@
 package canopy.graphics.nodes.animation
 
+import kotlin.test.Ignore
+import kotlin.test.Test
+import kotlin.test.assertEquals
 import canopy.core.managers.ManagersRegistry
-import canopy.core.nodes.SceneManager
+import canopy.core.managers.SceneManager
 import canopy.core.nodes.types.empty.EmptyNode
 import canopy.graphics.nodes.animation.tracks.ActionTrack
 import canopy.graphics.nodes.animation.tracks.PropertyTrack
@@ -9,9 +12,6 @@ import canopy.utils.UnstableApi
 import com.badlogic.gdx.math.Vector2
 import org.junit.jupiter.api.BeforeAll
 import org.junit.jupiter.api.assertThrows
-import kotlin.test.Ignore
-import kotlin.test.Test
-import kotlin.test.assertEquals
 
 @Ignore
 @UnstableApi
@@ -25,7 +25,7 @@ class AnimationTests {
             ManagersRegistry.register(
                 SceneManager {
                     // AnimationSystem()
-                },
+                }
             )
         }
     }

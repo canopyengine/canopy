@@ -48,24 +48,20 @@ class IdRegistry<T : IdEntry>(
         }
     }
 
-    fun collectJsonFiles(dir: FileHandle): List<FileHandle> =
-        dir.list()?.flatMap { file ->
-            when {
-                file.isDirectory -> collectJsonFiles(file) // recurse into subfolders
-                file.extension() == "json" -> listOf(file)
-                else -> emptyList()
-            }
-        } ?: emptyList()
+    fun collectJsonFiles(dir: FileHandle): List<FileHandle> = dir.list()?.flatMap { file ->
+        when {
+            file.isDirectory -> collectJsonFiles(file) // recurse into subfolders
+            file.extension() == "json" -> listOf(file)
+            else -> emptyList()
+        }
+    } ?: emptyList()
 
-    inline fun <reified R : T> mapIds(
-        ids: List<String>,
-        updateHandler: R.() -> Unit = {},
-    ): List<R> {
+    inline fun <reified R : T> mapIds(ids: List<String>, updateHandler: R.() -> Unit = {}): List<R> {
         if (ids.isEmpty()) return emptyList()
         return ids.map { id ->
             val item =
                 map[id] as? R ?: throw IllegalArgumentException(
-                    "Id '$id' not found in registry '${R::class.simpleName}'",
+                    "Id '$id' not found in registry '${R::class.simpleName}'"
                 )
             item.apply(updateHandler)
         }

@@ -2,10 +2,7 @@ package canopy.graphics.nodes.animation.tracks
 
 import kotlin.reflect.KMutableProperty0
 
-class PropertyTrack<P>(
-    val property: KMutableProperty0<P>,
-    block: PropertyTrack<P>.() -> Unit = {},
-) : Track<P>() {
+class PropertyTrack<P>(val property: KMutableProperty0<P>, block: PropertyTrack<P>.() -> Unit = {}) : Track<P>() {
     companion object {
         private val currentParent = ThreadLocal.withInitial<PropertyTrack<*>?> { null }
     }
@@ -21,10 +18,7 @@ class PropertyTrack<P>(
         currentParent.set(old)
     }
 
-    override fun collectUpdates(
-        prevTime: Float,
-        time: Float,
-    ): List<() -> Unit> {
+    override fun collectUpdates(prevTime: Float, time: Float): List<() -> Unit> {
         val interpolatedValue = interpolateKeys(prevTime, time)
         return listOf { property.set(interpolatedValue ?: property.get()) }
     }

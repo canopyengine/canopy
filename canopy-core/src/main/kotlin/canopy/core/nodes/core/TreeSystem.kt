@@ -1,9 +1,9 @@
 package canopy.core.nodes.core
 
+import kotlin.reflect.KClass
 import canopy.core.managers.InjectionManager
 import canopy.core.managers.ManagersRegistry
-import canopy.core.nodes.SceneManager
-import kotlin.reflect.KClass
+import canopy.core.managers.SceneManager
 
 // ===============================
 //      GLOBAL NODE SYSTEM BASE
@@ -29,10 +29,6 @@ abstract class TreeSystem(
 
     /** Nodes currently matching the system's type requirements */
     protected val matchingNodes = mutableListOf<Node<*>>()
-
-    init {
-        sceneManager.addSystem(this)
-    }
 
     // ===============================
     //         LIFECYCLE HOOKS
@@ -79,11 +75,10 @@ abstract class TreeSystem(
     protected open fun onNodeRemoved(node: Node<*>) {}
 
     /** Checks whether a node (or any of its children) matches the required types */
-    private fun acceptsNode(node: Node<*>) =
-        requiredTypes.any { type ->
-            type.isInstance(node) ||
-                node.hasChildType(type)
-        }
+    private fun acceptsNode(node: Node<*>) = requiredTypes.any { type ->
+        type.isInstance(node) ||
+            node.hasChildType(type)
+    }
 
     // ===============================
     //           TICK PROCESSING
@@ -114,10 +109,7 @@ abstract class TreeSystem(
     /**
      * Override to define logic applied per node during each tick.
      */
-    protected open fun processNode(
-        node: Node<*>,
-        delta: Float,
-    ) {}
+    protected open fun processNode(node: Node<*>, delta: Float) {}
 
     // ===============================
 //        UPDATE PHASE ENUM
@@ -168,10 +160,7 @@ fun treeSystem(
             afterProcess(delta)
         }
 
-        override fun processNode(
-            node: Node<*>,
-            delta: Float,
-        ) {
+        override fun processNode(node: Node<*>, delta: Float) {
             processNode(node, delta)
         }
     }

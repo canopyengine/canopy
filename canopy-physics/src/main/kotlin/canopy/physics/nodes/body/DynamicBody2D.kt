@@ -15,15 +15,15 @@ open class DynamicBody2D<T : DynamicBody2D<T>>(
     groups: MutableList<String> = mutableListOf(),
     block: T.() -> Unit = {},
 ) : PhysicsBody2D<T>(
-        name,
-        bodyType = BodyDef.BodyType.DynamicBody,
-        script,
-        position,
-        scale,
-        rotation,
-        groups,
-        block,
-    ) {
+    name,
+    bodyType = BodyDef.BodyType.DynamicBody,
+    script,
+    position,
+    scale,
+    rotation,
+    groups,
+    block
+) {
     private val logger = logger<DynamicBody2D<T>>()
 
     init {

@@ -13,11 +13,11 @@ class EmptyNode(
     groups: MutableList<String> = mutableListOf(),
     block: EmptyNode.() -> Unit = {},
 ) : Node<EmptyNode>(
-        name,
-        behavior,
-        position,
-        scale,
-        rotation,
-        groups,
-        block,
-    )
+    name,
+    behavior,
+    position,
+    scale,
+    rotation,
+    groups,
+    block
+)

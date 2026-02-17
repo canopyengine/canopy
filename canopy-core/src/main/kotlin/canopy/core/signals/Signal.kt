@@ -74,10 +74,7 @@ class TwoArgsSignal<A, B> : Signal<(A, B) -> Unit> {
 
     override infix fun disconnect(listener: (A, B) -> Unit) = callbacks.remove(listener)
 
-    fun emit(
-        a: A,
-        b: B,
-    ) = callbacks.forEach { it(a, b) }
+    fun emit(a: A, b: B) = callbacks.forEach { it(a, b) }
 
     override fun clear() = callbacks.clear()
 }

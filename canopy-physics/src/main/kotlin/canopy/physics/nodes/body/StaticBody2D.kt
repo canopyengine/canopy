@@ -16,15 +16,15 @@ class StaticBody2D(
     groups: MutableList<String> = mutableListOf(),
     block: StaticBody2D.() -> Unit = {},
 ) : PhysicsBody2D<StaticBody2D>(
-        name,
-        bodyType = BodyDef.BodyType.StaticBody,
-        script,
-        position,
-        scale,
-        rotation,
-        groups,
-        block,
-    ) {
+    name,
+    bodyType = BodyDef.BodyType.StaticBody,
+    script,
+    position,
+    scale,
+    rotation,
+    groups,
+    block
+) {
     private val logger = logger<StaticBody2D>()
 
     init {

@@ -10,12 +10,11 @@ import com.badlogic.gdx.physics.box2d.World
 import ktx.box2d.createWorld
 import ktx.log.logger
 
-class PhysicsSystem(
-    gravity: Vector2 = Vector2.Zero,
-) : TreeSystem(
+class PhysicsSystem(gravity: Vector2 = Vector2.Zero) :
+    TreeSystem(
         phase = UpdatePhase.PhysicsPre,
         0,
-        PhysicsBody2D::class,
+        PhysicsBody2D::class
     ) {
     private val logger = logger<PhysicsSystem>()
     val debugRenderer: Box2DDebugRenderer? =

@@ -21,18 +21,12 @@ class SpriteTrack<T : TextureRegion>(
         currentParent.set(old)
     }
 
-    fun keyFrame(
-        time: Float,
-        frameIdx: Int,
-    ) {
+    fun keyFrame(time: Float, frameIdx: Int) {
         require(frameIdx in 0 until frames.size) { "frameIdx $frameIdx out of range" }
         key(time, frames[frameIdx])
     }
 
-    override fun collectUpdates(
-        prevTime: Float,
-        time: Float,
-    ): List<() -> Unit> {
+    override fun collectUpdates(prevTime: Float, time: Float): List<() -> Unit> {
         val interpolatedValue = interpolateKeys(prevTime, time)
         return listOf { sprite.currFrame = interpolatedValue ?: sprite.currFrame }
     }

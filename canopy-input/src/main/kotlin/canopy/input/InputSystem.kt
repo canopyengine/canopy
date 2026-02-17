@@ -7,9 +7,8 @@ import com.badlogic.gdx.math.Vector2
 import ktx.log.logger
 
 @UnstableApi
-class InputSystem(
-    vararg pairs: Pair<String, List<InputBind>>,
-) : TreeSystem(UpdatePhase.PhysicsPre, 10),
+class InputSystem(vararg pairs: Pair<String, List<InputBind>>) :
+    TreeSystem(UpdatePhase.PhysicsPre, 10),
     Manager {
     private val logger = logger<InputSystem>()
     private val mapper = InputMapper()
@@ -36,7 +35,7 @@ class InputSystem(
                 InputState.JustPressed -> {
                     dispatchEvents(
                         listOf(ButtonInputEvent(action, InputState.JustPressed)),
-                        delta,
+                        delta
                     )
                 }
                 InputState.Pressed -> {
@@ -44,14 +43,14 @@ class InputSystem(
                     if (prevState == InputState.Pressed) {
                         dispatchEvents(
                             listOf(ButtonInputEvent(action, InputState.Pressed)),
-                            delta,
+                            delta
                         )
                     }
                 }
                 InputState.JustReleased -> {
                     dispatchEvents(
                         listOf(ButtonInputEvent(action, InputState.JustReleased)),
-                        delta,
+                        delta
                     )
                 }
                 else -> Unit
@@ -62,10 +61,7 @@ class InputSystem(
     // ------------------------------------------------------------------------
     // Compute next state based on previous state and raw input
     // ------------------------------------------------------------------------
-    private fun getInputState(
-        action: String,
-        newState: InputState,
-    ): InputState {
+    private fun getInputState(action: String, newState: InputState): InputState {
         val prev = actionsState[action] ?: InputState.Released
 
         val prevIsPressedEvent = prev in listOf(InputState.Pressed, InputState.JustPressed)
@@ -86,19 +82,13 @@ class InputSystem(
     // ------------------------------------------------------------------------
     // Dispatch events to the SceneManager
     // ------------------------------------------------------------------------
-    private fun dispatchEvents(
-        events: List<InputEvent>,
-        delta: Float,
-    ) {
+    private fun dispatchEvents(events: List<InputEvent>, delta: Float) {
         // node
     }
 
     private fun getState(action: String) = actionsState[action] ?: InputState.Released
 
-    fun getAxis(
-        negativeAction: String,
-        positiveAction: String,
-    ): Float {
+    fun getAxis(negativeAction: String, positiveAction: String): Float {
         val neg = getState(negativeAction)
         val pos = getState(positiveAction)
 
@@ -111,14 +101,8 @@ class InputSystem(
         return value
     }
 
-    fun getInputVector(
-        negativeX: String,
-        positiveX: String,
-        negativeY: String,
-        positiveY: String,
-    ): Vector2 =
-        Vector2(
-            getAxis(negativeX, positiveX),
-            getAxis(negativeY, positiveY),
-        )
+    fun getInputVector(negativeX: String, positiveX: String, negativeY: String, positiveY: String): Vector2 = Vector2(
+        getAxis(negativeX, positiveX),
+        getAxis(negativeY, positiveY)
+    )
 }

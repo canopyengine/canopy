@@ -1,14 +1,14 @@
 package canopy.data.saving
 
+import kotlin.test.Test
+import kotlin.test.assertEquals
+import kotlin.test.assertTrue
+import java.io.File
 import canopy.core.managers.ManagersRegistry
 import com.badlogic.gdx.files.FileHandle
 import kotlinx.serialization.builtins.serializer
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.BeforeAll
-import java.io.File
-import kotlin.test.Test
-import kotlin.test.assertEquals
-import kotlin.test.assertTrue
 
 class SaveManagerTests {
     companion object {
@@ -17,7 +17,7 @@ class SaveManagerTests {
                 "player" to { slot ->
                     val file = File("src/test/output/test-$slot.json")
                     FileHandle(file)
-                },
+                }
             )
 
         @JvmStatic
@@ -55,7 +55,7 @@ class SaveManagerTests {
             id = "test-int",
             serializer = Int.serializer(),
             onSave = { 5 },
-            onLoad = { intData = it },
+            onLoad = { intData = it }
         )
 
         var stringData = ""
@@ -64,7 +64,7 @@ class SaveManagerTests {
             id = "test-string",
             serializer = String.serializer(),
             onSave = { "abc" },
-            onLoad = { stringData = it },
+            onLoad = { stringData = it }
         )
         // Act
         saveManager.save("player", 1)

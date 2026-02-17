@@ -1,6 +1,10 @@
 package canopy.core.nodes
 
+import kotlin.test.*
+import kotlin.time.DurationUnit
+import kotlin.time.toDuration
 import canopy.core.managers.ManagersRegistry
+import canopy.core.managers.SceneManager
 import canopy.core.nodes.core.Behavior
 import canopy.core.nodes.core.Node
 import canopy.core.nodes.core.behavior
@@ -10,16 +14,15 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import org.junit.jupiter.api.BeforeAll
-import kotlin.test.*
-import kotlin.time.DurationUnit
-import kotlin.time.toDuration
 
 class NodeTests {
     companion object {
         @BeforeAll
         @JvmStatic
         fun setup() {
-            ManagersRegistry.register(SceneManager())
+            ManagersRegistry.withScope {
+                register(SceneManager())
+            }
         }
     }
 
@@ -42,7 +45,7 @@ class NodeTests {
         assertSame(scene, scene.getNode("child-b").parent)
         assertSame(
             scene.getNode("child-b"),
-            scene.getNode("child-b/child-c").parent,
+            scene.getNode("child-b/child-c").parent
         )
     }
 
@@ -59,7 +62,7 @@ class NodeTests {
                     if (name !in childCount) {
                         childCount[name] = 0
                     }
-                },
+                }
             )
 
         // Build scene
@@ -76,9 +79,9 @@ class NodeTests {
                 "Test 2" to 2,
                 "child-a" to 0,
                 "child-b" to 1,
-                "child-c" to 0,
+                "child-c" to 0
             ),
-            childCount,
+            childCount
         )
     }
 
@@ -89,7 +92,7 @@ class NodeTests {
             behavior<EmptyNode>(
                 onReady = {
                     callOrder += name
-                },
+                }
             )
 
         // Build scene
@@ -106,52 +109,51 @@ class NodeTests {
                 "child-a",
                 "child-c",
                 "child-b",
-                "Test 2",
+                "Test 2"
             ),
-            callOrder,
+            callOrder
         )
     }
 
     @Test
-    fun `ticks should update state`() =
-        runBlocking {
-            var nTicks = 0
-            var nPhysicsTicks = 0
+    fun `ticks should update state`() = runBlocking {
+        var nTicks = 0
+        var nPhysicsTicks = 0
 
-            val behavior =
-                behavior<EmptyNode>(
-                    onUpdate = {
-                        nTicks++
-                    },
-                    onPhysicsUpdate = {
-                        nPhysicsTicks++
-                    },
-                )
-
-            val tree = EmptyNode("root", behavior)
-            tree.buildTree()
-
-            launch {
-                repeat(2) { i ->
-                    if (nTicks % (i + 1) == 0) {
-                        tree.nodePhysicsUpdate(0f)
-                    }
-
-                    tree.nodeUpdate(0f)
-                    delay(20.toDuration(DurationUnit.MILLISECONDS))
+        val behavior =
+            behavior<EmptyNode>(
+                onUpdate = {
+                    nTicks++
+                },
+                onPhysicsUpdate = {
+                    nPhysicsTicks++
                 }
-            }.join()
+            )
 
-            assertEquals(2, nTicks)
-            assertEquals(1, nPhysicsTicks)
-        }
+        val tree = EmptyNode("root", behavior)
+        tree.buildTree()
+
+        launch {
+            repeat(2) { i ->
+                if (nTicks % (i + 1) == 0) {
+                    tree.nodePhysicsUpdate(0f)
+                }
+
+                tree.nodeUpdate(0f)
+                delay(20.toDuration(DurationUnit.MILLISECONDS))
+            }
+        }.join()
+
+        assertEquals(2, nTicks)
+        assertEquals(1, nPhysicsTicks)
+    }
 
     @Test
     fun `adding should call ready on child node`() {
         var wasCalled = false
         val behavior =
             behavior<EmptyNode>(
-                onReady = { wasCalled = true },
+                onReady = { wasCalled = true }
             )
 
         val root = EmptyNode("root")
@@ -169,7 +171,7 @@ class NodeTests {
         var wasCalled = false
         val behavior =
             behavior<EmptyNode>(
-                onExitTree = { wasCalled = true },
+                onExitTree = { wasCalled = true }
             )
 
         val tree =
@@ -210,17 +212,17 @@ class NodeTests {
             groups: MutableList<String> = mutableListOf(),
             block: CustomScene.() -> Unit = {},
         ) : Node<CustomScene>(
-                name,
-                script,
-                position,
-                scale,
-                rotation,
-                groups,
-                block = {
-                    EmptyNode("empty")
-                    block()
-                },
-            )
+            name,
+            script,
+            position,
+            scale,
+            rotation,
+            groups,
+            block = {
+                EmptyNode("empty")
+                block()
+            }
+        )
 
         val customScene =
             CustomScene {

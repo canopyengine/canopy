@@ -26,7 +26,7 @@ class BoxShape2D(
         width,
         height,
         position, // NOW comes from the fixture node
-        angle, // NOW comes from the fixture node
+        angle // NOW comes from the fixture node
     ) {
         this.friction = friction
         this.restitution = restitution

@@ -17,14 +17,14 @@ class AnimatedSprite2D<T : TextureRegion>(
     groups: MutableList<String> = mutableListOf(),
     block: Node<*>.() -> Unit = {},
 ) : Node<AnimatedSprite2D<T>>(
-        name,
-        script,
-        position,
-        scale,
-        rotation,
-        groups,
-        block,
-    ) {
+    name,
+    script,
+    position,
+    scale,
+    rotation,
+    groups,
+    block
+) {
     var currFrame: T? = null
 
     private val logger = logger<AnimatedSprite2D<T>>()

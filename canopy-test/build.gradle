@@ -6,10 +6,23 @@ plugins {
 
 dependencies {
   // Canopy
+  api project(":canopy-app")
   // REFLECTION
   // Testing
   // Testing
   // KTX & LibGDX
+  testImplementation "com.badlogicgames.gdx:gdx-backend-headless:$gdxVersion"
+  testImplementation "org.jetbrains.kotlin:kotlin-test-junit5:$kotlinVersion"
+  testImplementation "org.junit.jupiter:junit-jupiter:5.13.4"
+  testImplementation 'org.assertj:assertj-core:3.27.7'
+  testImplementation "org.mockito:mockito-core:5.16.1"
+  testImplementation "org.junit.jupiter:junit-jupiter-api:5.10.0"
+  testRuntimeOnly "org.junit.jupiter:junit-jupiter-engine:5.10.0"
+  testImplementation "org.mockito.kotlin:mockito-kotlin:5.1.0"
+  api "com.badlogicgames.gdx:gdx-backend-headless:$gdxVersion"
+  api "com.badlogicgames.gdx:gdx-platform:$gdxVersion:natives-desktop"
+  // Required to load natives in tests
+  api "com.badlogicgames.gdx:gdx-backend-lwjgl3:$gdxVersion"
 
   if(enableGraalNative == 'true') {
     implementation "io.github.berstanio:gdx-svmhelper-annotations:$graalHelperVersion"

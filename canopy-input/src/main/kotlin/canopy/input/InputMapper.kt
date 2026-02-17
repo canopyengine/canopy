@@ -15,7 +15,7 @@ class InputMapper {
             "input",
             InputData.serializer(),
             onSave = { this.asData() },
-            onLoad = ::loadData,
+            onLoad = ::loadData
         )
     }
 
@@ -30,11 +30,7 @@ class InputMapper {
         mappings.clear()
     }
 
-    fun mapAction(
-        action: String,
-        newBinds: List<InputBind>,
-        replace: Boolean = true,
-    ) {
+    fun mapAction(action: String, newBinds: List<InputBind>, replace: Boolean = true) {
         logger.info { "Mapping action [$action] to: ${newBinds.map { Input.Keys.toString(it.code) }}" }
 
         val binds = mappings.computeIfAbsent(action) { mutableListOf() }

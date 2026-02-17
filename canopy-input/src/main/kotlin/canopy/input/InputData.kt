@@ -4,15 +4,10 @@ import canopy.data.registry.IdEntry
 import kotlinx.serialization.Serializable
 
 @Serializable
-class InputData(
-    val mappings: List<InputEntry>,
-)
+class InputData(val mappings: List<InputEntry>)
 
 @Serializable
-class InputEntry(
-    override val name: String,
-    val binds: List<InputBind>,
-) : IdEntry {
+class InputEntry(override val name: String, val binds: List<InputBind>) : IdEntry {
     override val domain = "input"
 }
 

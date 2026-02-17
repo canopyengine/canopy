@@ -61,17 +61,11 @@ class PhysicsContactListener : ContactListener {
         }
     }
 
-    override fun preSolve(
-        contact: Contact?,
-        oldManifold: Manifold?,
-    ) {
+    override fun preSolve(contact: Contact?, oldManifold: Manifold?) {
         return // TODO("Not yet implemented")
     }
 
-    override fun postSolve(
-        contact: Contact?,
-        impulse: ContactImpulse?,
-    ) {
+    override fun postSolve(contact: Contact?, impulse: ContactImpulse?) {
         return // TODO("Not yet implemented")
     }
 }

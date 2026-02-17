@@ -7,10 +7,7 @@ abstract class InputListener<N : Node<N>>(
     private val children: Map<String, *>,
     private val script: InputBehavior<N>?,
 ) {
-    open fun nodeInput(
-        event: InputEvent,
-        delta: Float = 0F,
-    ) {
+    open fun nodeInput(event: InputEvent, delta: Float = 0F) {
         if (event.isHandled) return
         script?.onInput(event, delta)
         if (event.isHandled) return

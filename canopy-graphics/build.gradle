@@ -10,7 +10,7 @@ dependencies {
   implementation project(":canopy-data")
   implementation project(":canopy-utils")
   implementation project(":canopy-test")
-  implementation project(":canopy-backends")
+  implementation project(":canopy-app")
 
 
   // Reflection

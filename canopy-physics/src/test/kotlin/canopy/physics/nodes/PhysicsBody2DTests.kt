@@ -1,21 +1,21 @@
 package canopy.physics.nodes
 
-import canopy.backends.test.TestHeadlessCanopyGame
+import kotlin.test.Test
+import kotlin.test.assertEquals
+import java.util.concurrent.CountDownLatch
 import canopy.core.managers.ManagersRegistry
-import canopy.core.nodes.SceneManager
+import canopy.core.managers.SceneManager
 import canopy.physics.nodes.body.DynamicBody2D
 import canopy.physics.nodes.fixture.Area2D
 import canopy.physics.nodes.fixture.Collider2D
 import canopy.physics.nodes.shape.BoxShape2D
 import canopy.physics.nodes.shape.CircleShape2D
 import canopy.physics.systems.PhysicsSystem
+import canopy.test.backends.TestHeadlessCanopyGame
 import com.badlogic.gdx.math.Vector2
 import com.badlogic.gdx.physics.box2d.Shape
 import org.junit.jupiter.api.BeforeAll
 import org.junit.jupiter.api.assertNotNull
-import java.util.concurrent.CountDownLatch
-import kotlin.test.Test
-import kotlin.test.assertEquals
 
 class PhysicsBody2DTests {
     companion object {
@@ -24,7 +24,9 @@ class PhysicsBody2DTests {
         @BeforeAll
         @JvmStatic
         fun setupHeadlessApplication() {
-            val sceneManager = SceneManager { PhysicsSystem() }
+            val sceneManager = SceneManager {
+                registerSystem(PhysicsSystem())
+            }
 
             TestHeadlessCanopyGame(
                 sceneManager,
@@ -35,7 +37,7 @@ class PhysicsBody2DTests {
                         .replaceWorld()
 
                     started.countDown()
-                },
+                }
             ).launch()
 
             started.await()
@@ -49,11 +51,11 @@ class PhysicsBody2DTests {
                 Collider2D(
                     name = "collider",
                     shape = BoxShape2D(),
-                    position = Vector2(100f, 100f),
+                    position = Vector2(100f, 100f)
                 )
                 Area2D(
                     name = "area",
-                    shape = CircleShape2D(),
+                    shape = CircleShape2D()
                 )
             }
         tree.buildTree()

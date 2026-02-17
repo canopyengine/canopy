@@ -8,7 +8,6 @@ dependencies {
   // Canopy
   api project(":canopy-core")
   api project(":canopy-test")
-  api project(":canopy-backends")
 
   // REFLECTION
   implementation "org.jetbrains.kotlin:kotlin-reflect:$kotlinVersion"

@@ -27,14 +27,14 @@ class Camera2D(
     // DSL
     block: Camera2D.() -> Unit = {},
 ) : Node<Camera2D>(
-        name,
-        script,
-        position,
-        scale,
-        rotation,
-        groups,
-        block,
-    ) {
+    name,
+    script,
+    position,
+    scale,
+    rotation,
+    groups,
+    block
+) {
     val camera = OrthographicCamera()
 
     val active = active.asSignalVal()
@@ -109,10 +109,7 @@ class Camera2D(
     }
 
     /** Snap camera to target immediately during resize */
-    fun resize(
-        worldWidth: Float,
-        worldHeight: Float,
-    ) {
+    fun resize(worldWidth: Float, worldHeight: Float) {
         isResizing = true
         camera.setToOrtho(false, worldWidth, worldHeight)
 

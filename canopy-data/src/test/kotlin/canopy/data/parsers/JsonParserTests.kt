@@ -1,5 +1,7 @@
 package canopy.data.parsers
 
+import kotlin.test.assertEquals
+import kotlin.test.assertIs
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.modules.SerializersModule
@@ -8,30 +10,21 @@ import kotlinx.serialization.modules.subclass
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Nested
 import org.junit.jupiter.api.Test
-import kotlin.test.assertEquals
-import kotlin.test.assertIs
 
 class JsonParserTests {
     @Serializable
-    data class SimpleData(
-        val id: Int,
-        val name: String,
-    )
+    data class SimpleData(val id: Int, val name: String)
 
     @Serializable
     sealed interface BaseType
 
     @Serializable
     @SerialName("ImplementationA")
-    data class ImplementationA(
-        val valueA: String,
-    ) : BaseType
+    data class ImplementationA(val valueA: String) : BaseType
 
     @Serializable
     @SerialName("ImplementationB")
-    data class ImplementationB(
-        val valueB: Int,
-    ) : BaseType
+    data class ImplementationB(val valueB: Int) : BaseType
 
     @Nested
     @DisplayName("Simple tests for JsonParser")

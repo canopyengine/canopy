@@ -5,10 +5,7 @@ import com.badlogic.gdx.math.Vector2
 /**
  * Represents an input event detected by GDX and mapped by the Input Dispatcher
  */
-sealed class InputEvent(
-    open val action: String,
-    open val state: InputState,
-) {
+sealed class InputEvent(open val action: String, open val state: InputState) {
     /**
      * Whether or not this event was handled, for propagation concerns
      */
@@ -37,18 +34,8 @@ sealed class InputEvent(
 
 enum class InputState { Pressed, Released, JustPressed, JustReleased, Other }
 
-class ButtonInputEvent(
-    action: String,
-    state: InputState,
-) : InputEvent(action, state)
+class ButtonInputEvent(action: String, state: InputState) : InputEvent(action, state)
 
-class MouseButtonEvent(
-    val screenPos: Vector2,
-    action: String,
-    state: InputState,
-) : InputEvent(action, state)
+class MouseButtonEvent(val screenPos: Vector2, action: String, state: InputState) : InputEvent(action, state)
 
-class MouseMoveEvent(
-    val screenPos: Vector2,
-    action: String,
-) : InputEvent(action, InputState.Other)
+class MouseMoveEvent(val screenPos: Vector2, action: String) : InputEvent(action, InputState.Other)

@@ -24,14 +24,14 @@ class Area2D(
     // DSL
     block: Node<*>.() -> Unit = {},
 ) : Node<Area2D>(
-        name,
-        script,
-        position,
-        scale,
-        rotation,
-        groups,
-        block,
-    ) {
+    name,
+    script,
+    position,
+    scale,
+    rotation,
+    groups,
+    block
+) {
     private var fixture: Fixture? = null
 
     // Signals
@@ -52,7 +52,7 @@ class Area2D(
                 0f,
                 0f,
                 filter,
-                true,
+                true
             )
     }
 

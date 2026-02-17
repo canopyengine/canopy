@@ -22,14 +22,14 @@ abstract class PhysicsBody2D<T : PhysicsBody2D<T>>(
     // DSL
     block: T.() -> Unit = {},
 ) : Node<T>(
-        name,
-        script,
-        position,
-        scale,
-        rotation,
-        groups,
-        block,
-    ) {
+    name,
+    script,
+    position,
+    scale,
+    rotation,
+    groups,
+    block
+) {
     private val logger = logger<PhysicsBody2D<T>>()
 
     // ==========================

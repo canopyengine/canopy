@@ -6,7 +6,10 @@ plugins {
 
 dependencies {
   // Canopy Projects
-  api project(":canopy-test")
+  //api project(":canopy-test")
+
+  // Logging
+  api("org.slf4j:slf4j-api:2.0.16")
 
   // REFLECTION
   implementation "org.jetbrains.kotlin:kotlin-reflect:$kotlinVersion"

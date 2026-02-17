@@ -21,14 +21,14 @@ class Sprite2D(
     // DSL
     block: Node<*>.() -> Unit = {},
 ) : Node<Sprite2D>(
-        name,
-        script,
-        position,
-        scale,
-        rotation,
-        groups,
-        block,
-    ) {
+    name,
+    script,
+    position,
+    scale,
+    rotation,
+    groups,
+    block
+) {
     val sprite = Sprite(texture)
     private val logger = logger<Sprite2D>()
 

@@ -10,14 +10,12 @@ import com.badlogic.gdx.utils.viewport.FitViewport
 import ktx.graphics.use
 import ktx.log.logger
 
-class RenderSystem(
-    worldWidth: Float,
-    worldHeight: Float,
-) : TreeSystem(
+class RenderSystem(worldWidth: Float, worldHeight: Float) :
+    TreeSystem(
         UpdatePhase.FramePost,
         0,
         Sprite2D::class,
-        AnimatedSprite2D::class,
+        AnimatedSprite2D::class
     ) {
     // Misc
     private val logger = logger<RenderSystem>()
@@ -32,10 +30,7 @@ class RenderSystem(
         viewport.camera = camera.camera
     }
 
-    private fun resizeViewport(
-        width: Int,
-        height: Int,
-    ) {
+    private fun resizeViewport(width: Int, height: Int) {
         viewport.update(width, height, true)
         cameraManager.activeCamera.value?.resize(viewport.worldWidth, viewport.worldHeight)
     }
@@ -60,7 +55,7 @@ class RenderSystem(
                                 node.globalPosition.x,
                                 node.globalPosition.y,
                                 it.regionWidth * node.scale.x,
-                                it.regionHeight * node.scale.y,
+                                it.regionHeight * node.scale.y
                             )
                         }
                     }

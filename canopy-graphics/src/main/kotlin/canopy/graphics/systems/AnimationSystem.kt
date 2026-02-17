@@ -11,15 +11,12 @@ class AnimationSystem :
     TreeSystem(
         UpdatePhase.FramePre,
         1,
-        AnimationPlayer::class,
+        AnimationPlayer::class
     ) {
     private val logger = logger<AnimationSystem>()
     private val queuedUpdates = mutableListOf<() -> Unit>()
 
-    override fun processNode(
-        node: Node<*>,
-        delta: Float,
-    ) {
+    override fun processNode(node: Node<*>, delta: Float) {
         val player = node as AnimationPlayer
         val anim = player.currentAnimation ?: return
 

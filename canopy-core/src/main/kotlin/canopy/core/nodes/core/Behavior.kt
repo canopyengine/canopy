@@ -12,9 +12,7 @@ package canopy.core.nodes.core
  * @param N Type of the Node this behavior is attached to.
  * @property node Optional reference to the node. Can be null if detached.
  */
-abstract class Behavior<N : Node<N>>(
-    protected open val node: N? = null,
-) {
+abstract class Behavior<N : Node<N>>(protected open val node: N? = null) {
     /** Secondary constructor for convenience */
     constructor() : this(null)
 
@@ -82,27 +80,26 @@ fun <N : Node<N>> behavior(
     onExitTree: N.() -> Unit = {},
     onUpdate: N.(delta: Float) -> Unit = {},
     onPhysicsUpdate: N.(delta: Float) -> Unit = {},
-): (node: N) -> Behavior<N> =
-    { node ->
-        object : Behavior<N>(node) {
-            override fun onEnterTree() {
-                onEnterTree(node)
-            }
+): (node: N) -> Behavior<N> = { node ->
+    object : Behavior<N>(node) {
+        override fun onEnterTree() {
+            onEnterTree(node)
+        }
 
-            override fun onReady() {
-                onReady(node)
-            }
+        override fun onReady() {
+            onReady(node)
+        }
 
-            override fun onExitTree() {
-                onExitTree(node)
-            }
+        override fun onExitTree() {
+            onExitTree(node)
+        }
 
-            override fun onUpdate(delta: Float) {
-                onUpdate(node, delta)
-            }
+        override fun onUpdate(delta: Float) {
+            onUpdate(node, delta)
+        }
 
-            override fun onPhysicsUpdate(delta: Float) {
-                onPhysicsUpdate(node, delta)
-            }
+        override fun onPhysicsUpdate(delta: Float) {
+            onPhysicsUpdate(node, delta)
         }
     }
+}

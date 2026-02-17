@@ -1,10 +1,10 @@
 package canopy.core.signals
 
+import kotlin.properties.Delegates
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.runBlocking
-import kotlin.properties.Delegates
 
 /**
  * A variable that emits_ a signal when its value changes.
@@ -12,9 +12,7 @@ import kotlin.properties.Delegates
  * @property flow A StateFlow that emits the current value and updates on changes.
  * Useful for data binding and reactive programming.
  */
-class SignalVal<T>(
-    initial: T,
-) {
+class SignalVal<T>(initial: T) {
     private val valueChanged = createSignal<T>()
     private val _flow = MutableSharedFlow<T>(replay = 1) // replay last value
     val flow = _flow.asSharedFlow().distinctUntilChanged() // distinct until changed

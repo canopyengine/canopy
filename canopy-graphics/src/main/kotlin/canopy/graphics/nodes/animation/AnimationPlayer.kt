@@ -1,5 +1,6 @@
 package canopy.graphics.nodes.animation
 
+import kotlin.math.abs
 import canopy.core.nodes.core.Behavior
 import canopy.core.nodes.core.Node
 import canopy.core.signals.createSignal
@@ -7,7 +8,6 @@ import canopy.graphics.systems.AnimationSystem
 import canopy.utils.UnstableApi
 import com.badlogic.gdx.math.Vector2
 import ktx.log.logger
-import kotlin.math.abs
 
 @UnstableApi
 class AnimationPlayer(
@@ -19,14 +19,14 @@ class AnimationPlayer(
     groups: MutableList<String> = mutableListOf(),
     block: AnimationPlayer.() -> Unit = {},
 ) : Node<AnimationPlayer>(
-        name,
-        behavior,
-        position,
-        scale,
-        rotation,
-        groups,
-        block,
-    ) {
+    name,
+    behavior,
+    position,
+    scale,
+    rotation,
+    groups,
+    block
+) {
     private val animations = mutableMapOf<String, Animation>()
     private val logger = logger<AnimationPlayer>()
 

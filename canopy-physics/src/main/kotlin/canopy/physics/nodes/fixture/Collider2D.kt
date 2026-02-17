@@ -27,14 +27,14 @@ class Collider2D(
     // DSL
     block: Node<*>.() -> Unit = {},
 ) : Node<Collider2D>(
-        name,
-        script,
-        position,
-        scale,
-        rotation,
-        groups,
-        block,
-    ) {
+    name,
+    script,
+    position,
+    scale,
+    rotation,
+    groups,
+    block
+) {
     private var fixture: Fixture? = null
 
     // Signals
@@ -53,7 +53,7 @@ class Collider2D(
                 restitution,
                 density,
                 filter,
-                false,
+                false
             )
     }
 

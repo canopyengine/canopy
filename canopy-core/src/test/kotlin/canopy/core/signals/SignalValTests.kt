@@ -1,10 +1,10 @@
 package canopy.core.signals
 
+import kotlin.test.Test
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.yield
 import org.junit.jupiter.api.Assertions.assertEquals
-import kotlin.test.Test
 
 class SignalValTests {
     @Test
@@ -70,31 +70,30 @@ class SignalValTests {
     }
 
     @Test
-    fun `test signal val flow`() =
-        runBlocking {
-            val signalVal = SignalVal(0)
+    fun `test signal val flow`() = runBlocking {
+        val signalVal = SignalVal(0)
 
-            val collectedValues = mutableListOf<Int>()
+        val collectedValues = mutableListOf<Int>()
 
-            // Start collecting immediately
-            val job =
-                launch {
-                    signalVal.flow.collect {
-                        collectedValues.add(it)
-                    }
+        // Start collecting immediately
+        val job =
+            launch {
+                signalVal.flow.collect {
+                    collectedValues.add(it)
                 }
+            }
 
-            // Update values
-            signalVal.value = 42
-            signalVal.value = 100
-            signalVal.value = 100 // duplicate, should not emit (SharedFlow allows it, duplicates may remain)
+        // Update values
+        signalVal.value = 42
+        signalVal.value = 100
+        signalVal.value = 100 // duplicate, should not emit (SharedFlow allows it, duplicates may remain)
 
-            // Give coroutine a chance to collect all
-            yield()
-            job.cancel() // Stop collecting
+        // Give coroutine a chance to collect all
+        yield()
+        job.cancel() // Stop collecting
 
-            assertEquals(listOf(0, 42, 100), collectedValues)
-        }
+        assertEquals(listOf(0, 42, 100), collectedValues)
+    }
 
     @Test
     fun `test signal val unwrapped`() {

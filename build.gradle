@@ -1,5 +1,4 @@
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
-import org.jlleitschuh.gradle.ktlint.reporter.ReporterType
 
 buildscript {
   repositories {
@@ -17,7 +16,7 @@ buildscript {
 plugins {
   id "org.jetbrains.kotlin.jvm" version "$kotlinVersion" apply false
   id "org.jetbrains.kotlin.plugin.serialization" version "$kotlinPluginSerializationVersion" apply false
-  id "org.jlleitschuh.gradle.ktlint" version "$ktlintVersion" apply true
+  id "org.jlleitschuh.gradle.ktlint" version "$ktlintVersion" apply false
 }
 
 allprojects {
@@ -105,21 +104,3 @@ subprojects {
 }
 
 eclipse.project.name = 'canopy' + '-parent'
-
-
-ktlint {
-  // Don't override the internal CLI unless you know what you're doing
-  verbose.set(true)
-  outputToConsole.set(true)
-  ignoreFailures.set(false)
-
-  reporters {
-    reporter(ReporterType.PLAIN)
-    reporter(ReporterType.CHECKSTYLE)
-  }
-
-  filter {
-    exclude("**/generated/**")
-    include("**/src/**/*.kt")
-  }
-}

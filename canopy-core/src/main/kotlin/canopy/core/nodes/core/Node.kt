@@ -1,11 +1,11 @@
 package canopy.core.nodes.core
 
+import kotlin.reflect.KClass
 import canopy.core.managers.InjectionManager
 import canopy.core.managers.ManagersRegistry
-import canopy.core.nodes.SceneManager
+import canopy.core.managers.SceneManager
 import com.badlogic.gdx.math.Vector2
 import ktx.math.plus
-import kotlin.reflect.KClass
 
 /**
  * DSL marker for Scene DSL usage.
@@ -183,14 +183,14 @@ abstract class Node<N : Node<N>> protected constructor(
                 else -> {
                     val child = current?.children[part]
                     current = child ?: throw IllegalArgumentException(
-                        "No child '$part' under '${current?.name}' for path '$path'",
+                        "No child '$part' under '${current?.name}' for path '$path'"
                     )
                 }
             }
         }
 
         return current as? T ?: throw IllegalArgumentException(
-            "Node at path '$path' is not of expected type",
+            "Node at path '$path' is not of expected type"
         )
     }
 
@@ -206,10 +206,7 @@ abstract class Node<N : Node<N>> protected constructor(
     }
 
     /** Reparent a child to another node */
-    fun reparent(
-        child: Node<*>,
-        newParent: Node<*>,
-    ) {
+    fun reparent(child: Node<*>, newParent: Node<*>) {
         removeChild(child)
         newParent.addChild(child)
     }

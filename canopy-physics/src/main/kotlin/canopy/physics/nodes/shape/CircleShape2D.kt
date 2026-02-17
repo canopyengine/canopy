@@ -24,7 +24,7 @@ class CircleShape2D(
     ): Fixture =
         body.circle(
             radius,
-            position, // fixture offset
+            position // fixture offset
         ) {
             this.friction = friction
             this.restitution = restitution

@@ -1,20 +1,20 @@
 package canopy.graphics.nodes.animation
 
-import canopy.backends.test.TestHeadlessCanopyGame
+import kotlin.test.Ignore
+import kotlin.test.Test
+import kotlin.test.assertContentEquals
 import canopy.core.managers.ManagersRegistry
-import canopy.core.nodes.SceneManager
+import canopy.core.managers.SceneManager
 import canopy.core.nodes.types.empty.EmptyNode
 import canopy.data.assets.AssetsManager
 import canopy.graphics.nodes.animation.tracks.ActionTrack
 import canopy.graphics.nodes.animation.tracks.SpriteTrack
 import canopy.graphics.nodes.visual.AnimatedSprite2D
 import canopy.graphics.systems.AnimationSystem
+import canopy.test.backends.TestHeadlessCanopyGame
 import canopy.utils.UnstableApi
 import com.badlogic.gdx.graphics.g2d.TextureRegion
 import org.junit.jupiter.api.BeforeAll
-import kotlin.test.Ignore
-import kotlin.test.Test
-import kotlin.test.assertContentEquals
 
 @Ignore
 @UnstableApi
@@ -30,7 +30,7 @@ class SpriteAnimationTests {
                 register(
                     SceneManager {
                         AnimationSystem()
-                    },
+                    }
                 )
 
                 register(AssetsManager())
@@ -56,7 +56,7 @@ class SpriteAnimationTests {
             arrayOf(
                 TextureRegion(),
                 TextureRegion(),
-                TextureRegion(),
+                TextureRegion()
             )
 
         val executedFrames = mutableListOf<Int>()
