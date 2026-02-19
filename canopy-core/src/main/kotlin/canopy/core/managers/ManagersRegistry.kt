@@ -22,7 +22,9 @@ object ManagersRegistry {
      * @param manager The manager instance to register.
      */
     fun <T : Manager> register(manager: T) {
-        require(managers[manager::class] == null) { "Manager ${manager::class.simpleName} is already registered" }
+        require(managers[manager::class] == null) {
+            logger.info { "Manager ${manager::class.simpleName} is already registered" }
+        }
         managers[manager::class] = manager
     }
 

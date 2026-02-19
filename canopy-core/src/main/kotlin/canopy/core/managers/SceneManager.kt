@@ -63,7 +63,7 @@ class SceneManager(private var physicsStep: Float = 1f / 60f, private val block:
     // ===============================
     //          GROUPS
     // ===============================
-    val groups: MutableMap<String, MutableList<Node<*>>> = mutableMapOf()
+    val groups = mutableMapOf<String, MutableList<Node<*>>>()
 
     // ===============================
     //      SCENE MANAGEMENT
@@ -110,8 +110,9 @@ class SceneManager(private var physicsStep: Float = 1f / 60f, private val block:
     // ===============================
 
     fun <T : TreeSystem> registerSystem(system: T) {
-        require(!hasSystem(system::class)) { "System ${system::class.simpleName} is already registered" }
-
+        require(!hasSystem(system::class)) {
+            logger.error { "System ${system::class.simpleName} is already registered" }
+        }
         systems.getOrPut(system.phase) { mutableListOf() }.let { list ->
             list += system
             list.sortBy(TreeSystem::priority)

@@ -10,7 +10,9 @@ import canopy.core.managers.SceneManager
 // ===============================
 
 /**
- * Base class for systems operating on all nodes of a scene that match certain types.
+ * Base class for systems that span the whole tree, and process nodes that match the required types
+ *
+ * See more [here](https://github.com/canopyengine/canopy-docs/blob/main/docs/manuals/core/node-system.md).
  *
  * @param requiredTypes The types of nodes this system should operate on.
  */
@@ -24,7 +26,6 @@ abstract class TreeSystem(
     // ===============================
 
     protected val sceneManager: SceneManager by lazy { ManagersRegistry.get(SceneManager::class) }
-
     protected val injectionManager: InjectionManager by lazy { ManagersRegistry.get(InjectionManager::class) }
 
     /** Nodes currently matching the system's type requirements */
@@ -52,10 +53,10 @@ abstract class TreeSystem(
      * Called by tree lifecycle when nodes enter the scene.
      */
     fun register(node: Node<*>) {
-        if (acceptsNode(node)) {
-            matchingNodes += node
-            onNodeAdded(node)
-        }
+        if (!acceptsNode(node)) return
+
+        matchingNodes += node
+        onNodeAdded(node)
     }
 
     /**
@@ -63,9 +64,8 @@ abstract class TreeSystem(
      * Called by tree lifecycle when nodes exit the scene.
      */
     fun unregister(node: Node<*>) {
-        if (matchingNodes.remove(node)) {
-            onNodeRemoved(node)
-        }
+        if (!matchingNodes.remove(node)) return
+        onNodeRemoved(node)
     }
 
     /** Called when a node is added to the system. Override to add custom logic. */
@@ -76,8 +76,7 @@ abstract class TreeSystem(
 
     /** Checks whether a node (or any of its children) matches the required types */
     private fun acceptsNode(node: Node<*>) = requiredTypes.any { type ->
-        type.isInstance(node) ||
-            node.hasChildType(type)
+        type.isInstance(node) || node.hasChildType(type)
     }
 
     // ===============================
@@ -133,6 +132,9 @@ abstract class TreeSystem(
     }
 }
 
+/**
+ * Helper method that helps to create tree systems in-place
+ */
 fun treeSystem(
     phase: TreeSystem.UpdatePhase,
     priority: Int = 0,
@@ -145,23 +147,23 @@ fun treeSystem(
 ) {
     object : TreeSystem(phase, priority, *requiredTypes) {
         override fun onRegister() {
-            onRegister()
+            onRegister.invoke(this)
         }
 
         override fun onUnregister() {
-            onUnregister()
+            onUnregister.invoke(this)
         }
 
         override fun beforeProcess(delta: Float) {
-            beforeProcess(delta)
+            beforeProcess.invoke(this, delta)
         }
 
         override fun afterProcess(delta: Float) {
-            afterProcess(delta)
+            afterProcess.invoke(this, delta)
         }
 
         override fun processNode(node: Node<*>, delta: Float) {
-            processNode(node, delta)
+            processNode.invoke(this, node, delta)
         }
     }
 }

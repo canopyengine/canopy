@@ -1,23 +1,56 @@
 package canopy.graphics.backends
 
-import canopy.app.CanopyGame
-import canopy.app.backends.CanopyBackend
-import canopy.app.backends.CanopyBackendHandle
+import canopy.app.game.CanopyGame
+import canopy.app.game.CanopyGameHandle
+import canopy.core.logging.logger
+import canopy.core.managers.ManagersRegistry
+import canopy.core.managers.SceneManager
+import canopy.data.assets.AssetsManager
+import canopy.graphics.managers.CameraManager
+import canopy.graphics.systems.RenderSystem
 import com.badlogic.gdx.backends.lwjgl3.Lwjgl3Application
 import com.badlogic.gdx.backends.lwjgl3.Lwjgl3ApplicationConfiguration
+import ktx.async.KtxAsync
 
-object Lwjgl3Backend : CanopyBackend<Lwjgl3Config> {
-    override fun launch(
-        app: CanopyGame<Lwjgl3Config>,
-        config: Lwjgl3Config,
-        vararg args: String,
-    ): CanopyBackendHandle {
-        val handle =
-            object : CanopyBackendHandle {
-                override fun exit() {}
-            }
+class CanopyDesktopGame(
+    // General props
+    sceneManager: SceneManager = SceneManager(),
+    config: CanopyDesktopGameConfig? = null,
+    onCreate: (CanopyGame<CanopyDesktopGameConfig>) -> Unit = {},
+    onResize: (CanopyGame<CanopyDesktopGameConfig>, width: Int, height: Int) -> Unit = { _, _, _ -> },
+    onDispose: (CanopyGame<CanopyDesktopGameConfig>) -> Unit = {},
+) : CanopyGame<CanopyDesktopGameConfig>(
+    sceneManager,
+    config,
+    onCreate,
+    onResize,
+    onDispose
+) {
+    private val logger = logger<CanopyDesktopGame>()
 
-        if (StartupHelper.startNewJvmIfRequired()) return handle
+    override fun create() {
+        KtxAsync.initiate()
+
+        sceneManager.apply {
+            registerSystem(RenderSystem(config.screenWidth, config.screenHeight))
+        }
+
+        ManagersRegistry.apply {
+            register(CameraManager())
+            register(AssetsManager())
+        }
+        super.create()
+    }
+
+    override fun defaultConfig(): CanopyDesktopGameConfig = CanopyDesktopGameConfig()
+
+    override fun internalLaunch(config: CanopyDesktopGameConfig, vararg args: String): CanopyGameHandle {
+        val handle = CanopyGameHandle {}
+
+        if (StartupHelper.startNewJvmIfRequired()) {
+            logger.warn { "A new JVM was spammed while booting Canopy. Quitting..." }
+            return handle
+        }
 
         val cfg =
             Lwjgl3ApplicationConfiguration().apply {
@@ -32,7 +65,7 @@ object Lwjgl3Backend : CanopyBackend<Lwjgl3Config> {
                 // // useful for testing performance, but can also be very stressful to some hardware.
                 // // You may also need to configure GPU drivers to fully disable Vsync; this can cause screen tearing.
 
-                setWindowedMode(config.width, config.height)
+                setWindowedMode(config.screenWidth, config.screenHeight)
                 // // You can change these files; they are in lwjgl3/src/main/resources/ .
                 // // They can also be loaded from the root of assets/ .
                 setWindowIcon(*config.icons.toTypedArray())
@@ -45,12 +78,12 @@ object Lwjgl3Backend : CanopyBackend<Lwjgl3Config> {
                 // // You can choose to add the following line and the mentioned dependency if you want; they
                 // // are not intended for games that use GL30 (which is compatibility with OpenGL ES 3.0).
                 // // Know that it might not work well in some cases.
-//        setOpenGLEmulation(Lwjgl3ApplicationConfiguration.GLEmulation.ANGLE_GLES20, 0, 0)
+                // setOpenGLEmulation(Lwjgl3ApplicationConfiguration.GLEmulation.ANGLE_GLES20, 0, 0)
                 config.configure(this)
             }
 
-        Lwjgl3Application(app, cfg)
+        val app = Lwjgl3Application(this, cfg)
 
-        return handle
+        return CanopyGameHandle { app.exit() }
     }
 }

@@ -3,11 +3,7 @@ package canopy.data.assets
 import canopy.core.managers.Manager
 import com.badlogic.gdx.files.FileHandle
 import com.badlogic.gdx.graphics.Texture
-import ktx.assets.toAbsoluteFile
-import ktx.assets.toClasspathFile
-import ktx.assets.toExternalFile
-import ktx.assets.toInternalFile
-import ktx.assets.toLocalFile
+import ktx.assets.*
 
 class AssetsManager : Manager {
     fun loadTexture(path: String, source: FileSource, customOptions: Texture.() -> Unit = {}): Texture =

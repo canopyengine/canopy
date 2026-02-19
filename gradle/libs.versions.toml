@@ -1,0 +1,83 @@
+[versions]
+# Kotlin
+kotlin = "2.3.10"
+ktlint = "14.0.1"
+kotlinxSerialization = "1.10.0"
+
+# Gdx
+gdx = "1.14.0"
+universalTween = "6.3.3"
+gdxDialogs = "1.3.0"
+gdxControllers = "2.2.4"
+
+# Ktx
+ktx = "1.13.1-rc1"
+
+# Testing
+coroutines = "1.10.2"
+junit = "5.13.4"
+assertj = "3.27.7"
+mockk = "1.13.8"
+mockitoKotlin = "5.1.0"
+
+# Logging
+slf4j = "2.0.16"
+logback = "1.5.13"
+
+#Misc
+graalHelper = "2.0.1"
+
+#####
+#####
+
+[libraries]
+# Kotlin
+kotlin-stdlib = { module = "org.jetbrains.kotlin:kotlin-stdlib", version.ref = "kotlin" }
+kotlin-reflect = { module = "org.jetbrains.kotlin:kotlin-reflect", version.ref = "kotlin" }
+coroutines-core = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-core", version.ref = "coroutines" }
+kotlinx-serialization-json = { module = "org.jetbrains.kotlinx:kotlinx-serialization-json", version.ref = "kotlinxSerialization" }
+
+# Gdx
+gdx-core = { module = "com.badlogicgames.gdx:gdx", version.ref = "gdx" }
+gdx-box2d-core = { module = "com.badlogicgames.gdx:gdx-box2d", version.ref = "gdx" }
+
+gdx-backend-headless = { module = "com.badlogicgames.gdx:gdx-backend-headless", version.ref = "gdx" }
+gdx-backend-lwjgl3 = { module = "com.badlogicgames.gdx:gdx-backend-lwjgl3", version.ref = "gdx" }
+gdx-platform = { module = "com.badlogicgames.gdx:gdx-platform", version.ref = "gdx" }
+gdx-box2d-platform = { module = "com.badlogicgames.gdx:gdx-box2d-platform", version.ref = "gdx" }
+gdx-freetype-platform = { module = "com.badlogicgames.gdx:gdx-freetype-platform", version.ref = "gdx" }
+
+# Ktx
+ktx-app = { module = "io.github.libktx:ktx-app", version.ref = "ktx" }
+ktx-body2d = { module = "io.github.libktx:ktx-box2d", version.ref = "ktx"}
+ktx-assets = { module = "io.github.libktx:ktx-assets", version.ref = "ktx" }
+ktx-assets-async = { module = "io.github.libktx:ktx-assets-async", version.ref = "ktx" }
+ktx-async = { module = "io.github.libktx:ktx-async", version.ref = "ktx" }
+ktx-log = { module = "io.github.libktx:ktx-log", version.ref = "ktx" }
+ktx-math = { module = "io.github.libktx:ktx-math", version.ref = "ktx" }
+ktx-graphics = { module = "io.github.libktx:ktx-graphics", version.ref = "ktx" }
+
+# Testing
+junit-jupiter = { module = "org.junit.jupiter:junit-jupiter", version.ref = "junit" }
+assertj-core = { module = "org.assertj:assertj-core", version.ref = "assertj" }
+mockk = { module = "io.mockk:mockk", version.ref = "mockk" }
+mockito-kotlin = { module = "org.mockito.kotlin:mockito-kotlin", version.ref = "mockitoKotlin" }
+kotlin-test-junit5 = { module = "org.jetbrains.kotlin:kotlin-test-junit5", version.ref = "kotlin" }
+
+# Logging
+slf4j-api = { module = "org.slf4j:slf4j-api", version.ref = "slf4j" }
+logback-classic = { module = "ch.qos.logback:logback-classic", version.ref = "logback" }
+
+# Other
+universal-tween = { module = "org.mini2Dx:universal-tween-engine", version.ref = "universalTween" }
+gdx-dialogs-desktop = { module = "de.tomgrill.gdxdialogs:gdx-dialogs-desktop", version.ref = "gdxDialogs" }
+gdx-controllers-desktop = { module = "com.badlogicgames.gdx-controllers:gdx-controllers-desktop", version.ref = "gdxControllers" }
+graal-helper-annotations = { module = "io.github.berstanio:gdx-svmhelper-annotations", version.ref = "graalHelper" }
+
+#####
+#####
+
+[plugins]
+kotlin-jvm = { id = "org.jetbrains.kotlin.jvm", version.ref = "kotlin" }
+kotlin-serialization = { id = "org.jetbrains.kotlin.plugin.serialization", version.ref = "kotlin" }
+ktlint = { id = "org.jlleitschuh.gradle.ktlint", version.ref = "ktlint" }

@@ -9,6 +9,8 @@ package canopy.core.nodes.core
  *
  * Behaviors allow modular logic to run on nodes without subclassing the node itself.
  *
+ * See more [here](https://github.com/canopyengine/canopy-docs/blob/main/docs/manuals/core/node-system.md).
+ *
  * @param N Type of the Node this behavior is attached to.
  * @property node Optional reference to the node. Can be null if detached.
  */
@@ -44,11 +46,6 @@ abstract class Behavior<N : Node<N>>(protected open val node: N? = null) {
      * Use for deterministic physics calculations.
      */
     open fun onPhysicsUpdate(delta: Float) = Unit
-
-    // Uncomment if factory pattern is needed in the future
-//    interface Factory<T : Node, B : Behavior<T>> {
-//        fun create(node: T): B
-//    }
 }
 
 // ===============================

@@ -10,7 +10,7 @@ import com.badlogic.gdx.utils.viewport.FitViewport
 import ktx.graphics.use
 import ktx.log.logger
 
-class RenderSystem(worldWidth: Float, worldHeight: Float) :
+class RenderSystem(worldWidth: Int, worldHeight: Int) :
     TreeSystem(
         UpdatePhase.FramePost,
         0,
@@ -20,10 +20,10 @@ class RenderSystem(worldWidth: Float, worldHeight: Float) :
     // Misc
     private val logger = logger<RenderSystem>()
     private val batch = SpriteBatch()
-    private val viewport = FitViewport(worldWidth, worldHeight)
+    private val viewport = FitViewport(worldWidth.toFloat(), worldHeight.toFloat())
 
     // Managers //
-    private val cameraManager = ManagersRegistry.get(CameraManager::class)
+    private val cameraManager by lazy { ManagersRegistry.get(CameraManager::class) }
 
     private fun updateViewportCamera() {
         val camera = cameraManager.activeCamera.value ?: return

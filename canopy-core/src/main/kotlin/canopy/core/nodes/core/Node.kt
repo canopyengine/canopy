@@ -1,6 +1,7 @@
 package canopy.core.nodes.core
 
 import kotlin.reflect.KClass
+import canopy.core.logging.logger
 import canopy.core.managers.InjectionManager
 import canopy.core.managers.ManagersRegistry
 import canopy.core.managers.SceneManager
@@ -8,17 +9,12 @@ import com.badlogic.gdx.math.Vector2
 import ktx.math.plus
 
 /**
- * DSL marker for Scene DSL usage.
- */
-@DslMarker
-annotation class NodeDSL
-
-/**
- * Base node class for 2D scene graph system.
+ * Base node class for 2D scene graph systems.
+ *
+ * See more [here](https://github.com/canopyengine/canopy-docs/blob/main/docs/manuals/core/node-system.md).
  *
  * @param N Type of the node (for generics / DSL chaining)
  */
-@NodeDSL
 @Suppress("UNCHECKED_CAST")
 abstract class Node<N : Node<N>> protected constructor(
     // ===============================
@@ -41,8 +37,15 @@ abstract class Node<N : Node<N>> protected constructor(
     // ===============================
     //        INTERNAL PROPERTIES
     // ===============================
+
+    private val logger = logger<Node<N>>()
+
+    // ========== MANAGER REFERENCES ================= //
+
     /** Reference to the scene manager (set automatically on init) */
     protected val sceneManager: SceneManager by lazy { ManagersRegistry.get(SceneManager::class) }
+
+    /** Reference to the injection manager (for prop injection) */
     protected val injectionManager: InjectionManager by lazy { ManagersRegistry.get(InjectionManager::class) }
 
     /** Whether this node is a prefab (not active until instantiated) */
@@ -85,7 +88,8 @@ abstract class Node<N : Node<N>> protected constructor(
 
     init {
         check(ManagersRegistry.has(SceneManager::class)) {
-            """
+            logger.error {
+                """
 
             [NODE]
             You're trying to create nodes without a Scene Manager!
@@ -93,7 +97,8 @@ abstract class Node<N : Node<N>> protected constructor(
 
             To fix it: Register the Scene Manager on 'ManagersRegistry'.
 
-            """.trimIndent()
+                """.trimIndent()
+            }
         }
 
         // Attach to current DSL parent if exists
@@ -109,7 +114,7 @@ abstract class Node<N : Node<N>> protected constructor(
     //          CHILD MANAGEMENT
     // ===============================
     private fun addChildInternal(child: Node<*>) {
-        check(child.name !in children) { "Child with name '${child.name}' already exists" }
+        check(child.name !in children) { logger.error { "Child with name '${child.name}' already exists" } }
         _children[child.name] = child
         child._parent = this
         sceneManager.registerSubtree(child)
@@ -117,7 +122,7 @@ abstract class Node<N : Node<N>> protected constructor(
 
     /** Adds a child node at runtime */
     fun addChild(child: Node<*>) {
-        check(child.parent == null) { "Node '${child.name}' already has a parent!" }
+        check(child.parent == null) { logger.error { "Node '${child.name}' already has a parent!" } }
         addChildInternal(child)
 
         if (child.isPrefab) return
@@ -129,14 +134,14 @@ abstract class Node<N : Node<N>> protected constructor(
 
     /** Removes a child node */
     fun removeChild(child: Node<*>) {
-        check(child.parent == this) { "Node '${child.name}' is not a child of '$name'!" }
+        check(child.parent == this) { logger.error { "Node '${child.name}' is not a child of '$name'!" } }
 
         // Lifecycle teardown
         child.nodeExitTree()
         _children.remove(child.name)
         child._parent = null
 
-        sceneManager.unregisterSubtree(this)
+        sceneManager.unregisterSubtree(child)
 
         // CLEANUP
         child.children.values

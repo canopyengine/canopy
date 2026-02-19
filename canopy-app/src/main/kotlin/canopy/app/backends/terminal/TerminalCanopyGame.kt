@@ -1,24 +1,34 @@
 package canopy.app.backends.terminal
 
-import canopy.app.CanopyGame
-import canopy.app.backends.CanopyBackendConfig
+import canopy.app.game.CanopyGame
+import canopy.app.game.CanopyGameConfig
+import canopy.app.game.CanopyGameHandle
 import canopy.core.managers.SceneManager
+import com.badlogic.gdx.backends.headless.HeadlessApplication
+import com.badlogic.gdx.backends.headless.HeadlessApplicationConfiguration
 
 class TerminalCanopyGame(
     sceneManager: SceneManager = SceneManager(),
-    onCreate: (CanopyGame<CanopyBackendConfig>) -> Unit = {},
-    onResize: (CanopyGame<CanopyBackendConfig>, width: Int, height: Int) -> Unit = { _, _, _ -> },
-    onDispose: (CanopyGame<CanopyBackendConfig>) -> Unit = {},
-) : CanopyGame<CanopyBackendConfig>(
+    config: CanopyGameConfig,
+    onCreate: (CanopyGame<CanopyGameConfig>) -> Unit = {},
+    onResize: (CanopyGame<CanopyGameConfig>, width: Int, height: Int) -> Unit = { _, _, _ -> },
+    onDispose: (CanopyGame<CanopyGameConfig>) -> Unit = {},
+) : CanopyGame<CanopyGameConfig>(
     sceneManager,
-    TerminalCanopyBackend,
+    config,
     onCreate,
     onResize,
     onDispose
 ) {
-    override fun defaultConfig(): CanopyBackendConfig = CanopyBackendConfig(
-        width = 800,
-        height = 600,
+    override fun defaultConfig(): CanopyGameConfig = CanopyGameConfig(
         title = "Test Headless Canopy Game"
     )
+
+    override fun internalLaunch(config: CanopyGameConfig, vararg args: String): CanopyGameHandle {
+        val headless = HeadlessApplication(this, HeadlessApplicationConfiguration())
+
+        return CanopyGameHandle {
+            headless.exit()
+        }
+    }
 }

@@ -1,8 +1,6 @@
-package canopy.app
+package canopy.app.game
 
-import canopy.app.backends.CanopyBackend
-import canopy.app.backends.CanopyBackendConfig
-import canopy.app.backends.CanopyBackendHandle
+import canopy.app.CanopyScreen
 import canopy.core.managers.InjectionManager
 import canopy.core.managers.ManagersRegistry
 import canopy.core.managers.SceneManager
@@ -23,16 +21,18 @@ import ktx.async.KtxAsync
  * Overall, CanopyGame provides a structured and flexible foundation for building games with the Canopy framework, handling common lifecycle events and allowing for customization through callbacks and variant-specific launch implementations.
  *
  */
-abstract class CanopyGame<C : CanopyBackendConfig>(
+abstract class CanopyGame<C : CanopyGameConfig>(
     protected val sceneManager: SceneManager = SceneManager(),
-    private val backend: CanopyBackend<C>,
+    config: C? = null,
     // Lifecycle callbacks
-    val onCreate: (CanopyGame<C>) -> Unit = {},
-    val onResize: (CanopyGame<C>, width: Int, height: Int) -> Unit = { _, _, _ -> },
-    val onDispose: (CanopyGame<C>) -> Unit = {},
+    protected val onCreate: (CanopyGame<C>) -> Unit = {},
+    protected val onResize: (CanopyGame<C>, width: Int, height: Int) -> Unit = { _, _, _ -> },
+    protected val onDispose: (CanopyGame<C>) -> Unit = {},
 ) : KtxGame<CanopyScreen>() {
 
     protected val injectionManager by lazy { ManagersRegistry.get(InjectionManager::class) }
+
+    protected val config: C = config ?: defaultConfig()
 
     /**
      * Initializes the game, setting up the scene manager and managers registry, then calling the onCreate callback.
@@ -70,6 +70,10 @@ abstract class CanopyGame<C : CanopyBackendConfig>(
 
     abstract fun defaultConfig(): C
 
-    open fun launch(config: C = defaultConfig(), vararg args: String): CanopyBackendHandle =
-        backend.launch(this, config, *args)
+    protected abstract fun internalLaunch(config: C, vararg args: String): CanopyGameHandle
+
+    fun launch(vararg args: String): CanopyGameHandle = internalLaunch(
+        config,
+        *args
+    )
 }
