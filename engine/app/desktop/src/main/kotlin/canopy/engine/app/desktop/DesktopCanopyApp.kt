@@ -14,21 +14,21 @@ import com.badlogic.gdx.backends.lwjgl3.Lwjgl3ApplicationConfiguration
 import ktx.async.KtxAsync
 
 @UnstableApi
-class CanopyDesktopApp(
+class DesktopCanopyApp(
     // General props
     sceneManager: SceneManager = SceneManager(),
-    config: CanopyDesktopAppConfig? = null,
-    onCreate: (CanopyApp<CanopyDesktopAppConfig>) -> Unit = {},
-    onResize: (CanopyApp<CanopyDesktopAppConfig>, width: Int, height: Int) -> Unit = { _, _, _ -> },
-    onDispose: (CanopyApp<CanopyDesktopAppConfig>) -> Unit = {},
-) : CanopyApp<CanopyDesktopAppConfig>(
+    config: DesktopCanopyAppConfig? = null,
+    onCreate: (CanopyApp<DesktopCanopyAppConfig>) -> Unit = {},
+    onResize: (CanopyApp<DesktopCanopyAppConfig>, width: Int, height: Int) -> Unit = { _, _, _ -> },
+    onDispose: (CanopyApp<DesktopCanopyAppConfig>) -> Unit = {},
+) : CanopyApp<DesktopCanopyAppConfig>(
     sceneManager,
     config,
     onCreate,
     onResize,
     onDispose
 ) {
-    private val logger = logger<CanopyDesktopApp>()
+    private val logger = logger<DesktopCanopyApp>()
 
     override fun create() {
         KtxAsync.initiate()
@@ -44,9 +44,9 @@ class CanopyDesktopApp(
         super.create()
     }
 
-    override fun defaultConfig(): CanopyDesktopAppConfig = CanopyDesktopAppConfig()
+    override fun defaultConfig(): DesktopCanopyAppConfig = DesktopCanopyAppConfig()
 
-    override fun internalLaunch(config: CanopyDesktopAppConfig, vararg args: String): CanopyAppHandle {
+    override fun internalLaunch(config: DesktopCanopyAppConfig, vararg args: String): CanopyAppHandle {
         val handle = CanopyAppHandle {}
 
         if (StartupHelper.startNewJvmIfRequired()) {

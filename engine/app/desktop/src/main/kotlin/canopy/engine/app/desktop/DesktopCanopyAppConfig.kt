@@ -3,7 +3,7 @@ package canopy.engine.app.desktop
 import canopy.engine.app.appkit.CanopyAppConfig
 import com.badlogic.gdx.backends.lwjgl3.Lwjgl3ApplicationConfiguration
 
-class CanopyDesktopAppConfig(
+class DesktopCanopyAppConfig(
     title: String = "Canopy Desktop Game",
     fps: Int = 60,
     // Implementation props
