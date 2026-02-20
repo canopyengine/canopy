@@ -27,6 +27,9 @@ logback = "1.5.13"
 #Misc
 graalHelper = "2.0.1"
 
+# TOML
+ktoml = "0.7.1"
+
 #####
 #####
 
@@ -73,6 +76,10 @@ universal-tween = { module = "org.mini2Dx:universal-tween-engine", version.ref =
 gdx-dialogs-desktop = { module = "de.tomgrill.gdxdialogs:gdx-dialogs-desktop", version.ref = "gdxDialogs" }
 gdx-controllers-desktop = { module = "com.badlogicgames.gdx-controllers:gdx-controllers-desktop", version.ref = "gdxControllers" }
 graal-helper-annotations = { module = "io.github.berstanio:gdx-svmhelper-annotations", version.ref = "graalHelper" }
+
+# TOML
+ktoml-core = { module = "com.akuleshov7:ktoml-core", version.ref = "ktoml" }
+ktoml-file = { module = "com.akuleshov7:ktoml-file", version.ref = "ktoml" }
 
 #####
 #####

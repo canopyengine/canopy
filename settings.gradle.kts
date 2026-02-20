@@ -29,7 +29,8 @@ include(
     ":engine:input",
     ":engine:graphics",
     ":engine:physics",
-    ":engine:data"
+    ":engine:data",
+    ":engine:saving"
 )
 
 // Kits - modules that don't provide end-features

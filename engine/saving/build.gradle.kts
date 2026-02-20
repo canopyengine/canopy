@@ -9,8 +9,4 @@ dependencies {
 
     // JSON
     api(libs.kotlinx.serialization.json)
-
-    // TOML
-    api(libs.ktoml.core)
-    api(libs.ktoml.file)
 }
