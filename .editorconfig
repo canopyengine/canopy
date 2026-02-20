@@ -11,15 +11,19 @@ insert_final_newline = true
 indent_size = 4
 ij_continuation_indent_size = 4
 max_line_length = 120
+
+ktlint_code_style = android_studio
+
 ij_kotlin_allow_trailing_comma = true
-ij_kotlin_imports_layout = *,java.**,javax.**,kotlin.**
+ij_kotlin_imports_layout = kotlin.**,java.**,javax.**,*
+
 ktlint_standard_no-wildcard-imports = disabled
 ktlint_standard_no-consecutive-comments = disabled
+ktlint_standard_multiline-expression-wrapping = disabled
 
 [*.md]
 trim_trailing_whitespace = false
 
 [*.gradle]
 indent_size = 2
-# Default import ordering rule
 ktlint_standard_import-ordering = enabled
