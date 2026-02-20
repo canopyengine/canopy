@@ -1,7 +1,7 @@
 
 <p style="display: flex; align-items: center; gap: 10px;">
   <a href="../README.md">
-    <img src="./assets/canopy-icon.png" width="50" alt="Canopy Engine logo">
+    <img src="assets/canopy-icon.png" width="50" alt="Canopy Engine logo">
   </a>
     <span style="text-align: center; font-size: 1.5em; font-weight: bold;">Roadmap</span>
 </p>
@@ -38,7 +38,7 @@ areas for improvement in future releases.
 
 #### **Tech demo**: A simple text-driven adventure game, showcasing the core features of the engine.
 #### **Estimated release date**: **TBA**.
-#### **[Release details](./releases/0.1.0.md)**
+#### **[Release details](releases/0.1.0.md)**
 
 ---
 

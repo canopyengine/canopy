@@ -3,18 +3,17 @@ pluginManagement {
         gradlePluginPortal()
         google()
         mavenCentral()
-        mavenLocal()
         maven("https://central.sonatype.com/repository/maven-snapshots/")
     }
 }
 
 dependencyResolutionManagement {
+    repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
     repositories {
+        google()
         mavenCentral()
-        mavenLocal()
         maven("https://central.sonatype.com/repository/maven-snapshots/")
         maven("https://jitpack.io")
-        google()
     }
 }
 
@@ -23,15 +22,27 @@ plugins {
 }
 
 rootProject.name = "canopy"
+
+// Root modules
 include(
-    ":canopy-core",
-    ":canopy-input",
-    ":canopy-graphics",
-    ":canopy-physics",
-    ":canopy-utils",
-    ":canopy-data",
-    ":canopy-test",
-    ":canopy-app"
+    ":engine:core",
+    ":engine:input",
+    ":engine:graphics",
+    ":engine:physics",
+    ":engine:data"
+)
+
+// Kits - modules that don't provide end-features
+include(
+    ":engine:testkit",
+    ":engine:app:appkit",
+    ":engine:utils"
+)
+
+// Backends
+include(
+    ":engine:app:headless",
+    ":engine:app:desktop"
 )
 
 enableFeaturePreview("TYPESAFE_PROJECT_ACCESSORS")

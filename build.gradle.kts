@@ -11,9 +11,7 @@ plugins {
     alias(libs.plugins.kotlin.jvm) apply false
     alias(libs.plugins.kotlin.serialization) apply false
     alias(libs.plugins.ktlint) apply false
-
-    // Apply to use "api", "implementation" and other utility methods
-    id("java-library")
+    // root is aggregator: no java/java-library here
 }
 
 allprojects {
@@ -31,7 +29,11 @@ allprojects {
     }
 }
 
-configure(subprojects) {
+subprojects {
+    // Grouping projects should not behave like real modules
+    if (path == ":engine" || path == ":engine:app") return@subprojects
+
+    // Apply plugins HERE so Kotlin DSL dependency accessors exist in this script block
     apply(plugin = "java-library")
     apply(plugin = "org.jetbrains.kotlin.jvm")
     apply(plugin = "maven-publish")
@@ -43,35 +45,28 @@ configure(subprojects) {
         // withJavadocJar()
     }
 
-    // generate assets.txt under /assets
-    tasks.register("generateAssetList") {
-        val assetsFolder = file("$rootDir/assets/")
-        inputs.dir(assetsFolder)
-
-        doLast {
-            val assetsFile = File(assetsFolder, "assets.txt")
-            if (assetsFile.exists()) assetsFile.delete()
-
-            fileTree(assetsFolder)
-                .files
-                .map {
-                    assetsFolder
-                        .toPath()
-                        .relativize(it.toPath())
-                        .toString()
-                        .replace("\\", "/")
-                }
-                .sorted()
-                .forEach { assetsFile.appendText("$it\n") }
-        }
-    }
-
-    tasks.named<ProcessResources>("processResources") {
-        dependsOn("generateAssetList")
-    }
-
     tasks.withType<KotlinCompile>().configureEach {
         compilerOptions.jvmTarget.set(JvmTarget.JVM_17)
+    }
+
+    dependencies {
+        val libs = rootProject.libs
+
+        // Kotlin
+        "api"(libs.kotlin.stdlib)
+        "implementation"(libs.kotlin.reflect)
+        "api"(libs.coroutines.core)
+
+        // Testing
+        "testImplementation"(libs.kotlin.test.junit5)
+        "testImplementation"(libs.junit.jupiter)
+        "testImplementation"(libs.assertj.core)
+        "testImplementation"(libs.mockk)
+
+        // natives classifier for tests
+        val gdxPlatform = libs.gdx.platform.get().module
+        val gdxVer = libs.versions.gdx.get()
+        "testRuntimeOnly"("$gdxPlatform:$gdxVer:natives-desktop")
     }
 
     // ---- Publishing to ~/.m2 ----
@@ -89,35 +84,6 @@ configure(subprojects) {
         repositories {
             mavenLocal()
         }
-    }
-}
-
-subprojects {
-    apply(plugin = "java-library")
-    apply(plugin = "org.jetbrains.kotlin.jvm")
-
-    dependencies {
-        val libs = rootProject.libs
-
-        // Kotlin
-        api(libs.kotlin.stdlib)
-        implementation(libs.kotlin.reflect)
-        api(libs.coroutines.core)
-
-        // Testing
-        testImplementation(libs.kotlin.test.junit5)
-        testImplementation(libs.junit.jupiter)
-        testImplementation(libs.assertj.core)
-        testImplementation(libs.mockk)
-
-        // LibGDX test deps
-        // testImplementation(libs.gdx.backend.headless)
-        // testImplementation(libs.gdx.backend.lwjgl3)
-
-        // natives classifier
-        val gdxPlatform = libs.gdx.platform.get().module
-        val gdxVer = libs.versions.gdx.get()
-        testRuntimeOnly("$gdxPlatform:$gdxVer:natives-desktop")
     }
 
     plugins.withId("org.jlleitschuh.gradle.ktlint") {
@@ -137,7 +103,6 @@ subprojects {
             }
         }
 
-        // Attach ktlintFormat to build so it runs automatically
         tasks.named("build") {
             dependsOn("ktlintFormat")
         }
