@@ -4,26 +4,16 @@ import kotlin.reflect.KClass
 import io.canopy.engine.core.managers.InjectionManager
 import io.canopy.engine.core.managers.ManagersRegistry
 import io.canopy.engine.core.managers.SceneManager
+import io.canopy.engine.logging.api.LogContext
+import io.canopy.engine.logging.engine.EngineLogs
 
-// ===============================
-//      GLOBAL NODE SYSTEM BASE
-// ===============================
-
-/**
- * Base class for systems that span the whole tree, and process nodes that match the required types
- *
- * See more [here](https://github.com/canopyengine/canopy-docs/blob/main/docs/manuals/core/node-system.md).
- *
- * @param requiredTypes The types of nodes this system should operate on.
- */
 abstract class TreeSystem(
     internal val phase: UpdatePhase,
     val priority: Int = 0,
     vararg val requiredTypes: KClass<out Node<*>>,
 ) {
-    // ===============================
-    //        CORE PROPERTIES
-    // ===============================
+    // Engine subsystem logger for systems
+    private val log = EngineLogs.subsystem("system")
 
     protected val sceneManager: SceneManager by lazy { ManagersRegistry.get(SceneManager::class) }
     protected val injectionManager: InjectionManager by lazy { ManagersRegistry.get(InjectionManager::class) }
@@ -31,50 +21,57 @@ abstract class TreeSystem(
     /** Nodes currently matching the system's type requirements */
     protected val matchingNodes = mutableListOf<Node<*>>()
 
+    private val systemName: String = this::class.simpleName ?: "AnonymousTreeSystem"
+
     // ===============================
     //         LIFECYCLE HOOKS
     // ===============================
 
-    /**
-     * Called once before updates begin.
-     * Automatically sets up the scene manager reference.
-     */
-    open fun onRegister() {}
+    open fun onRegister() {
+        // default: nothing
+    }
 
-    /** Called when the system is being closed / disposed. Override if needed. */
-    open fun onUnregister() {}
+    open fun onUnregister() {
+        // default: nothing
+    }
 
     // ===============================
     //         NODE REGISTRATION
     // ===============================
 
-    /**
-     * Registers a node with the system.
-     * Called by tree lifecycle when nodes enter the scene.
-     */
     fun register(node: Node<*>) {
         if (!acceptsNode(node)) return
 
         matchingNodes += node
-        onNodeAdded(node)
+
+        LogContext.with(
+            "system" to systemName,
+            "phase" to phase.name,
+            "nodePath" to node.path
+        ) {
+            log.trace(fields = mapOf("event" to "system.node_added")) { "Node added to system" }
+        }
+
+        runHook("onNodeAdded", node = node) { onNodeAdded(node) }
     }
 
-    /**
-     * Unregisters a node from the system.
-     * Called by tree lifecycle when nodes exit the scene.
-     */
     fun unregister(node: Node<*>) {
         if (!matchingNodes.remove(node)) return
-        onNodeRemoved(node)
+
+        LogContext.with(
+            "system" to systemName,
+            "phase" to phase.name,
+            "nodePath" to node.path
+        ) {
+            log.trace(fields = mapOf("event" to "system.node_removed")) { "Node removed from system" }
+        }
+
+        runHook("onNodeRemoved", node = node) { onNodeRemoved(node) }
     }
 
-    /** Called when a node is added to the system. Override to add custom logic. */
     protected open fun onNodeAdded(node: Node<*>) {}
-
-    /** Called when a node is removed from the system. Override to add custom logic. */
     protected open fun onNodeRemoved(node: Node<*>) {}
 
-    /** Checks whether a node (or any of its children) matches the required types */
     private fun acceptsNode(node: Node<*>) = requiredTypes.any { type ->
         type.isInstance(node) || node.hasChildType(type)
     }
@@ -83,51 +80,61 @@ abstract class TreeSystem(
     //           TICK PROCESSING
     // ===============================
 
-    /**
-     * Called every frame or physics tick by the scheduler.
-     * Executes optional hooks before/after node processing.
-     */
     fun tick(delta: Float) {
-        beforeProcess(delta)
-        matchingNodes.forEach { processNode(it, delta) }
-        afterProcess(delta)
+        LogContext.with(
+            "system" to systemName,
+            "phase" to phase.name,
+            "delta" to delta
+        ) {
+            // Very low-noise: you can enable TRACE to see these
+            log.trace(fields = mapOf("event" to "system.tick", "matchingCount" to matchingNodes.size)) {
+                "Tick"
+            }
+
+            runHook("beforeProcess", delta = delta) { beforeProcess(delta) }
+
+            // No automatic per-node logging (too spammy). Use subclass logging if needed.
+            matchingNodes.forEach { node ->
+                runHook("processNode", delta = delta, node = node) { processNode(node, delta) }
+            }
+
+            runHook("afterProcess", delta = delta) { afterProcess(delta) }
+        }
     }
 
-    /**
-     * Optional hook executed before iterating nodes.
-     * Override to implement pre-processing logic.
-     */
     protected open fun beforeProcess(delta: Float) {}
-
-    /**
-     * Optional hook executed after iterating nodes.
-     * Override to implement post-processing logic.
-     */
     protected open fun afterProcess(delta: Float) {}
-
-    /**
-     * Override to define logic applied per node during each tick.
-     */
     protected open fun processNode(node: Node<*>, delta: Float) {}
 
     // ===============================
-//        UPDATE PHASE ENUM
-// ===============================
+    //           SAFE HOOK RUNNER
+    // ===============================
 
-    /**
-     * Defines when a global node system should be executed.
-     */
+    private inline fun runHook(hook: String, delta: Float? = null, node: Node<*>? = null, block: () -> Unit) {
+        try {
+            block()
+        } catch (t: Throwable) {
+            val fields = buildMap<String, Any?> {
+                put("event", "system.hook_error")
+                put("hook", hook)
+                put("system", systemName)
+                put("phase", phase.name)
+                put("priority", priority)
+                put("requiredTypes", requiredTypes.joinToString { it.simpleName ?: it.toString() })
+                put("matchingCount", matchingNodes.size)
+                if (delta != null) put("delta", delta)
+                if (node != null) put("nodePath", node.path)
+            }
+
+            log.error(t = t, fields = fields) { "System hook threw" }
+            throw t // fail fast; change to 'return' if you prefer resilience
+        }
+    }
+
     enum class UpdatePhase {
-        /** Runs before physics is processed for the scene */
         PhysicsPre,
-
-        /** Runs after physics is processed for the scene */
         PhysicsPost,
-
-        /** Runs before scene frame updates */
         FramePre,
-
-        /** Runs after scene frame updates */
         FramePost,
     }
 }
@@ -146,24 +153,10 @@ fun treeSystem(
     processNode: TreeSystem.(node: Node<*>, delta: Float) -> Unit = { _, _ -> },
 ) {
     object : TreeSystem(phase, priority, *requiredTypes) {
-        override fun onRegister() {
-            onRegister.invoke(this)
-        }
-
-        override fun onUnregister() {
-            onUnregister.invoke(this)
-        }
-
-        override fun beforeProcess(delta: Float) {
-            beforeProcess.invoke(this, delta)
-        }
-
-        override fun afterProcess(delta: Float) {
-            afterProcess.invoke(this, delta)
-        }
-
-        override fun processNode(node: Node<*>, delta: Float) {
-            processNode.invoke(this, node, delta)
-        }
+        override fun onRegister() = onRegister.invoke(this)
+        override fun onUnregister() = onUnregister.invoke(this)
+        override fun beforeProcess(delta: Float) = beforeProcess.invoke(this, delta)
+        override fun afterProcess(delta: Float) = afterProcess.invoke(this, delta)
+        override fun processNode(node: Node<*>, delta: Float) = processNode.invoke(this, node, delta)
     }
 }

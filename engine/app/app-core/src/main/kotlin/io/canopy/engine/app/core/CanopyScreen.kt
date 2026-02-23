@@ -9,11 +9,23 @@ abstract class CanopyScreen : KtxScreen {
     protected val sceneManager by lazy { ManagersRegistry.get(SceneManager::class) }
     protected val injectionManager by lazy { ManagersRegistry.get(InjectionManager::class) }
 
+    private var setupCalled = false
+
     /**
      * Called once when the screen is first shown. Use this method to set up your screen's content, such as creating
      * entities, loading assets, etc.
      */
     open fun setup() {}
+
+    override fun show() {
+        // First render is called once
+        if (!setupCalled) {
+            setup()
+            setupCalled = true
+            return
+        }
+        super.show()
+    }
 
     override fun render(delta: Float) {
         super.render(delta)

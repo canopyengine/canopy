@@ -17,6 +17,7 @@ dependencies {
     implementation(projects.engine.graphics)
     implementation(projects.engine.data.dataCore)
     implementation(projects.engine.utils)
+    implementation(projects.engine.logging)
 
     // Gdx
     implementation(libs.gdx.backend.lwjgl3)

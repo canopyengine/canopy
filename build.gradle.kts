@@ -8,7 +8,7 @@ import org.jlleitschuh.gradle.ktlint.reporter.ReporterType
 val projectVersion: String by project
 
 plugins {
-    alias(libs.plugins.kotlin.jvm) apply false
+    alias(libs.plugins.kotlin.jvm) apply true
     alias(libs.plugins.kotlin.serialization) apply false
     alias(libs.plugins.ktlint) apply false
     // root is aggregator: no java/java-library here
@@ -35,7 +35,7 @@ subprojects {
     val ignoredPaths = listOf(
         ":engine",
         ":engine:app",
-        ":engine:data",
+        ":engine:data"
     )
 
     if (path in ignoredPaths) return@subprojects
@@ -105,6 +105,7 @@ subprojects {
             }
 
             filter {
+                exclude("**/build/generated/**")
                 exclude("**/generated/**")
                 include("**/src/**/*.kt")
             }

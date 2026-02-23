@@ -29,6 +29,7 @@ include(
     ":engine:input",
     ":engine:graphics",
     ":engine:physics",
+    ":engine:logging"
 )
 
 // App modules -
