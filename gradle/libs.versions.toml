@@ -22,10 +22,14 @@ mockitoKotlin = "5.1.0"
 
 # Logging
 slf4j = "2.0.16"
-logback = "1.5.13"
+logback = "1.5.32"
+logstash="9.0"
 
 #Misc
 graalHelper = "2.0.1"
+
+# TOML
+tomlkt = "0.6.0"
 
 #####
 #####
@@ -67,12 +71,16 @@ kotlin-test-junit5 = { module = "org.jetbrains.kotlin:kotlin-test-junit5", versi
 # Logging
 slf4j-api = { module = "org.slf4j:slf4j-api", version.ref = "slf4j" }
 logback-classic = { module = "ch.qos.logback:logback-classic", version.ref = "logback" }
+logback-logstash = {module = "net.logstash.logback:logstash-logback-encoder", version.ref = "logstash"}
 
 # Other
 universal-tween = { module = "org.mini2Dx:universal-tween-engine", version.ref = "universalTween" }
 gdx-dialogs-desktop = { module = "de.tomgrill.gdxdialogs:gdx-dialogs-desktop", version.ref = "gdxDialogs" }
 gdx-controllers-desktop = { module = "com.badlogicgames.gdx-controllers:gdx-controllers-desktop", version.ref = "gdxControllers" }
 graal-helper-annotations = { module = "io.github.berstanio:gdx-svmhelper-annotations", version.ref = "graalHelper" }
+
+# TOML
+tomlkt = { module = "dev.eav.tomlkt:tomlkt", version.ref = "tomlkt" }
 
 #####
 #####

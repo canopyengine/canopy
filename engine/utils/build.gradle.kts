@@ -4,9 +4,8 @@ plugins {
 }
 
 dependencies {
-    // Canopy
-    implementation(projects.engine.core)
-    implementation(projects.engine.app.appkit)
-
-    // JSON
+    // Gdx
+    api(libs.gdx.core)
+    // Ktx
+    api(libs.ktx.math)
 }

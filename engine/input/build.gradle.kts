@@ -6,7 +6,8 @@ plugins {
 dependencies {
     // Canopy
     implementation(projects.engine.core)
-    implementation(projects.engine.data)
+    implementation(projects.engine.data.dataCore)
+    implementation(projects.engine.data.dataSaving)
     implementation(projects.engine.utils)
 
     // JSON

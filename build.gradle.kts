@@ -8,7 +8,7 @@ import org.jlleitschuh.gradle.ktlint.reporter.ReporterType
 val projectVersion: String by project
 
 plugins {
-    alias(libs.plugins.kotlin.jvm) apply false
+    alias(libs.plugins.kotlin.jvm) apply true
     alias(libs.plugins.kotlin.serialization) apply false
     alias(libs.plugins.ktlint) apply false
     // root is aggregator: no java/java-library here
@@ -31,7 +31,14 @@ allprojects {
 
 subprojects {
     // Grouping projects should not behave like real modules
-    if (path == ":engine" || path == ":engine:app") return@subprojects
+
+    val ignoredPaths = listOf(
+        ":engine",
+        ":engine:app",
+        ":engine:data"
+    )
+
+    if (path in ignoredPaths) return@subprojects
 
     // Apply plugins HERE so Kotlin DSL dependency accessors exist in this script block
     apply(plugin = "java-library")
@@ -98,6 +105,7 @@ subprojects {
             }
 
             filter {
+                exclude("**/build/generated/**")
                 exclude("**/generated/**")
                 include("**/src/**/*.kt")
             }

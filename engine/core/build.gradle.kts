@@ -1,3 +1,5 @@
+import org.gradle.kotlin.dsl.withType
+
 plugins {
     alias(libs.plugins.ktlint)
 }
@@ -10,6 +12,10 @@ val enableGraalNative: Boolean = providers
     .get()
 
 dependencies {
+    // Canopy
+    implementation(projects.engine.utils)
+    implementation(projects.engine.logging)
+
     // Gdx
     api(libs.gdx.core)
 
@@ -28,5 +34,15 @@ dependencies {
     // Graal helper only when enabled
     if (enableGraalNative) {
         implementation(libs.graal.helper.annotations)
+    }
+}
+
+// Canopy custom tasks
+tasks.withType<Jar>().configureEach {
+    manifest {
+        attributes(
+            "Implementation-Title" to project.name,
+            "Implementation-Version" to project.version.toString()
+        )
     }
 }
