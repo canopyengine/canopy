@@ -5,8 +5,8 @@ plugins {
 dependencies {
     // Canopy
     implementation(projects.engine.core)
-    implementation(projects.engine.app.appkit)
-    implementation(projects.engine.data)
+    implementation(projects.engine.app.appCore)
+    implementation(projects.engine.data.dataCore)
     implementation(projects.engine.utils)
     implementation(projects.engine.testkit)
 

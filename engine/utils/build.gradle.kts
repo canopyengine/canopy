@@ -6,7 +6,7 @@ plugins {
 dependencies {
     // Canopy
     implementation(projects.engine.core)
-    implementation(projects.engine.app.appkit)
+    implementation(projects.engine.app.appCore)
 
     // JSON
 }

@@ -29,21 +29,25 @@ include(
     ":engine:input",
     ":engine:graphics",
     ":engine:physics",
-    ":engine:data",
-    ":engine:saving"
 )
 
-// Kits - modules that don't provide end-features
+// App modules -
+include(
+    ":engine:app:app-core",
+    ":engine:app:app-desktop",
+    ":engine:app:app-headless"
+)
+
+// Data modules -
+include(
+    ":engine:data:data-core",
+    ":engine:data:data-saving",
+)
+
+// Misc modules -
 include(
     ":engine:testkit",
-    ":engine:app:appkit",
     ":engine:utils"
-)
-
-// Backends
-include(
-    ":engine:app:headless",
-    ":engine:app:desktop"
 )
 
 enableFeaturePreview("TYPESAFE_PROJECT_ACCESSORS")

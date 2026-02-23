@@ -6,10 +6,15 @@ plugins {
 dependencies {
     // Canopy
     implementation(projects.engine.core)
-    implementation(projects.engine.app.appCore)
-
     // Gdx
-    implementation(libs.gdx.backend.headless)
+    api(libs.gdx.core)
+
+    // Ktx
+    api(libs.ktx.assets)
 
     // JSON
+    api(libs.kotlinx.serialization.json)
+
+    // TOML
+    api(libs.tomlkt)
 }

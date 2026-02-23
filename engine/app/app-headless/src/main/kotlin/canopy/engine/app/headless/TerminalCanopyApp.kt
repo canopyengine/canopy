@@ -1,4 +1,4 @@
-package canopy.engine.testkit.app
+package canopy.engine.app.headless
 
 import canopy.engine.app.core.CanopyApp
 import canopy.engine.app.core.CanopyAppConfig
@@ -7,9 +7,9 @@ import canopy.engine.core.managers.SceneManager
 import com.badlogic.gdx.backends.headless.HeadlessApplication
 import com.badlogic.gdx.backends.headless.HeadlessApplicationConfiguration
 
-class TestHeadlessCanopyApp(
+class TerminalCanopyApp(
     sceneManager: SceneManager = SceneManager(),
-    config: CanopyAppConfig? = null,
+    config: CanopyAppConfig,
     onCreate: (CanopyApp<CanopyAppConfig>) -> Unit = {},
     onResize: (CanopyApp<CanopyAppConfig>, width: Int, height: Int) -> Unit = { _, _, _ -> },
     onDispose: (CanopyApp<CanopyAppConfig>) -> Unit = {},
@@ -20,12 +20,6 @@ class TestHeadlessCanopyApp(
     onResize,
     onDispose
 ) {
-    override fun render() {}
-
-    override fun pause() {}
-
-    override fun resume() {}
-
     override fun defaultConfig(): CanopyAppConfig = CanopyAppConfig(
         title = "Test Headless Canopy Game"
     )
@@ -33,6 +27,8 @@ class TestHeadlessCanopyApp(
     override fun internalLaunch(config: CanopyAppConfig, vararg args: String): CanopyAppHandle {
         val headless = HeadlessApplication(this, HeadlessApplicationConfiguration())
 
-        return CanopyAppHandle { headless.exit() }
+        return CanopyAppHandle {
+            headless.exit()
+        }
     }
 }

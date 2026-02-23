@@ -6,7 +6,7 @@ import kotlin.test.assertContentEquals
 import canopy.engine.core.managers.ManagersRegistry
 import canopy.engine.core.managers.SceneManager
 import canopy.engine.core.nodes.types.empty.EmptyNode
-import canopy.engine.data.assets.AssetsManager
+import canopy.engine.data.core.assets.AssetsManager
 import canopy.engine.graphics.nodes.animation.tracks.ActionTrack
 import canopy.engine.graphics.nodes.animation.tracks.SpriteTrack
 import canopy.engine.graphics.nodes.visual.AnimatedSprite2D

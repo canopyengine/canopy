@@ -1,6 +1,6 @@
 package canopy.engine.input
 
-import canopy.engine.data.registry.IdEntry
+import canopy.engine.data.core.registry.IdEntry
 import kotlinx.serialization.Serializable
 
 @Serializable

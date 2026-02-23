@@ -1,15 +1,16 @@
 plugins {
-    alias(libs.plugins.kotlin.serialization)
+    // only if you want ktlint enabled for this module
     alias(libs.plugins.ktlint)
 }
 
 dependencies {
-    // Canopy
+    // Canopy deps
     implementation(projects.engine.core)
     implementation(projects.engine.app.appCore)
 
     // Gdx
     implementation(libs.gdx.backend.headless)
 
-    // JSON
+    // Logging
+    runtimeOnly(libs.logback.classic)
 }

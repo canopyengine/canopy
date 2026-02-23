@@ -31,7 +31,14 @@ allprojects {
 
 subprojects {
     // Grouping projects should not behave like real modules
-    if (path == ":engine" || path == ":engine:app") return@subprojects
+
+    val ignoredPaths = listOf(
+        ":engine",
+        ":engine:app",
+        ":engine:data",
+    )
+
+    if (path in ignoredPaths) return@subprojects
 
     // Apply plugins HERE so Kotlin DSL dependency accessors exist in this script block
     apply(plugin = "java-library")
