@@ -30,20 +30,27 @@ import org.slf4j.LoggerFactory
 object CanopyLogging {
 
     data class Config(
-        val logDir: Path,
-        val runId: String,
+        val baseLogDir: Path = Path.of(".canopy").resolve("logs"),
+        val runId: String = defaultRunFolderName(), // canopy-YYYY-MM-dd-HH-mm
         val engineVersion: String = "unknown",
 
         val consoleLevel: LogLevel = LogLevel.INFO,
-        val engineFileLevel: LogLevel = LogLevel.DEBUG,
+
+        val engineJsonLevel: LogLevel = LogLevel.DEBUG,
+        val engineLogLevel: LogLevel = LogLevel.INFO,
+        val userLogLevel: LogLevel = LogLevel.INFO,
 
         val maxHistoryDays: Int = 7,
         val maxFileSize: String = "10MB",
         val totalSizeCap: String = "200MB",
 
-        /** If true, root logs (including user/app) will be written to the engine file too. */
-        val includeUserLogsInFile: Boolean = false,
+        // What counts as "engine origin"
+        val engineLoggerPrefix: String = "canopy",
     )
+
+    fun defaultRunFolderName(now: ZonedDateTime = ZonedDateTime.now()): String =
+        "canopy-" + DateTimeFormatter.ofPattern("yyyy-MM-dd-HH-mm").format(now)
+// NOTE: HH:mm would break on Windows
 
     private val startedAt = AtomicReference<Instant?>(null)
 
@@ -53,28 +60,28 @@ object CanopyLogging {
      */
     fun init(config: Config) {
         val context = LoggerFactory.getILoggerFactory() as? LoggerContext ?: return
-
-        // Reset defaults to avoid duplicate appenders on re-init.
         context.reset()
 
-        if (!config.logDir.exists()) config.logDir.createDirectories()
+        val runDir = config.baseLogDir.resolve(config.runId)
+        if (!runDir.exists()) runDir.createDirectories()
 
-        // Global structured context for the whole session
         LogContext.setGlobal(
             "runId" to config.runId,
             "engineVersion" to config.engineVersion
         )
 
         // ----------------------------
-        // Console appender (readable)
+        // Console appender (keep yours)
         // ----------------------------
-        val consoleEncoder = buildConsoleEncoder(context)
-
         val consoleAppender = ConsoleAppender<ILoggingEvent>().apply {
             this.context = context
             name = "CONSOLE"
-            encoder = consoleEncoder
+            encoder = buildConsoleEncoder(context)
             isWithJansi = true
+
+            // Log user logs only
+            addFilter(denyEngineFilter(config.engineLoggerPrefix).apply { start() })
+
             addFilter(
                 ThresholdFilter().apply {
                     setLevel(config.consoleLevel.name)
@@ -84,8 +91,7 @@ object CanopyLogging {
             start()
         }
 
-        // Optional: drop noisy external logs from console (example: OpenAL/ALSOFT)
-        // Keep it simple; edit as needed.
+        // Optional: keep your noisy OpenAL filter (unchanged)
         consoleAppender.addFilter(
             object : Filter<ILoggingEvent>() {
                 override fun decide(event: ILoggingEvent): FilterReply {
@@ -99,67 +105,133 @@ object CanopyLogging {
         )
 
         // ----------------------------
-        // Engine JSONL file appender
+        // ENGINE: engine.jsonl
         // ----------------------------
-        val engineFileAppender = RollingFileAppender<ILoggingEvent>().apply {
+        val engineJsonAppender = RollingFileAppender<ILoggingEvent>().apply {
             this.context = context
-            name = "ENGINE_FILE"
-            file = config.logDir.resolve("canopy-engine-${config.runId}.jsonl").toString()
+            name = "ENGINE_JSONL"
+            file = runDir.resolve("engine.jsonl").toString()
 
             encoder = LogstashEncoder().apply {
                 this.context = context
-                // includes MDC by default; that’s where runId/engineVersion go
                 start()
             }
+
+            addFilter(engineOnlyFilter(config.engineLoggerPrefix).apply { start() })
+            addFilter(
+                ThresholdFilter().apply {
+                    setLevel(config.engineJsonLevel.name)
+                    start()
+                }
+            )
         }
 
-        val rollingPolicy = SizeAndTimeBasedRollingPolicy<ILoggingEvent>().apply {
+        engineJsonAppender.rollingPolicy = SizeAndTimeBasedRollingPolicy<ILoggingEvent>().apply {
             this.context = context
-            setParent(engineFileAppender)
-            fileNamePattern =
-                config.logDir.resolve("canopy-engine-%d{yyyy-MM-dd}.${config.runId}.%i.jsonl.gz").toString()
+            setParent(engineJsonAppender)
+            fileNamePattern = runDir.resolve("engine.%d{yyyy-MM-dd}.%i.jsonl.gz").toString()
             maxHistory = config.maxHistoryDays
             setMaxFileSize(FileSize.valueOf(config.maxFileSize))
             setTotalSizeCap(FileSize.valueOf(config.totalSizeCap))
             start()
         }
 
-        engineFileAppender.rollingPolicy = rollingPolicy
+        engineJsonAppender.start()
 
-        engineFileAppender.addFilter(
-            ThresholdFilter().apply {
-                setLevel(config.engineFileLevel.name)
+        // ----------------------------
+        // ENGINE: engine.log (readable)
+        // ----------------------------
+        val engineLogAppender = RollingFileAppender<ILoggingEvent>().apply {
+            this.context = context
+            name = "ENGINE_LOG"
+            file = runDir.resolve("engine.log").toString()
+
+            encoder = PatternLayoutEncoder().apply {
+                this.context = context
+                pattern =
+                    "%d{HH:mm:ss.SSS} %-5level %logger{36} " +
+                    "[run=%X{runId}] %msg%ex{short}%n"
                 start()
             }
-        )
 
-        engineFileAppender.start()
+            addFilter(engineOnlyFilter(config.engineLoggerPrefix).apply { start() })
+            addFilter(
+                ThresholdFilter().apply {
+                    setLevel(config.engineLogLevel.name)
+                    start()
+                }
+            )
+        }
+
+        engineLogAppender.rollingPolicy = SizeAndTimeBasedRollingPolicy<ILoggingEvent>().apply {
+            this.context = context
+            setParent(engineLogAppender)
+            fileNamePattern = runDir.resolve("engine.%d{yyyy-MM-dd}.%i.log.gz").toString()
+            maxHistory = config.maxHistoryDays
+            setMaxFileSize(FileSize.valueOf(config.maxFileSize))
+            setTotalSizeCap(FileSize.valueOf(config.totalSizeCap))
+            start()
+        }
+
+        engineLogAppender.start()
 
         // ----------------------------
-        // Root logger routing
+        // USER: user.log (readable, non-canopy)
         // ----------------------------
+        val userLogAppender = RollingFileAppender<ILoggingEvent>().apply {
+            this.context = context
+            name = "USER_LOG"
+            file = runDir.resolve("user.log").toString()
+
+            encoder = PatternLayoutEncoder().apply {
+                this.context = context
+                pattern =
+                    "%d{HH:mm:ss.SSS} %-5level %logger{36} " +
+                    "[run=%X{runId}] %msg%ex{short}%n"
+                start()
+            }
+
+            // deny canopy.* so user.log is truly user-origin
+            addFilter(denyEngineFilter(config.engineLoggerPrefix).apply { start() })
+            addFilter(
+                ThresholdFilter().apply {
+                    setLevel(config.userLogLevel.name)
+                    start()
+                }
+            )
+        }
+
+        userLogAppender.rollingPolicy = SizeAndTimeBasedRollingPolicy<ILoggingEvent>().apply {
+            this.context = context
+            setParent(userLogAppender)
+            fileNamePattern = runDir.resolve("user.%d{yyyy-MM-dd}.%i.log.gz").toString()
+            maxHistory = config.maxHistoryDays
+            setMaxFileSize(FileSize.valueOf(config.maxFileSize))
+            setTotalSizeCap(FileSize.valueOf(config.totalSizeCap))
+            start()
+        }
+
+        userLogAppender.start()
+
+        // ----------------------------
+        // Root routing
+        // ----------------------------
+        // Root: console + user.log (but user.log filter blocks canopy.*)
         val root = context.getLogger(Logger.ROOT_LOGGER_NAME).apply {
-            level = Level.TRACE // let appenders filter; simpler mental model
-            addAppender(consoleAppender)
-        }
-
-        // Everything under canopy.engine.* goes to engine file (and also to console via root)
-        context.getLogger("canopy.engine").apply {
-            isAdditive = true
             level = Level.TRACE
-            addAppender(engineFileAppender)
+            addAppender(consoleAppender)
+            addAppender(userLogAppender)
         }
 
-        // If you want app/user logs included in the same file, attach file appender to root.
-        if (config.includeUserLogsInFile) {
-            root.addAppender(engineFileAppender)
+        // Engine namespace: add engine files
+        context.getLogger(config.engineLoggerPrefix).apply {
+            isAdditive = true // can be true or false; console filter already blocks engine from printing
+            level = Level.TRACE
+            addAppender(engineJsonAppender)
+            addAppender(engineLogAppender)
         }
 
-        // ----------------------------
-        // Session "header" (JSONL-safe)
-        // ----------------------------
-        // This is your “header”: a dedicated first-class JSON event.
-        // We log to a canopy.engine.* logger so it definitely lands in the engine JSONL file.
+        // Session header logs (unchanged idea)
         startedAt.set(Instant.now())
 
         Logs.get("canopy.engine.session").info(
@@ -169,16 +241,14 @@ object CanopyLogging {
                 "startedAt" to startedAt.get().toString(),
                 "runId" to config.runId,
                 "engineVersion" to config.engineVersion,
-                "logDir" to config.logDir.toString()
+                "runDir" to runDir.toString()
             )
         ) { "Session start" }
 
-        // Also emit a human-friendly line on console via bootstrap logger (optional).
-        val bootLog = Logs.get("canopy.bootstrap.logging")
-        bootLog.info(
+        Logs.get("canopy.bootstrap.logging").info(
             fields = mapOf(
                 "event" to "logging.init",
-                "logDir" to config.logDir.toString()
+                "runDir" to runDir.toString()
             )
         ) { "Canopy logging initialized" }
     }
@@ -211,7 +281,7 @@ object CanopyLogging {
         }
     }
 
-    fun defaultLogDir(baseDir: Path = Path.of(".canopy")): Path = baseDir.resolve("logs")
+    fun defaultBaseLogDir(baseDir: Path = Path.of(".canopy")): Path = baseDir.resolve("logs")
 
     fun defaultRunId(): String = DateTimeFormatter.ofPattern("yyyyMMdd-HHmmss").format(ZonedDateTime.now())
 
@@ -236,6 +306,20 @@ object CanopyLogging {
                 "%mdcx{runId,engineVersion} " +
                 "%msg%ex{short}%n"
             start()
+        }
+    }
+
+    private fun engineOnlyFilter(prefix: String) = object : Filter<ILoggingEvent>() {
+        override fun decide(event: ILoggingEvent): FilterReply {
+            val name = event.loggerName ?: return FilterReply.DENY
+            return if (name.startsWith(prefix)) FilterReply.NEUTRAL else FilterReply.DENY
+        }
+    }
+
+    private fun denyEngineFilter(prefix: String) = object : Filter<ILoggingEvent>() {
+        override fun decide(event: ILoggingEvent): FilterReply {
+            val name = event.loggerName ?: return FilterReply.NEUTRAL
+            return if (name.startsWith(prefix)) FilterReply.DENY else FilterReply.NEUTRAL
         }
     }
 }

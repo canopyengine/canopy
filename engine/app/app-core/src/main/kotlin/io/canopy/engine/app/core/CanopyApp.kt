@@ -17,6 +17,7 @@ abstract class CanopyApp<C : CanopyAppConfig>(
     protected val onCreate: (CanopyApp<C>) -> Unit = {},
     protected val onResize: (CanopyApp<C>, width: Int, height: Int) -> Unit = { _, _, _ -> },
     protected val onDispose: (CanopyApp<C>) -> Unit = {},
+    protected val logLevel: LogLevel = LogLevel.DEBUG,
 ) : KtxGame<CanopyScreen>() {
 
     protected val injectionManager by lazy { ManagersRegistry.get(InjectionManager::class) }
@@ -27,19 +28,19 @@ abstract class CanopyApp<C : CanopyAppConfig>(
     override fun create() {
         // Init logging FIRST (so startup logs are captured)
         val runId = CanopyLogging.defaultRunId()
-        val logDir = CanopyLogging.defaultLogDir()
+        val logDir = CanopyLogging.defaultBaseLogDir()
         val engineVersion = CanopyBuildInfo.version
 
         ConsoleBanner.print(CanopyBuildInfo.version, ConsoleBanner.Mode.GRADIENT)
 
         CanopyLogging.init(
             CanopyLogging.Config(
-                logDir = logDir,
+                baseLogDir = logDir,
                 runId = runId,
                 engineVersion = engineVersion,
-                // Prefer your own LogLevel enum long-term; keeping this if your Config currently uses Logback Level:
                 consoleLevel = LogLevel.INFO,
-                engineFileLevel = LogLevel.DEBUG
+                engineLogLevel = LogLevel.INFO,
+                userLogLevel = logLevel
             )
         )
 
