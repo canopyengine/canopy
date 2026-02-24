@@ -1,4 +1,4 @@
-package io.canopy.engine.app.core
+package io.canopy.engine.app.core.screen
 
 import io.canopy.engine.core.managers.InjectionManager
 import io.canopy.engine.core.managers.ManagersRegistry

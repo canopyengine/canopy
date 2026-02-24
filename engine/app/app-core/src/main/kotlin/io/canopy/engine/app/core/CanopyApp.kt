@@ -3,6 +3,8 @@ package io.canopy.engine.app.core
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicReference
+import io.canopy.engine.app.core.screen.CanopyScreen
+import io.canopy.engine.app.core.screen.CanopyScreenRegistry
 import io.canopy.engine.core.CanopyBuildInfo
 import io.canopy.engine.core.managers.InjectionManager
 import io.canopy.engine.core.managers.ManagersRegistry
@@ -15,6 +17,8 @@ import ktx.app.KtxGame
 import ktx.async.KtxAsync
 
 abstract class CanopyApp<C : CanopyAppConfig> protected constructor() : KtxGame<CanopyScreen>() {
+    private val screenRegistry = CanopyScreenRegistry(this)
+
     val sceneManager: SceneManager = SceneManager()
     protected var onCreate: (CanopyApp<C>) -> Unit = {}
     protected var onResize: (CanopyApp<C>, width: Int, height: Int) -> Unit = { _, _, _ -> }
@@ -89,6 +93,8 @@ abstract class CanopyApp<C : CanopyAppConfig> protected constructor() : KtxGame<
         }.setup()
 
         onCreate(this)
+
+        screenRegistry.setup()
 
         started.countDown()
         super.create()
@@ -184,11 +190,6 @@ abstract class CanopyApp<C : CanopyAppConfig> protected constructor() : KtxGame<
         _config = newConfig
     }
 
-    inline fun <reified S : CanopyScreen> startScreen(screen: S) {
-        addScreen(screen)
-        setScreen<S>()
-    }
-
     fun onCreate(handler: CanopyApp<C>.() -> Unit) {
         onCreate = handler
     }
@@ -199,6 +200,10 @@ abstract class CanopyApp<C : CanopyAppConfig> protected constructor() : KtxGame<
 
     fun onDispose(handler: CanopyApp<C>.() -> Unit) {
         onDispose = handler
+    }
+
+    fun screens(handler: CanopyScreenRegistry.() -> Unit) {
+        screenRegistry.setupCallback = handler
     }
 }
 
