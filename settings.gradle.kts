@@ -36,7 +36,8 @@ include(
 include(
     ":engine:app:app-core",
     ":engine:app:app-desktop",
-    ":engine:app:app-headless"
+    ":engine:app:app-headless",
+    ":engine:app:app-test"
 )
 
 // Data modules -
@@ -47,7 +48,6 @@ include(
 
 // Misc modules -
 include(
-    ":engine:testkit",
     ":engine:utils"
 )
 

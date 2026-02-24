@@ -2,45 +2,32 @@ package io.canopy.engine.physics.nodes
 
 import kotlin.test.Test
 import kotlin.test.assertEquals
-import java.util.concurrent.CountDownLatch
 import com.badlogic.gdx.math.Vector2
 import com.badlogic.gdx.physics.box2d.Shape
-import io.canopy.engine.core.managers.ManagersRegistry
-import io.canopy.engine.core.managers.SceneManager
+import io.canopy.engine.app.test.testHeadlessApp
 import io.canopy.engine.physics.nodes.body.DynamicBody2D
 import io.canopy.engine.physics.nodes.fixture.Area2D
 import io.canopy.engine.physics.nodes.fixture.Collider2D
 import io.canopy.engine.physics.nodes.shape.BoxShape2D
 import io.canopy.engine.physics.nodes.shape.CircleShape2D
 import io.canopy.engine.physics.systems.PhysicsSystem
-import io.canopy.engine.testkit.app.TestHeadlessCanopyApp
 import org.junit.jupiter.api.BeforeAll
 import org.junit.jupiter.api.assertNotNull
 
 class PhysicsBody2DTests {
     companion object {
-        private val started = CountDownLatch(1)
-
         @BeforeAll
         @JvmStatic
         fun setupHeadlessApplication() {
-            val sceneManager = SceneManager {
-                registerSystem(PhysicsSystem())
-            }
-
-            TestHeadlessCanopyApp(
-                sceneManager,
-                onCreate = {
-                    ManagersRegistry
-                        .get(SceneManager::class)
-                        .getSystem(PhysicsSystem::class)
-                        .replaceWorld()
-
-                    started.countDown()
+            testHeadlessApp {
+                sceneManager {
+                    registerSystem(PhysicsSystem())
                 }
-            ).launch()
 
-            started.await()
+                onCreate {
+                    sceneManager.getSystem(PhysicsSystem::class).replaceWorld()
+                }
+            }.launchAsync()
         }
     }
 

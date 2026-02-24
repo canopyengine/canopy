@@ -7,7 +7,7 @@ dependencies {
     // Canopy
     implementation(projects.engine.core)
     implementation(projects.engine.app.appCore)
-    implementation(projects.engine.testkit)
+    implementation(projects.engine.app.appTest)
 
     // Gdx
     implementation(libs.gdx.box2d.core)
