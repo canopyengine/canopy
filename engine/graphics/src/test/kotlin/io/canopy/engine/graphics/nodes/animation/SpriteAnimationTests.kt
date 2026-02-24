@@ -4,6 +4,7 @@ import kotlin.test.Ignore
 import kotlin.test.Test
 import kotlin.test.assertContentEquals
 import com.badlogic.gdx.graphics.g2d.TextureRegion
+import io.canopy.engine.app.test.testHeadlessApp
 import io.canopy.engine.core.managers.ManagersRegistry
 import io.canopy.engine.core.managers.SceneManager
 import io.canopy.engine.core.nodes.types.empty.EmptyNode
@@ -12,7 +13,6 @@ import io.canopy.engine.graphics.nodes.animation.tracks.ActionTrack
 import io.canopy.engine.graphics.nodes.animation.tracks.SpriteTrack
 import io.canopy.engine.graphics.nodes.visual.AnimatedSprite2D
 import io.canopy.engine.graphics.systems.AnimationSystem
-import io.canopy.engine.testkit.app.TestHeadlessCanopyApp
 import io.canopy.engine.utils.UnstableApi
 import org.junit.jupiter.api.BeforeAll
 
@@ -24,23 +24,15 @@ class SpriteAnimationTests {
     companion object {
         @BeforeAll
         @JvmStatic
-        fun setup() {
-            ManagersRegistry.apply {
-                // Scene Manager
-                register(
-                    SceneManager {
-                        AnimationSystem()
-                    }
-                )
-
-                register(AssetsManager())
-            }
-        }
-
-        @BeforeAll
-        @JvmStatic
         fun setupHeadlessApplication() {
-            TestHeadlessCanopyApp().launch()
+            testHeadlessApp {
+                sceneManager {
+                    registerSystem(AnimationSystem())
+                }
+                onCreate {
+                    ManagersRegistry.register(AssetsManager())
+                }
+            }.launch()
         }
     }
 

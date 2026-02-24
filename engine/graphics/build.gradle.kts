@@ -8,7 +8,7 @@ dependencies {
     implementation(projects.engine.app.appCore)
     implementation(projects.engine.data.dataCore)
     implementation(projects.engine.utils)
-    implementation(projects.engine.testkit)
+    implementation(projects.engine.app.appTest)
 
     // Gdx
     api(libs.gdx.backend.lwjgl3)
