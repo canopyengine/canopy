@@ -67,16 +67,14 @@ class SceneManager(private var physicsStep: Float = 1f / 60f, private val block:
         val oldScene = _currScene
 
         log.info(
-            fields = mapOf(
-                "event" to "scene.replace",
-                "oldScene" to oldScene?.name,
-                "newScene" to newScene?.name
-            )
+            "event" to "scene.replace",
+            "oldScene" to oldScene?.name,
+            "newScene" to newScene?.name
         ) { "Replacing scene" }
 
         oldScene?.let { scene ->
             LogContext.with("scene" to scene.name) {
-                log.debug(fields = mapOf("event" to "scene.exit_tree")) { "Exiting old scene tree" }
+                log.debug("event" to "scene.exit_tree") { "Exiting old scene tree" }
                 scene.nodeExitTree()
                 unregisterSubtree(scene)
             }
@@ -87,10 +85,10 @@ class SceneManager(private var physicsStep: Float = 1f / 60f, private val block:
 
         newScene?.let { scene ->
             LogContext.with("scene" to scene.name) {
-                log.debug(fields = mapOf("event" to "scene.register_subtree")) { "Registering new scene subtree" }
+                log.debug("event" to "scene.register_subtree") { "Registering new scene subtree" }
                 registerSubtree(scene)
 
-                log.debug(fields = mapOf("event" to "scene.build_tree")) { "Building new scene tree" }
+                log.debug("event" to "scene.build_tree") { "Building new scene tree" }
                 scene.buildTree()
             }
         }
@@ -109,18 +107,16 @@ class SceneManager(private var physicsStep: Float = 1f / 60f, private val block:
                     "nodePath" to node.path,
                     "system" to sys::class.simpleName
                 ) {
-                    log.trace(fields = mapOf("event" to "system.register_node")) { "Registering node in system" }
+                    log.trace("event" to "system.register_node") { "Registering node in system" }
                 }
                 sys.register(node)
             }
         }
 
         log.debug(
-            fields = mapOf(
-                "event" to "scene.subtree_registered",
-                "scene" to root.name,
-                "flatTreeSize" to flatTree.size
-            )
+            "event" to "scene.subtree_registered",
+            "scene" to root.name,
+            "flatTreeSize" to flatTree.size
         ) { "Subtree registered" }
     }
 
@@ -135,18 +131,16 @@ class SceneManager(private var physicsStep: Float = 1f / 60f, private val block:
                     "nodePath" to node.path,
                     "system" to sys::class.simpleName
                 ) {
-                    log.trace(fields = mapOf("event" to "system.unregister_node")) { "Unregistering node from system" }
+                    log.trace("event" to "system.unregister_node") { "Unregistering node from system" }
                 }
                 sys.unregister(node)
             }
         }
 
         log.debug(
-            fields = mapOf(
-                "event" to "scene.subtree_unregistered",
-                "scene" to root.name,
-                "flatTreeSize" to flatTree.size
-            )
+            "event" to "scene.subtree_unregistered",
+            "scene" to root.name,
+            "flatTreeSize" to flatTree.size
         ) { "Subtree unregistered" }
     }
 
@@ -173,13 +167,11 @@ class SceneManager(private var physicsStep: Float = 1f / 60f, private val block:
         }
 
         log.info(
-            fields = mapOf(
-                "event" to "system.register",
-                "system" to systemName,
-                "phase" to system.phase.name,
-                "priority" to system.priority,
-                "requiredTypes" to system.requiredTypes.joinToString { it.simpleName ?: it.toString() }
-            )
+            "event" to "system.register",
+            "system" to systemName,
+            "phase" to system.phase.name,
+            "priority" to system.priority,
+            "requiredTypes" to system.requiredTypes.joinToString { it.simpleName ?: it.toString() }
         ) { "Registered system" }
     }
 
@@ -193,11 +185,9 @@ class SceneManager(private var physicsStep: Float = 1f / 60f, private val block:
         }
 
         log.info(
-            fields = mapOf(
-                "event" to "system.unregister",
-                "system" to systemName,
-                "phase" to system.phase.name
-            )
+            "event" to "system.unregister",
+            "system" to systemName,
+            "phase" to system.phase.name
         ) { "Unregistered system" }
     }
 
@@ -219,7 +209,7 @@ class SceneManager(private var physicsStep: Float = 1f / 60f, private val block:
     // ===============================
     fun addToGroup(group: String, node: Node<*>) {
         groups.computeIfAbsent(group) { mutableListOf() }.add(node)
-        log.trace(fields = mapOf("event" to "group.add", "group" to group, "nodePath" to node.path)) {
+        log.trace("event" to "group.add", "group" to group, "nodePath" to node.path) {
             "Added node to group"
         }
     }
@@ -227,7 +217,7 @@ class SceneManager(private var physicsStep: Float = 1f / 60f, private val block:
     fun removeFromGroup(group: String, node: Node<*>) {
         val groupNodes = groups[group] ?: error("Group $group does not exist")
         groupNodes -= node
-        log.trace(fields = mapOf("event" to "group.remove", "group" to group, "nodePath" to node.path)) {
+        log.trace("event" to "group.remove", "group" to group, "nodePath" to node.path) {
             "Removed node from group"
         }
     }
@@ -235,7 +225,7 @@ class SceneManager(private var physicsStep: Float = 1f / 60f, private val block:
     fun signalGroup(group: String, callback: (node: Node<*>) -> Unit) {
         val groupNodes = groups[group] ?: error("Group $group does not exist")
         LogContext.with("group" to group) {
-            log.debug(fields = mapOf("event" to "group.signal", "count" to groupNodes.size)) { "Signaling group" }
+            log.debug("event" to "group.signal", "count" to groupNodes.size) { "Signaling group" }
             groupNodes.forEach(callback)
         }
     }
@@ -254,7 +244,7 @@ class SceneManager(private var physicsStep: Float = 1f / 60f, private val block:
             val physicsFrame = isPhysicsFrame(delta)
 
             if (physicsFrame) {
-                log.trace(fields = mapOf("event" to "tick.physics")) { "Physics tick" }
+                log.trace("event" to "tick.physics") { "Physics tick" }
                 systems[TreeSystem.UpdatePhase.PhysicsPre]?.forEach { sys ->
                     LogContext.with("system" to (sys::class.simpleName ?: "UnknownSystem"), "phase" to "PhysicsPre") {
                         sys.tick(physicsStep)
@@ -288,7 +278,7 @@ class SceneManager(private var physicsStep: Float = 1f / 60f, private val block:
 
     fun resize(width: Int, height: Int) {
         onResize.emit(width, height)
-        log.debug(fields = mapOf("event" to "scene.resize", "width" to width, "height" to height)) { "Resize" }
+        log.debug("event" to "scene.resize", "width" to width, "height" to height) { "Resize" }
     }
 
     private fun isPhysicsFrame(delta: Float): Boolean {
@@ -304,13 +294,13 @@ class SceneManager(private var physicsStep: Float = 1f / 60f, private val block:
     //        LIFECYCLE HOOKS
     // ===============================
     override fun setup() {
-        log.info(fields = mapOf("event" to "sceneManager.setup", "physicsStep" to physicsStep)) { "Setup" }
+        log.info("event" to "sceneManager.setup", "physicsStep" to physicsStep) { "Setup" }
         this.block()
         systems.values.flatten().forEach(TreeSystem::onRegister)
     }
 
     override fun teardown() {
-        log.info(fields = mapOf("event" to "sceneManager.teardown")) { "Teardown" }
+        log.info("event" to "sceneManager.teardown") { "Teardown" }
         systems.values.flatten().forEach(TreeSystem::onUnregister)
     }
 }

@@ -49,7 +49,7 @@ abstract class TreeSystem(
             "phase" to phase.name,
             "nodePath" to node.path
         ) {
-            log.trace(fields = mapOf("event" to "system.node_added")) { "Node added to system" }
+            log.trace("event" to "system.node_added") { "Node added to system" }
         }
 
         runHook("onNodeAdded", node = node) { onNodeAdded(node) }
@@ -63,7 +63,7 @@ abstract class TreeSystem(
             "phase" to phase.name,
             "nodePath" to node.path
         ) {
-            log.trace(fields = mapOf("event" to "system.node_removed")) { "Node removed from system" }
+            log.trace("event" to "system.node_removed") { "Node removed from system" }
         }
 
         runHook("onNodeRemoved", node = node) { onNodeRemoved(node) }
@@ -87,7 +87,7 @@ abstract class TreeSystem(
             "delta" to delta
         ) {
             // Very low-noise: you can enable TRACE to see these
-            log.trace(fields = mapOf("event" to "system.tick", "matchingCount" to matchingNodes.size)) {
+            log.trace("event" to "system.tick", "matchingCount" to matchingNodes.size) {
                 "Tick"
             }
 
@@ -124,9 +124,9 @@ abstract class TreeSystem(
                 put("matchingCount", matchingNodes.size)
                 if (delta != null) put("delta", delta)
                 if (node != null) put("nodePath", node.path)
-            }
+            }.map { Pair(it.key, it.value) }
 
-            log.error(t = t, fields = fields) { "System hook threw" }
+            log.error(t = t, *fields.toTypedArray()) { "System hook threw" }
             throw t // fail fast; change to 'return' if you prefer resilience
         }
     }

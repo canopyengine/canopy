@@ -50,8 +50,11 @@ class IdRegistry<T : IdEntry>(
 
     fun collectJsonFiles(dir: FileHandle): List<FileHandle> = dir.list()?.flatMap { file ->
         when {
-            file.isDirectory -> collectJsonFiles(file) // recurse into subfolders
+            file.isDirectory -> collectJsonFiles(file)
+
+            // recurse into subfolders
             file.extension() == "json" -> listOf(file)
+
             else -> emptyList()
         }
     } ?: emptyList()

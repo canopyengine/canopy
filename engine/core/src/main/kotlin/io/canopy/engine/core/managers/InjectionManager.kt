@@ -23,11 +23,9 @@ class InjectionManager : Manager {
         dependenciesMap[kClass] = injectable
 
         log.info(
-            fields = mapOf(
-                "event" to "di.register",
-                "type" to typeName,
-                "size" to dependenciesMap.size
-            )
+            "event" to "di.register",
+            "type" to typeName,
+            "size" to dependenciesMap.size
         ) { "Registered injectable" }
     }
 
@@ -37,20 +35,16 @@ class InjectionManager : Manager {
 
         // Debug level: injection happens a lot; info would spam
         log.debug(
-            fields = mapOf(
-                "event" to "di.inject",
-                "type" to typeName
-            )
+            "event" to "di.inject",
+            "type" to typeName
         ) { "Resolving injectable" }
 
         val ref = dependenciesMap[kClass]
             ?: run {
                 log.error(
-                    fields = mapOf(
-                        "event" to "di.missing",
-                        "type" to typeName,
-                        "registered" to dependenciesMap.size
-                    )
+                    "event" to "di.missing",
+                    "type" to typeName,
+                    "registered" to dependenciesMap.size
                 ) { "Injectable not registered" }
                 throw IllegalStateException("Injectable of type $typeName wasn't registered.")
             }
@@ -58,21 +52,19 @@ class InjectionManager : Manager {
         return ref() as? T
             ?: run {
                 log.error(
-                    fields = mapOf(
-                        "event" to "di.type_mismatch",
-                        "type" to typeName
-                    )
+                    "event" to "di.type_mismatch",
+                    "type" to typeName
                 ) { "Provider returned unexpected type" }
                 throw IllegalStateException("Injectable of type $typeName was not injected (type mismatch).")
             }
     }
 
     override fun setup() {
-        log.debug(fields = mapOf("event" to "di.setup")) { "Setup" }
+        log.debug("event" to "di.setup") { "Setup" }
     }
 
     override fun teardown() {
-        log.debug(fields = mapOf("event" to "di.teardown", "size" to dependenciesMap.size)) { "Teardown" }
+        log.debug("event" to "di.teardown", "size" to dependenciesMap.size) { "Teardown" }
         dependenciesMap.clear()
     }
 }

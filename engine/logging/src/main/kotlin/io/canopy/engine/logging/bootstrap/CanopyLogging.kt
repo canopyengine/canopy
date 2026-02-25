@@ -23,6 +23,7 @@ import ch.qos.logback.core.util.FileSize
 import io.canopy.engine.logging.api.LogContext
 import io.canopy.engine.logging.api.LogLevel
 import io.canopy.engine.logging.api.Logs
+import io.canopy.engine.logging.util.ConsoleBanner
 import net.logstash.logback.encoder.LogstashEncoder
 import org.slf4j.Logger
 import org.slf4j.LoggerFactory
@@ -35,6 +36,7 @@ object CanopyLogging {
         val engineVersion: String = "unknown",
 
         val consoleLevel: LogLevel = LogLevel.INFO,
+        val bannerMode: ConsoleBanner.Mode = ConsoleBanner.Mode.GRADIENT,
 
         val engineJsonLevel: LogLevel = LogLevel.DEBUG,
         val engineLogLevel: LogLevel = LogLevel.INFO,
@@ -59,6 +61,8 @@ object CanopyLogging {
      * If Logback isn't the active backend, it's a no-op.
      */
     fun init(config: Config) {
+        ConsoleBanner.print(config.engineVersion, ConsoleBanner.Mode.GRADIENT)
+
         val context = LoggerFactory.getILoggerFactory() as? LoggerContext ?: return
         context.reset()
 
@@ -235,21 +239,17 @@ object CanopyLogging {
         startedAt.set(Instant.now())
 
         Logs.get("canopy.engine.session").info(
-            fields = mapOf(
-                "event" to "session.start",
-                "schema" to "canopy-log-v1",
-                "startedAt" to startedAt.get().toString(),
-                "runId" to config.runId,
-                "engineVersion" to config.engineVersion,
-                "runDir" to runDir.toString()
-            )
+            "event" to "session.start",
+            "schema" to "canopy-log-v1",
+            "startedAt" to startedAt.get().toString(),
+            "runId" to config.runId,
+            "engineVersion" to config.engineVersion,
+            "runDir" to runDir.toString()
         ) { "Session start" }
 
         Logs.get("canopy.bootstrap.logging").info(
-            fields = mapOf(
-                "event" to "logging.init",
-                "runDir" to runDir.toString()
-            )
+            "event" to "logging.init",
+            "runDir" to runDir.toString()
         ) { "Canopy logging initialized" }
     }
 
@@ -262,21 +262,17 @@ object CanopyLogging {
         if (t != null) {
             sessionLog.error(
                 t = t,
-                fields = mapOf(
-                    "event" to "session.end",
-                    "reason" to reason,
-                    "endedAt" to now.toString(),
-                    "durationMs" to durationMs
-                )
+                "event" to "session.end",
+                "reason" to reason,
+                "endedAt" to now.toString(),
+                "durationMs" to durationMs
             ) { "Session end" }
         } else {
             sessionLog.info(
-                fields = mapOf(
-                    "event" to "session.end",
-                    "reason" to reason,
-                    "endedAt" to now.toString(),
-                    "durationMs" to durationMs
-                )
+                "event" to "session.end",
+                "reason" to reason,
+                "endedAt" to now.toString(),
+                "durationMs" to durationMs
             ) { "Session end" }
         }
     }

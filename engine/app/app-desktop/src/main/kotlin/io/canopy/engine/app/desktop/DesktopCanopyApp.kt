@@ -10,8 +10,10 @@ import io.canopy.engine.graphics.managers.CameraManager
 import io.canopy.engine.graphics.systems.RenderSystem
 import io.canopy.engine.logging.api.Logs
 import io.canopy.engine.utils.UnstableApi
-import ktx.async.KtxAsync
 
+/**
+ * LWJGL3 Implementation of [CanopyApp]
+ */
 @UnstableApi
 class DesktopCanopyApp internal constructor() : CanopyApp<DesktopCanopyAppConfig>() {
     // App/variant logger (not engine.*)
@@ -25,12 +27,13 @@ class DesktopCanopyApp internal constructor() : CanopyApp<DesktopCanopyAppConfig
         )
 
         // your existing setup
-        KtxAsync.initiate()
         sceneManager.registerSystem(
             RenderSystem(config.screenWidth, config.screenHeight)
         )
-        ManagersRegistry.register(CameraManager())
-        ManagersRegistry.register(AssetsManager())
+        ManagersRegistry.apply {
+            register(CameraManager())
+            register(AssetsManager())
+        }
 
         super.create()
     }

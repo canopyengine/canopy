@@ -174,5 +174,5 @@ private fun SignalLogs.logEnabledTrace() = log.isTraceEnabled()
 
 private fun SignalLogs.logTrace(event: String, fields: Map<String, Any?>) {
     // Log at trace, but keep message constant; structured fields carry info.
-    log.trace(fields = fields + ("event" to event)) { event }
+    log.trace("event" to event) { event }
 }

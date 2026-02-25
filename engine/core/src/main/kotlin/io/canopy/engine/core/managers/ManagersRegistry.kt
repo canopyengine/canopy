@@ -10,7 +10,7 @@ import io.canopy.engine.logging.engine.EngineLogs
 object ManagersRegistry {
 
     // Engine subsystem logger (consistent + routable)
-    private val log = EngineLogs.subsystem("managers")
+    private val log = EngineLogs.managers
 
     private val managers = mutableMapOf<KClass<out Manager>, Manager>()
 
@@ -24,7 +24,7 @@ object ManagersRegistry {
 
         managers[key] = manager
 
-        log.debug(fields = mapOf("manager" to key.simpleName)) {
+        log.debug("manager" to key.simpleName) {
             "Registered manager"
         }
     }
@@ -42,7 +42,7 @@ object ManagersRegistry {
         )
 
     fun setup() {
-        log.info(fields = mapOf("registered" to managers.size)) {
+        log.info("registered" to managers.size) {
             "Bootstrapping managers"
         }
 
@@ -58,7 +58,7 @@ object ManagersRegistry {
     }
 
     fun teardown() {
-        log.info(fields = mapOf("registered" to managers.size)) {
+        log.info("registered" to managers.size) {
             "Tearing down managers"
         }
 

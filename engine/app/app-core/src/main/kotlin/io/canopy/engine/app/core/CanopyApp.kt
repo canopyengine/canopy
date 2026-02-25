@@ -16,22 +16,54 @@ import io.canopy.engine.logging.engine.EngineLogs
 import ktx.app.KtxGame
 import ktx.async.KtxAsync
 
+/**
+ * Base App class - starting point of a Canopy App
+ */
 abstract class CanopyApp<C : CanopyAppConfig> protected constructor() : KtxGame<CanopyScreen>() {
+    /*  ====================
+     *     App properties
+     *  ==================== */
     private val screenRegistry = CanopyScreenRegistry(this)
-
     val sceneManager: SceneManager = SceneManager()
+    val injectionManager by lazy { ManagersRegistry.get(InjectionManager::class) }
+
+    /* App config */
+    private var _config: C? = null
+    protected val config: C get() = _config ?: defaultConfig()
+
+    /* Holds track of frame count */
+    private var frame: Long = 0
+
+    /*  ========================
+     *      Lifecycle callbacks
+     *  ======================== */
     protected var onCreate: (CanopyApp<C>) -> Unit = {}
+    protected var onRender: (CanopyApp<C>) -> Unit = {}
     protected var onResize: (CanopyApp<C>, width: Int, height: Int) -> Unit = { _, _, _ -> }
     protected var onDispose: (CanopyApp<C>) -> Unit = {}
     protected var logLevel: LogLevel = LogLevel.DEBUG
 
+    /*  =============================================
+     *      Async helpers - allow async app handling
+     *  ============================================= */
+
+    // Countdown latches - to control when an app started and finished
     private val started = CountDownLatch(1)
     private val finished = CountDownLatch(1)
 
+    // Refs to callbacks - used to 'install' the handler before running the app
     private val backendExitRef = AtomicReference<(() -> Unit)?>(null)
     private val backendForceRef = AtomicReference<(() -> Unit)?>(null)
 
-    // always-available handle
+    // References the launch thread
+    private val launchThreadRef = AtomicReference<Thread?>(null)
+
+    // Reference errors thrown by the launch thread
+    private val launchErrorRef = AtomicReference<Throwable?>(null)
+
+    /*
+     * App Handle - useful for forcing or scheduling app close
+     */
     val handle: CanopyAppHandle = ProxyAppHandle(
         finished = finished,
         onRequestExit = {
@@ -49,23 +81,19 @@ abstract class CanopyApp<C : CanopyAppConfig> protected constructor() : KtxGame<
         onAwaitStarted = { timeout, timeUnit -> started.await(timeout, timeUnit) }
     )
 
-    private val launchThreadRef = AtomicReference<Thread?>(null)
-    private val launchErrorRef = AtomicReference<Throwable?>(null)
+    /* =========================================
+     *      LIFECYCLE OPERATIONS
+     * =========================================
+     */
 
-    protected val injectionManager by lazy { ManagersRegistry.get(InjectionManager::class) }
-
-    private var _config: C? = null
-    protected val config: C get() = _config ?: defaultConfig()
-
-    private var frame: Long = 0
-
+    /**
+     * Called on app setup - similar to nodes' 'onReady' callbacks
+     */
     override fun create() {
         // Init logging FIRST (so startup logs are captured)
         val runId = CanopyLogging.defaultRunId()
         val logDir = CanopyLogging.defaultBaseLogDir()
         val engineVersion = CanopyBuildInfo.version
-
-        ConsoleBanner.print(CanopyBuildInfo.version, ConsoleBanner.Mode.GRADIENT)
 
         CanopyLogging.init(
             CanopyLogging.Config(
@@ -78,44 +106,64 @@ abstract class CanopyApp<C : CanopyAppConfig> protected constructor() : KtxGame<
             )
         )
 
-        EngineLogs.lifecycle.info(
-            fields = mapOf(
-                "event" to "app.launch",
+        LogContext.with(
+            "backend" to (this::class.simpleName ?: "unknown")
+        ) {
+            EngineLogs.lifecycle.info(
                 "backend" to (this::class.simpleName ?: "unknown")
-            )
-        ) { "Launching app" }
+            ) { "Booting Canopy..." }
 
-        KtxAsync.initiate()
+            // Should be called before managers are registered just in case the user decides to do setup here
+            onCreate(this)
 
-        ManagersRegistry.apply {
-            register(InjectionManager())
-            register(sceneManager)
-        }.setup()
+            // Allows async asset loading
+            KtxAsync.initiate()
 
-        onCreate(this)
+            // Register global managers
+            ManagersRegistry.apply {
+                register(InjectionManager())
+                register(sceneManager)
+            }.setup()
 
-        screenRegistry.setup()
+            // Screens added on the screen registry are added here
+            screenRegistry.setup()
 
-        started.countDown()
-        super.create()
+            // Countdown so main thread stops blocking after app boots
+            started.countDown()
+            super.create()
+
+            EngineLogs.lifecycle.info(
+                "event" to "app.launch.init"
+            ) { "Application started." }
+        }
     }
 
+    /**
+     * Called on each game loop - equivalent to 'update'
+     */
     override fun render() {
         frame++
         LogContext.with("frame" to frame) {
+            onRender(this)
             super.render()
         }
     }
 
+    /**
+     * Called on screen resize
+     */
     override fun resize(width: Int, height: Int) {
         super.resize(width, height)
         sceneManager.resize(width, height)
         onResize(this, width, height)
     }
 
+    /**
+     * Called on app disposal
+     */
     override fun dispose() {
         try {
-            EngineLogs.lifecycle.info(fields = mapOf("event" to "app.dispose")) { "Disposing app" }
+            EngineLogs.lifecycle.info("event" to "app.dispose") { "Disposing app" }
             ManagersRegistry.teardown()
             CanopyLogging.end(reason = "normal")
         } catch (t: Throwable) {
@@ -128,6 +176,9 @@ abstract class CanopyApp<C : CanopyAppConfig> protected constructor() : KtxGame<
         }
     }
 
+    /**
+     * Default config
+     */
     abstract fun defaultConfig(): C
 
     /**
@@ -180,8 +231,11 @@ abstract class CanopyApp<C : CanopyAppConfig> protected constructor() : KtxGame<
         backendForceRef.set(forceClose ?: requestExit)
     }
 
-    /* Helper methods for building the app */
+    /** ===================================
+     *      Declarative builder helpers
+     *  =================================== */
 
+    /* Helper methods for building the app */
     fun sceneManager(lambda: SceneManager.() -> Unit) {
         sceneManager.apply(lambda)
     }
@@ -192,6 +246,10 @@ abstract class CanopyApp<C : CanopyAppConfig> protected constructor() : KtxGame<
 
     fun onCreate(handler: CanopyApp<C>.() -> Unit) {
         onCreate = handler
+    }
+
+    fun onRender(handler: CanopyApp<C>.() -> Unit) {
+        onRender = handler
     }
 
     fun onResize(handler: CanopyApp<C>.(Int, Int) -> Unit) {
