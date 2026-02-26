@@ -46,4 +46,4 @@ class TerminalCanopyApp internal constructor() : CanopyApp<CanopyAppConfig>() {
     }
 }
 
-fun terminalApp(builder: TerminalCanopyApp.() -> Unit): TerminalCanopyApp = TerminalCanopyApp().apply(builder)
+fun terminalApp(builder: TerminalCanopyApp.() -> Unit = {}): TerminalCanopyApp = TerminalCanopyApp().apply(builder)

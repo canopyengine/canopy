@@ -36,5 +36,5 @@ class TestHeadlessCanopyApp internal constructor() : CanopyApp<CanopyAppConfig>(
     }
 }
 
-fun testHeadlessApp(builder: TestHeadlessCanopyApp.() -> Unit): TestHeadlessCanopyApp =
+fun testHeadlessApp(builder: TestHeadlessCanopyApp.() -> Unit = {}): TestHeadlessCanopyApp =
     TestHeadlessCanopyApp().apply(builder)

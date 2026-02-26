@@ -59,4 +59,4 @@ class DesktopCanopyApp internal constructor() : CanopyApp<DesktopCanopyAppConfig
 }
 
 @UnstableApi
-fun desktopApp(builder: DesktopCanopyApp.() -> Unit): DesktopCanopyApp = DesktopCanopyApp().apply(builder)
+fun desktopApp(builder: DesktopCanopyApp.() -> Unit = {}): DesktopCanopyApp = DesktopCanopyApp().apply(builder)
