@@ -2,7 +2,7 @@ package io.canopy.engine.graphics.systems
 
 import com.badlogic.gdx.graphics.g2d.SpriteBatch
 import com.badlogic.gdx.utils.viewport.FitViewport
-import io.canopy.engine.core.managers.ManagersRegistry
+import io.canopy.engine.core.managers.lazyManager
 import io.canopy.engine.core.nodes.core.TreeSystem
 import io.canopy.engine.graphics.managers.CameraManager
 import io.canopy.engine.graphics.nodes.visual.AnimatedSprite2D
@@ -23,7 +23,7 @@ class RenderSystem(worldWidth: Int, worldHeight: Int) :
     private val viewport = FitViewport(worldWidth.toFloat(), worldHeight.toFloat())
 
     // Managers //
-    private val cameraManager by lazy { ManagersRegistry.get(CameraManager::class) }
+    private val cameraManager by lazyManager<CameraManager>()
 
     private fun updateViewportCamera() {
         val camera = cameraManager.activeCamera.value ?: return

@@ -25,7 +25,6 @@ abstract class CanopyApp<C : CanopyAppConfig> protected constructor() : KtxGame<
      *  ==================== */
     private val screenRegistry = CanopyScreenRegistry(this)
     val sceneManager: SceneManager = SceneManager()
-    val injectionManager by lazy { ManagersRegistry.get(InjectionManager::class) }
 
     /* App config */
     private var _config: C? = null
@@ -121,8 +120,8 @@ abstract class CanopyApp<C : CanopyAppConfig> protected constructor() : KtxGame<
 
             // Register global managers
             ManagersRegistry.apply {
-                register(InjectionManager())
-                register(sceneManager)
+                +InjectionManager()
+                +sceneManager
             }.setup()
 
             // Screens added on the screen registry are added here
@@ -261,7 +260,7 @@ abstract class CanopyApp<C : CanopyAppConfig> protected constructor() : KtxGame<
     }
 
     fun screens(handler: CanopyScreenRegistry.() -> Unit) {
-        screenRegistry.setupCallback = handler
+        screenRegistry.registerSetupCallback(handler)
     }
 }
 

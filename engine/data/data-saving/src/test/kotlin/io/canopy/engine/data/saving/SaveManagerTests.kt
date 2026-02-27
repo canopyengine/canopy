@@ -6,6 +6,7 @@ import kotlin.test.assertTrue
 import java.io.File
 import com.badlogic.gdx.files.FileHandle
 import io.canopy.engine.core.managers.ManagersRegistry
+import io.canopy.engine.core.managers.manager
 import kotlinx.serialization.builtins.serializer
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.BeforeAll
@@ -33,7 +34,7 @@ class SaveManagerTests {
 
     @AfterEach
     fun cleanup() {
-        ManagersRegistry.get(SaveManager::class).cleanModules("player")
+        manager<SaveManager>().cleanModules("player")
     }
 
     @Test

@@ -4,11 +4,8 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import io.canopy.engine.core.managers.ManagersRegistry
 import io.canopy.engine.core.managers.SceneManager
-import io.canopy.engine.core.nodes.core.Behavior
-import io.canopy.engine.core.nodes.core.Node
-import io.canopy.engine.core.nodes.core.NodeRef
-import io.canopy.engine.core.nodes.core.behavior
-import io.canopy.engine.core.nodes.core.nodeRef
+import io.canopy.engine.core.managers.manager
+import io.canopy.engine.core.nodes.core.*
 import io.canopy.engine.core.nodes.types.empty.EmptyNode
 import org.junit.jupiter.api.BeforeAll
 
@@ -53,7 +50,7 @@ class NodeRefTests {
                 EmptyNode(name = "external")
             }
 
-        ManagersRegistry.get(SceneManager::class).currScene = tree
+        manager<SceneManager>().currScene = tree
 
         assertEquals("external", referencedNode)
     }

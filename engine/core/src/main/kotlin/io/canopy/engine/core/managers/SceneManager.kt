@@ -1,5 +1,6 @@
 package io.canopy.engine.core.managers
 
+import kotlin.properties.ReadOnlyProperty
 import kotlin.reflect.KClass
 import com.badlogic.gdx.math.Vector2
 import io.canopy.engine.core.nodes.core.Node
@@ -53,7 +54,9 @@ class SceneManager(private var physicsStep: Float = 1f / 60f, private val block:
     //         SYSTEMS
     // ===============================
     private val systems: MutableMap<TreeSystem.UpdatePhase, MutableList<TreeSystem>> = mutableMapOf()
-    private val systemsByType = mutableMapOf<KClass<out Node<*>>, MutableList<TreeSystem>>()
+    private val systemsByClass = mutableMapOf<KClass<out TreeSystem>, TreeSystem>()
+
+    private val systemsByNodeTypes = mutableMapOf<KClass<out Node<*>>, MutableList<TreeSystem>>()
 
     // ===============================
     //          GROUPS
@@ -101,7 +104,7 @@ class SceneManager(private var physicsStep: Float = 1f / 60f, private val block:
             flatTree[node.path] = node
 
             // Register node into systems interested in its type
-            systemsByType[node::class]?.forEach { sys ->
+            systemsByNodeTypes[node::class]?.forEach { sys ->
                 LogContext.with(
                     "scene" to (root.name),
                     "nodePath" to node.path,
@@ -125,7 +128,7 @@ class SceneManager(private var physicsStep: Float = 1f / 60f, private val block:
         traverseNodes(root) { node ->
             flatTree.remove(node.path)
 
-            systemsByType[node::class]?.forEach { sys ->
+            systemsByNodeTypes[node::class]?.forEach { sys ->
                 LogContext.with(
                     "scene" to root.name,
                     "nodePath" to node.path,
@@ -153,36 +156,44 @@ class SceneManager(private var physicsStep: Float = 1f / 60f, private val block:
     //      SYSTEM MANAGEMENT
     // ===============================
 
-    fun <T : TreeSystem> registerSystem(system: T) {
-        val systemName = system::class.simpleName ?: "UnknownSystem"
-        require(!hasSystem(system::class)) { "System $systemName is already registered" }
+    fun <T : TreeSystem> addSystem(system: T) {
+        require(!hasSystem(system::class)) {
+            "System ${system::class.simpleName} is already registered"
+        }
 
+        systemsByClass[system::class] = system
         systems.getOrPut(system.phase) { mutableListOf() }.let { list ->
             list += system
             list.sortBy(TreeSystem::priority)
         }
 
         system.requiredTypes.forEach { type ->
-            systemsByType.computeIfAbsent(type) { mutableListOf() }.add(system)
+            systemsByNodeTypes.computeIfAbsent(type) { mutableListOf() }.add(system)
         }
 
         log.info(
             "event" to "system.register",
-            "system" to systemName,
+            "system" to system::class.simpleName,
             "phase" to system.phase.name,
             "priority" to system.priority,
             "requiredTypes" to system.requiredTypes.joinToString { it.simpleName ?: it.toString() }
         ) { "Registered system" }
     }
 
-    fun unregisterSystem(system: TreeSystem) {
-        val systemName = system::class.simpleName ?: "UnknownSystem"
+    inline operator fun <reified T : TreeSystem> T.unaryPlus() = addSystem(this)
+
+    fun <T : TreeSystem> removeSystem(kClass: KClass<T>) {
+        val systemName = kClass.simpleName ?: "UnknownSystem"
+
+        require(hasSystem(kClass)) { "System ${kClass.simpleName} is not registered" }
+        val system = systemsByClass[kClass] ?: return
 
         systems[system.phase]?.apply {
             remove(system)
-            system.requiredTypes.forEach { type -> systemsByType[type]?.remove(system) }
+            system.requiredTypes.forEach { type -> systemsByNodeTypes[type]?.remove(system) }
             sortBy(TreeSystem::priority)
         }
+        systemsByClass.remove(kClass)
 
         log.info(
             "event" to "system.unregister",
@@ -191,18 +202,21 @@ class SceneManager(private var physicsStep: Float = 1f / 60f, private val block:
         ) { "Unregistered system" }
     }
 
-    @Suppress("UNCHECKED_CAST")
-    fun <T : TreeSystem> getSystem(clazz: KClass<T>): T =
-        systems.values.flatten().firstOrNull { clazz.isInstance(it) } as? T
-            ?: throw IllegalStateException(
-                """
-                [SCENE MANAGER]
-                The system ${clazz.simpleName} isn't registered
-                To fix it: register it into a Scene Manager!
-                """.trimIndent()
-            )
+    inline operator fun <reified T : TreeSystem> (KClass<T>).unaryMinus() = removeSystem(this)
 
-    fun <T : TreeSystem> hasSystem(clazz: KClass<T>): Boolean = systems.values.flatten().any { clazz.isInstance(it) }
+    @Suppress("UNCHECKED_CAST")
+    fun <T : TreeSystem> getSystem(clazz: KClass<T>): T = systemsByClass[clazz] as? T
+        ?: throw IllegalStateException(
+            """
+            [SCENE MANAGER]
+            The system ${clazz.simpleName} isn't registered
+            To fix it: register it into a Scene Manager!
+            """.trimIndent()
+        )
+
+    fun <T : TreeSystem> hasSystem(clazz: KClass<T>): Boolean = clazz in systemsByClass.keys
+
+    operator fun contains(clazz: KClass<*>) = clazz in systemsByClass
 
     // ===============================
     //      GROUP MANAGEMENT
@@ -304,3 +318,9 @@ class SceneManager(private var physicsStep: Float = 1f / 60f, private val block:
         systems.values.flatten().forEach(TreeSystem::onUnregister)
     }
 }
+
+inline fun <reified T : TreeSystem> treeSystem(): T =
+    ManagersRegistry.getManager(SceneManager::class).getSystem(T::class)
+
+inline fun <reified T : TreeSystem> lazyTreeSystem(): ReadOnlyProperty<Any?, T> =
+    ReadOnlyProperty { _, _ -> treeSystem<T>() }

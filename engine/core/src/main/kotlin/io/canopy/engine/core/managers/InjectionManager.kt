@@ -1,5 +1,6 @@
 package io.canopy.engine.core.managers
 
+import kotlin.properties.ReadOnlyProperty
 import kotlin.reflect.KClass
 import io.canopy.engine.logging.engine.EngineLogs
 
@@ -28,6 +29,9 @@ class InjectionManager : Manager {
             "size" to dependenciesMap.size
         ) { "Registered injectable" }
     }
+
+    inline operator fun <reified T : Any> plusAssign(noinline injectable: () -> T) =
+        registerInjectable(T::class, injectable)
 
     @Suppress("UNCHECKED_CAST")
     fun <T : Any> inject(kClass: KClass<T>): T {
@@ -68,3 +72,7 @@ class InjectionManager : Manager {
         dependenciesMap.clear()
     }
 }
+
+inline fun <reified T : Any> inject(): T = manager<InjectionManager>().inject(T::class)
+
+inline fun <reified T : Any> lazyInject(): ReadOnlyProperty<Any?, T> = ReadOnlyProperty { _, _ -> inject<T>() }

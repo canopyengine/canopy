@@ -2,9 +2,10 @@ package io.canopy.engine.core.nodes.core
 
 import kotlin.reflect.KClass
 import com.badlogic.gdx.math.Vector2
-import io.canopy.engine.core.managers.InjectionManager
 import io.canopy.engine.core.managers.ManagersRegistry
 import io.canopy.engine.core.managers.SceneManager
+import io.canopy.engine.core.managers.lazyManager
+import io.canopy.engine.core.managers.manager
 import io.canopy.engine.logging.api.LogContext
 import io.canopy.engine.logging.engine.EngineLogs
 import ktx.math.plus
@@ -32,10 +33,7 @@ abstract class Node<N : Node<N>> protected constructor(
     private val log = EngineLogs.node
 
     /** Reference to the scene manager (set automatically on init) */
-    protected val sceneManager: SceneManager by lazy { ManagersRegistry.get(SceneManager::class) }
-
-    /** Reference to the injection manager (for prop injection) */
-    protected val injectionManager: InjectionManager by lazy { ManagersRegistry.get(InjectionManager::class) }
+    protected val sceneManager: SceneManager by lazyManager<SceneManager>()
 
     /** Whether this node is a prefab (not active until instantiated) */
     private var isPrefab: Boolean = false
@@ -151,6 +149,9 @@ abstract class Node<N : Node<N>> protected constructor(
         }
     }
 
+    operator fun Node<*>.unaryPlus() = addChild(this)
+    operator fun plusAssign(child: Node<*>) = addChild(child)
+
     /** Removes a child node */
     fun removeChild(child: Node<*>) {
         check(child.parent == this) { "Node '${child.name}' is not a child of '$name'!" }
@@ -178,6 +179,9 @@ abstract class Node<N : Node<N>> protected constructor(
         child.children.values.toList().forEach { child.removeChild(it) }
     }
 
+    operator fun Node<*>.unaryMinus() = removeChild(this)
+    operator fun minusAssign(child: Node<*>) = removeChild(child)
+
     /** Removes a child node by path */
     fun removeChild(path: String) {
         val child = getNode(path)
@@ -204,7 +208,9 @@ abstract class Node<N : Node<N>> protected constructor(
         for (part in searchParts) {
             when (part) {
                 "", "." -> {}
+
                 ".." -> current = current?.parent ?: throw IllegalArgumentException("No parent for path: $path")
+
                 else -> {
                     val child = current?.children[part]
                     current = child ?: throw IllegalArgumentException(
@@ -216,6 +222,8 @@ abstract class Node<N : Node<N>> protected constructor(
 
         return current as? T ?: throw IllegalArgumentException("Node at path '$path' is not of expected type")
     }
+
+    inline operator fun <reified T : Node<T>> get(path: String): Node<*> = getNode<T>(path)
 
     /** Marks this node as a prefab (not active until instantiated) */
     fun asPrefab(): N {
@@ -367,7 +375,7 @@ operator fun Node<*>.unaryPlus(): Node<*> {
 }
 
 fun Node<*>.asSceneRoot(): Node<*> {
-    val sceneManager = ManagersRegistry.get(SceneManager::class)
+    val sceneManager = manager<SceneManager>()
     sceneManager.currScene = this
 
     LogContext.with("nodePath" to this.path) {
