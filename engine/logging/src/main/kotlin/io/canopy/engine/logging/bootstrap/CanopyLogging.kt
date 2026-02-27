@@ -61,7 +61,10 @@ object CanopyLogging {
      * If Logback isn't the active backend, it's a no-op.
      */
     fun init(config: Config) {
-        ConsoleBanner.print(config.engineVersion, ConsoleBanner.Mode.GRADIENT)
+        ConsoleBanner.print(
+            config.engineVersion,
+            ConsoleBanner.Mode.GRADIENT
+        )
 
         val context = LoggerFactory.getILoggerFactory() as? LoggerContext ?: return
         context.reset()

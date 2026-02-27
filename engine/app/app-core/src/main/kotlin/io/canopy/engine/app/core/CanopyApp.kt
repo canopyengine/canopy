@@ -92,7 +92,7 @@ abstract class CanopyApp<C : CanopyAppConfig> protected constructor() : KtxGame<
         // Init logging FIRST (so startup logs are captured)
         val runId = CanopyLogging.defaultRunId()
         val logDir = CanopyLogging.defaultBaseLogDir()
-        val engineVersion = CanopyBuildInfo.version
+        val engineVersion = CanopyBuildInfo.projectVersion
 
         CanopyLogging.init(
             CanopyLogging.Config(

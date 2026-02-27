@@ -39,8 +39,10 @@ dependencies {
 tasks.withType<Jar>().configureEach {
     manifest {
         attributes(
-            "Implementation-Title" to project.name,
-            "Implementation-Version" to project.version.toString()
+            mapOf(
+                "Project-Title" to project.name,
+                "Project-Version" to rootProject.version
+            )
         )
     }
 }

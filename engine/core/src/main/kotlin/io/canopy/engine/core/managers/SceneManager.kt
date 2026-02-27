@@ -1,6 +1,5 @@
 package io.canopy.engine.core.managers
 
-import kotlin.properties.ReadOnlyProperty
 import kotlin.reflect.KClass
 import com.badlogic.gdx.math.Vector2
 import io.canopy.engine.core.nodes.core.Node

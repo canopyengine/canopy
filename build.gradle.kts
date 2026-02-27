@@ -5,13 +5,21 @@ import org.jetbrains.kotlin.gradle.tasks.KotlinCompile
 import org.jlleitschuh.gradle.ktlint.KtlintExtension
 import org.jlleitschuh.gradle.ktlint.reporter.ReporterType
 
-val projectVersion: String by project
+val canopyVersion: String by project
 
 plugins {
     alias(libs.plugins.kotlin.jvm) apply true
     alias(libs.plugins.kotlin.serialization) apply false
     alias(libs.plugins.ktlint) apply false
-    // root is aggregator: no java/java-library here
+    alias(libs.plugins.axion.release) apply true
+}
+
+scmVersion {
+    tag {
+        prefix.set("v") // tags like v0.1.0
+    }
+    // Optional: if no tag yet, start from something:
+    versionCreator("simple")
 }
 
 allprojects {
@@ -19,7 +27,7 @@ allprojects {
     apply(plugin = "idea")
 
     group = "io.github.canopyengine"
-    version = projectVersion
+    version = rootProject.scmVersion.version
 
     extensions.configure<IdeaModel> {
         module {
@@ -29,9 +37,10 @@ allprojects {
     }
 }
 
+
+
 subprojects {
     // Grouping projects should not behave like real modules
-
     val ignoredPaths = listOf(
         ":engine",
         ":engine:app",
@@ -131,4 +140,59 @@ tasks.named<Delete>("clean") {
             .filter { it.isDirectory && it.name == ".canopy" }
             .toList()
     )
+}
+
+fun relTask(
+    name: String,
+    axionTask: String,
+    props: Map<String, String>
+) = tasks.register<GradleBuild>(name) {
+    group = "versioning"
+    description = "Axion: $axionTask with ${props.entries.joinToString()}"
+
+    tasks = listOf(axionTask)
+    startParameter.projectProperties.putAll(props)
+}
+
+relTask(
+    name = "alphaPatch",
+    axionTask = "createRelease",
+    props = mapOf(
+        "release.versionIncrementer" to "incrementPatch",
+        "release.prerelease" to "alpha" // or "alpha." depending on your format
+    )
+)
+
+relTask(
+    name = "alphaMinor",
+    axionTask = "release",
+    props = mapOf(
+        "release.versionIncrementer" to "incrementMinor",
+        "release.prerelease" to "alpha"
+    )
+)
+
+relTask(
+    name = "alphaMajor",
+    axionTask = "release",
+    props = mapOf(
+        "release.versionIncrementer" to "incrementMajor",
+        "release.prerelease" to "alpha"
+    )
+)
+
+relTask(
+    name = "rc",
+    axionTask = "release",
+    props = mapOf("release.prerelease" to "rc")
+)
+
+relTask(
+    name = "stable",
+    axionTask = "release",
+    props = mapOf("release.finalize" to "true")
+)
+
+tasks.named("verifyRelease") {
+    dependsOn("build")
 }
