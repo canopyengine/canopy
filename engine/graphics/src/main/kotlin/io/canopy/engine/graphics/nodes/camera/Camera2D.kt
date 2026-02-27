@@ -3,7 +3,7 @@ package io.canopy.engine.graphics.nodes.camera
 import com.badlogic.gdx.graphics.OrthographicCamera
 import com.badlogic.gdx.math.Vector2
 import com.badlogic.gdx.math.Vector3
-import io.canopy.engine.core.managers.ManagersRegistry
+import io.canopy.engine.core.managers.manager
 import io.canopy.engine.core.nodes.core.Behavior
 import io.canopy.engine.core.nodes.core.Node
 import io.canopy.engine.core.nodes.core.NodeRef
@@ -47,7 +47,7 @@ class Camera2D(
     var limitBottom: Float? = null
 
     // Managers
-    private val cameraManager = ManagersRegistry.get(CameraManager::class)
+    private val cameraManager = manager<CameraManager>()
 
     override fun nodeEnterTree() {
         super.nodeEnterTree()

@@ -4,6 +4,8 @@ import com.badlogic.gdx.math.Vector2
 import com.badlogic.gdx.physics.box2d.Box2DDebugRenderer
 import com.badlogic.gdx.physics.box2d.World
 import io.canopy.engine.core.managers.GameManager
+import io.canopy.engine.core.managers.InjectionManager
+import io.canopy.engine.core.managers.manager
 import io.canopy.engine.core.nodes.core.Node
 import io.canopy.engine.core.nodes.core.TreeSystem
 import io.canopy.engine.physics.nodes.body.PhysicsBody2D
@@ -29,7 +31,7 @@ class PhysicsSystem(gravity: Vector2 = Vector2.Zero) :
         }
 
     override fun onRegister() {
-        injectionManager.registerInjectable(World::class) { world }
+        manager<InjectionManager>() += { world }
     }
 
     override fun afterProcess(delta: Float) {

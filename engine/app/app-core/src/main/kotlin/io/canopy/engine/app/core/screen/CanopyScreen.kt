@@ -1,13 +1,11 @@
 package io.canopy.engine.app.core.screen
 
-import io.canopy.engine.core.managers.InjectionManager
-import io.canopy.engine.core.managers.ManagersRegistry
 import io.canopy.engine.core.managers.SceneManager
+import io.canopy.engine.core.managers.lazyManager
 import ktx.app.KtxScreen
 
 abstract class CanopyScreen : KtxScreen {
-    protected val sceneManager by lazy { ManagersRegistry.get(SceneManager::class) }
-    protected val injectionManager by lazy { ManagersRegistry.get(InjectionManager::class) }
+    protected val sceneManager by lazyManager<SceneManager>()
 
     private var setupCalled = false
 

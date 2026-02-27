@@ -1,9 +1,8 @@
 package io.canopy.engine.core.nodes.core
 
 import kotlin.reflect.KClass
-import io.canopy.engine.core.managers.InjectionManager
-import io.canopy.engine.core.managers.ManagersRegistry
 import io.canopy.engine.core.managers.SceneManager
+import io.canopy.engine.core.managers.lazyManager
 import io.canopy.engine.logging.api.LogContext
 import io.canopy.engine.logging.engine.EngineLogs
 
@@ -15,8 +14,7 @@ abstract class TreeSystem(
     // Engine subsystem logger for systems
     private val log = EngineLogs.subsystem("system")
 
-    protected val sceneManager: SceneManager by lazy { ManagersRegistry.get(SceneManager::class) }
-    protected val injectionManager: InjectionManager by lazy { ManagersRegistry.get(InjectionManager::class) }
+    protected val sceneManager: SceneManager by lazyManager<SceneManager>()
 
     /** Nodes currently matching the system's type requirements */
     protected val matchingNodes = mutableListOf<Node<*>>()
@@ -142,7 +140,7 @@ abstract class TreeSystem(
 /**
  * Helper method that helps to create tree systems in-place
  */
-fun treeSystem(
+fun createTreeSystem(
     phase: TreeSystem.UpdatePhase,
     priority: Int = 0,
     vararg requiredTypes: KClass<out Node<*>>,

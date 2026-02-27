@@ -21,7 +21,7 @@ class PhysicsBody2DTests {
         fun setupHeadlessApplication() {
             testHeadlessApp {
                 sceneManager {
-                    registerSystem(PhysicsSystem())
+                    +PhysicsSystem()
                 }
 
                 onCreate {

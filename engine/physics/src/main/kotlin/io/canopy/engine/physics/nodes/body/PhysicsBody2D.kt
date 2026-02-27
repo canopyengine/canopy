@@ -3,6 +3,7 @@ package io.canopy.engine.physics.nodes.body
 import com.badlogic.gdx.math.Vector2
 import com.badlogic.gdx.physics.box2d.BodyDef
 import com.badlogic.gdx.physics.box2d.World
+import io.canopy.engine.core.managers.inject
 import io.canopy.engine.core.nodes.core.Behavior
 import io.canopy.engine.core.nodes.core.Node
 import ktx.box2d.body
@@ -35,7 +36,7 @@ abstract class PhysicsBody2D<T : PhysicsBody2D<T>>(
     // ==========================
     //          Physics
     // ==========================
-    private val world = injectionManager.inject(World::class)
+    private val world = inject<World>()
     val body =
         world.body(bodyType) {
             this.position.set(globalPosition)

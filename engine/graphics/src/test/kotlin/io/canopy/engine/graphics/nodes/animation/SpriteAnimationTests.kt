@@ -6,7 +6,8 @@ import kotlin.test.assertContentEquals
 import com.badlogic.gdx.graphics.g2d.TextureRegion
 import io.canopy.engine.app.test.testHeadlessApp
 import io.canopy.engine.core.managers.ManagersRegistry
-import io.canopy.engine.core.managers.SceneManager
+import io.canopy.engine.core.managers.lazyManager
+import io.canopy.engine.core.managers.treeSystem
 import io.canopy.engine.core.nodes.types.empty.EmptyNode
 import io.canopy.engine.data.core.assets.AssetsManager
 import io.canopy.engine.graphics.nodes.animation.tracks.ActionTrack
@@ -19,7 +20,7 @@ import org.junit.jupiter.api.BeforeAll
 @Ignore
 @UnstableApi
 class SpriteAnimationTests {
-    val assetsManager by lazy { ManagersRegistry.get(AssetsManager::class) }
+    val assetsManager by lazyManager<AssetsManager>()
 
     companion object {
         @BeforeAll
@@ -27,7 +28,7 @@ class SpriteAnimationTests {
         fun setupHeadlessApplication() {
             testHeadlessApp {
                 sceneManager {
-                    registerSystem(AnimationSystem())
+                    +AnimationSystem()
                 }
                 onCreate {
                     ManagersRegistry.register(AssetsManager())
@@ -84,8 +85,7 @@ class SpriteAnimationTests {
 
         animationPlayer.play("animation")
 
-        val sceneManager = ManagersRegistry.get(SceneManager::class)
-        val animationSystem = sceneManager.getSystem(AnimationSystem::class)
+        val animationSystem = treeSystem<AnimationSystem>()
 
         // 🔑 Drive time forward
         repeat(11) {

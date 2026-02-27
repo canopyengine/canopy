@@ -16,23 +16,21 @@ import io.canopy.engine.utils.UnstableApi
  */
 @UnstableApi
 class DesktopCanopyApp internal constructor() : CanopyApp<DesktopCanopyAppConfig>() {
-    // App/variant logger (not engine.*)
     private val log = Logs.get("canopy.app.desktop")
 
     override fun create() {
-        // install the backend exit behavior as soon as libGDX is alive
         installBackendHandle(
             requestExit = { Gdx.app.postRunnable { Gdx.app.exit() } },
             forceClose = { Runtime.getRuntime().halt(0) } // last resort
         )
 
-        // your existing setup
-        sceneManager.registerSystem(
-            RenderSystem(config.screenWidth, config.screenHeight)
-        )
+        sceneManager.apply {
+            +RenderSystem(config.screenWidth, config.screenHeight)
+        }
+
         ManagersRegistry.apply {
-            register(CameraManager())
-            register(AssetsManager())
+            +CameraManager()
+            +AssetsManager()
         }
 
         super.create()

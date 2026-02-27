@@ -1,5 +1,3 @@
-import org.gradle.kotlin.dsl.withType
-
 plugins {
     alias(libs.plugins.ktlint)
 }

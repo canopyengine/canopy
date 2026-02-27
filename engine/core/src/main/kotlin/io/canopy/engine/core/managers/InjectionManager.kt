@@ -29,6 +29,9 @@ class InjectionManager : Manager {
         ) { "Registered injectable" }
     }
 
+    inline operator fun <reified T : Any> plusAssign(noinline injectable: () -> T) =
+        registerInjectable(T::class, injectable)
+
     @Suppress("UNCHECKED_CAST")
     fun <T : Any> inject(kClass: KClass<T>): T {
         val typeName = kClass.qualifiedName ?: kClass.simpleName ?: "UnknownType"
@@ -68,3 +71,7 @@ class InjectionManager : Manager {
         dependenciesMap.clear()
     }
 }
+
+inline fun <reified T : Any> inject(): T = manager<InjectionManager>().inject(T::class)
+
+inline fun <reified T : Any> lazyInject() = lazy { inject<T>() }

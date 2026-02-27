@@ -124,3 +124,11 @@ subprojects {
 extensions.configure<EclipseModel> {
     project.name = "canopy-parent"
 }
+
+tasks.named<Delete>("clean") {
+    delete(
+        rootDir.walkTopDown()
+            .filter { it.isDirectory && it.name == ".canopy" }
+            .toList()
+    )
+}
