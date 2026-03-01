@@ -1,7 +1,7 @@
 
 <p style="display: flex; align-items: center; gap: 10px;">
   <a href="../README.md">
-    <img src="./assets/canopy-icon.png" width=50" alt="Canopy Engine logo">
+    <img src="/docs/assets/canopy-icon.png" width="50" alt="Canopy Engine logo">
   </a>
     <span style="text-align: center; font-size: 1.5em; font-weight: bold;">Introduction</span>
 </p>
@@ -18,8 +18,8 @@ foundation for more complex games.
 **The origin for Canopy came from two places - love for **gaming**, and love for **Kotlin**.**
 
 <p align="center">
-    <img src="./assets/fallout3.png" width="400" alt="Fallout 3">
-    <img src="./assets/outer-wilds.png" width="400" alt="Outer Wilds logo">
+    <img src="/docs/assets/fallout3.png" width="400" alt="Fallout 3">
+    <img src="/docs/assets/outer-wilds.png" width="400" alt="Outer Wilds logo">
 </p>
 
 
@@ -28,7 +28,7 @@ and so I searched far and wide. First, I came into contact with tools like **[RP
 and I started ideating my own stories.
 
 <p align="center">
-    <img src="./assets/rpg-maker.png" width="400" alt="RPG Maker">
+    <img src="/docs/assets/rpg-maker.png" width="400" alt="RPG Maker">
 </p>
 
 For the time, I was focused on writing stories and so developed some small projects, but the **limitations** were very
@@ -39,9 +39,9 @@ I then searched for more mature tools, and based my choices on my favorite games
 for my love of **[Undertale](https://undertale.com/)** and **[Katana Zero](https://katanazero.com/)**;
 
 <p align="center">
-    <img src="./assets/game-maker.png" width="400" alt="Game Maker Studio Logo">
-    <img src="./assets/undertale.png" width="400" alt="Undertale">
-    <img src="./assets/katana-zero.png" width="400" alt="Katana Zero">
+    <img src="/docs/assets/game-maker.png" width="300" alt="Game Maker Studio Logo">
+    <img src="/docs/assets/undertale.png" width="300" alt="Undertale">
+    <img src="/docs/assets/katana-zero.png" width="300" alt="Katana Zero">
 </p>
 
 
@@ -49,8 +49,8 @@ I messed with **[Unity](https://unity.com/pt)** for my love of **[Hollow Knight]
 the idea of following a more industry-oriented approach.
 
 <p align="center">
-    <img src="./assets/unity.png" width="400" alt="Unity Logo">
-    <img src="./assets/hollow-knight.png" width="400" alt="Hollow Knight">
+    <img src="/docs/assets/unity.png" width="400" alt="Unity Logo">
+    <img src="/docs/assets/hollow-knight.png" width="400" alt="Hollow Knight">
 </p>
 
 But still, I was feeling like something was missing from them, as well as **college kicking in**,
@@ -59,7 +59,7 @@ and the **beauty** and **freedom** it gave me. Before that, the only experience 
 due to Unity, which at the time felt very **restrictive** and "Old", and so Kotlin brought a **fresh look**.
 
 <p align="center">
-    <img src="./assets/kotlin.png" width="400" alt="Kotlin">
+    <img src="/docs/assets/kotlin.png" width="400" alt="Kotlin">
 </p>
 
 A year or so after I entered college, I saw a video about an engine. An engine where **composition** was a core principle,
@@ -67,7 +67,7 @@ where coding was made direct and with **no boilerplate**, something like Kotlin 
 This was **[Godot](https://godotengine.org/)**.
 
 <p align="center">
-    <img src="./assets/godot.png" width="400" alt="Godot">
+    <img src="/docs/assets/godot.png" width="400" alt="Godot">
 </p>
 
 Since then, I fell in love with **Godot** and have been using it for my games, which I hope to someday release.
@@ -83,7 +83,7 @@ one in particular that seemed interesting: **[LibGDX](https://libgdx.com/)**. We
 and something happened.
 
 <p align="center">
-    <img src="./assets/libgdx.png" width="400" alt="LibGDX">
+    <img src="/docs/assets/libgdx.png" width="400" alt="LibGDX">
 </p>
 
 ---
