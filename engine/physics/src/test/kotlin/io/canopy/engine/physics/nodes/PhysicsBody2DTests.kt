@@ -2,7 +2,6 @@ package io.canopy.engine.physics.nodes
 
 import kotlin.test.Test
 import kotlin.test.assertEquals
-import com.badlogic.gdx.math.Vector2
 import com.badlogic.gdx.physics.box2d.Shape
 import io.canopy.engine.app.test.testHeadlessApp
 import io.canopy.engine.physics.nodes.body.DynamicBody2D
@@ -37,9 +36,8 @@ class PhysicsBody2DTests {
             DynamicBody2D("root") {
                 Collider2D(
                     name = "collider",
-                    shape = BoxShape2D(),
-                    position = Vector2(100f, 100f)
-                )
+                    shape = BoxShape2D()
+                ).at(100f, 100f)
                 Area2D(
                     name = "area",
                     shape = CircleShape2D()

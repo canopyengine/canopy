@@ -16,19 +16,26 @@ import ktx.math.plus
 @Suppress("UNCHECKED_CAST")
 abstract class Node<N : Node<N>> protected constructor(
     /** Node name (unique among siblings) */
-    val name: String,
-    /** Optional behavior script attached to the node */
-    behavior: (node: N) -> Behavior<N>?,
-    /** Local position in 2D space */
-    open var position: Vector2 = Vector2.Zero,
-    /** Local scale in 2D space */
-    open var scale: Vector2 = Vector2(1f, 1f),
-    /** Local rotation in radians */
-    open var rotation: Float = 0f,
-    val groups: MutableList<String> = mutableListOf(),
-    /** Optional DSL block for building children inline */
+    name: String,
     block: N.() -> Unit,
 ) {
+    private var _name = name
+    var name
+        get() = _name
+        set(value) = rename(value)
+
+    // Transform properties
+
+    /** Local position in 2D space */
+    open var position: Vector2 = Vector2.Zero
+
+    /** Local scale in 2D space */
+    open var scale: Vector2 = Vector2(1f, 1f)
+
+    /** Local rotation in radians */
+    open var rotation: Float = 0f
+    val groups: MutableList<String> = mutableListOf()
+
     // Use a stable engine subsystem logger so it routes to engine logs.
     private val log = EngineLogs.node
 
@@ -39,7 +46,7 @@ abstract class Node<N : Node<N>> protected constructor(
     private var isPrefab: Boolean = false
 
     /** Behavior script instance */
-    private val behavior: Behavior<N>? = behavior(this as N)
+    internal var behavior: Behavior<N>? = null
 
     /** Parent node reference */
     private var _parent: Node<*>? = null
@@ -93,12 +100,17 @@ abstract class Node<N : Node<N>> protected constructor(
         // Build subtree through DSL
         val oldParent = currentParent.get()
         currentParent.set(this)
-        block(this as N)
-        currentParent.set(oldParent)
 
-        // Optional: only log construction at TRACE to avoid noise
-        LogContext.with("nodePath" to path) {
-            log.trace("event" to "node.constructed") { "Node constructed" }
+        try {
+            create()
+            block(this as N)
+        } finally {
+            currentParent.set(oldParent)
+
+            // Optional: only log construction at TRACE to avoid noise
+            LogContext.with("nodePath" to path) {
+                log.trace("event" to "node.constructed") { "Node constructed" }
+            }
         }
     }
 
@@ -223,7 +235,7 @@ abstract class Node<N : Node<N>> protected constructor(
         return current as? T ?: throw IllegalArgumentException("Node at path '$path' is not of expected type")
     }
 
-    inline operator fun <reified T : Node<T>> get(path: String): Node<*> = getNode<T>(path)
+    inline operator fun <reified T : Node<T>> get(path: String): T = getNode<T>(path)
 
     /** Marks this node as a prefab (not active until instantiated) */
     fun asPrefab(): N {
@@ -293,6 +305,13 @@ abstract class Node<N : Node<N>> protected constructor(
     //        LIFECYCLE METHODS
     // ===============================
 
+    /**
+     * Override this function if you want a ``pre-defined`` configuration of the custom node
+     *
+     * > Example: Custom internal structure, behavior, etc...
+     */
+    open fun create() {}
+
     open fun nodeReady() {
         LogContext.with("nodePath" to path) {
             log.trace("event" to "node.ready") { "nodeReady()" }
@@ -361,7 +380,38 @@ abstract class Node<N : Node<N>> protected constructor(
         _children.values.forEach { it.recomputePathRecursively() }
     }
 
+    private fun rename(newName: String) {
+        if (newName == name) return
+
+        val p = parent
+        if (p != null) {
+            // collision check
+            require(!p._children.containsKey(newName)) {
+                "Sibling with name '$newName' already exists under parent '${p.path}'."
+            }
+
+            // update parent's index
+            p._children.remove(name)
+            p._children[newName] = this
+        }
+
+        _name = newName
+        recomputePathRecursively()
+    }
+
     infix fun child(node: Node<*>) = addChild(node)
+
+    // Builder DSL
+
+    fun at(x: Float, y: Float) = apply { position.set(x, y) }
+    fun at(pos: Vector2) = apply { position.set(pos) }
+
+    fun scaled(x: Float, y: Float) = apply { this.scale.set(x, y) }
+    fun scaled(scale: Vector2) = apply { this.scale.set(scale) }
+
+    fun groups(vararg groups: String) = apply { groups.forEach { addGroup(it) } }
+
+    fun <T : Node<T>> patch(path: String, handler: T.() -> Unit) = getNode<T>(path).apply(handler)
 }
 
 operator fun Node<*>.plus(node: Node<*>): Node<*> {

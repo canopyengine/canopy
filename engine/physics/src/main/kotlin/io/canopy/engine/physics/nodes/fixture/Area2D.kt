@@ -1,9 +1,7 @@
 package io.canopy.engine.physics.nodes.fixture
 
-import com.badlogic.gdx.math.Vector2
 import com.badlogic.gdx.physics.box2d.Filter
 import com.badlogic.gdx.physics.box2d.Fixture
-import io.canopy.engine.core.nodes.core.Behavior
 import io.canopy.engine.core.nodes.core.Node
 import io.canopy.engine.core.signals.createSignal
 import io.canopy.engine.physics.nodes.body.PhysicsBody2D
@@ -15,21 +13,10 @@ class Area2D(
     var shape: PhysicsShape2D,
     val angle: Float = 0f,
     val filter: Filter = Filter(),
-    // Base props
-    script: (node: Area2D) -> Behavior<Area2D>? = { null },
-    position: Vector2 = Vector2.Zero,
-    scale: Vector2 = Vector2(1f, 1f),
-    rotation: Float = 0f,
-    groups: MutableList<String> = mutableListOf(),
     // DSL
     block: Node<*>.() -> Unit = {},
 ) : Node<Area2D>(
     name,
-    script,
-    position,
-    scale,
-    rotation,
-    groups,
     block
 ) {
     private var fixture: Fixture? = null

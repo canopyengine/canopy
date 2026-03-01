@@ -71,13 +71,27 @@ abstract class Behavior<N : Node<N>>(protected open val node: N? = null) {
  * @param onPhysicsUpdate Lambda called on physics tick
  * @return Lambda that creates a [Behavior] instance for a node
  */
-fun <N : Node<N>> behavior(
+fun <N : Node<N>> N.behavior(
     onEnterTree: N.() -> Unit = {},
     onReady: N.() -> Unit = {},
     onExitTree: N.() -> Unit = {},
     onUpdate: N.(delta: Float) -> Unit = {},
     onPhysicsUpdate: N.(delta: Float) -> Unit = {},
-): (node: N) -> Behavior<N> = { node ->
+) {
+    behavior = createBehavior(onEnterTree, onReady, onExitTree, onUpdate, onPhysicsUpdate)()
+}
+
+fun <N : Node<N>> N.behavior(builder: (node: N) -> Behavior<N>) {
+    this.behavior = builder(this)
+}
+
+fun <N : Node<N>> createBehavior(
+    onEnterTree: N.() -> Unit = {},
+    onReady: N.() -> Unit = {},
+    onExitTree: N.() -> Unit = {},
+    onUpdate: N.(delta: Float) -> Unit = {},
+    onPhysicsUpdate: N.(delta: Float) -> Unit = {},
+) = { node: N ->
     object : Behavior<N>(node) {
         override fun onEnterTree() {
             onEnterTree(node)

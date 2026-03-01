@@ -1,8 +1,6 @@
 package io.canopy.engine.graphics.nodes.animation
 
 import kotlin.math.abs
-import com.badlogic.gdx.math.Vector2
-import io.canopy.engine.core.nodes.core.Behavior
 import io.canopy.engine.core.nodes.core.Node
 import io.canopy.engine.core.signals.createSignal
 import io.canopy.engine.graphics.systems.AnimationSystem
@@ -10,23 +8,11 @@ import io.canopy.engine.utils.UnstableApi
 import ktx.log.logger
 
 @UnstableApi
-class AnimationPlayer(
-    name: String,
-    behavior: (node: AnimationPlayer) -> Behavior<AnimationPlayer>? = { null },
-    position: Vector2 = Vector2.Zero,
-    scale: Vector2 = Vector2(1f, 1f),
-    rotation: Float = 0f,
-    groups: MutableList<String> = mutableListOf(),
-    block: AnimationPlayer.() -> Unit = {},
-) : Node<AnimationPlayer>(
-    name,
-    behavior,
-    position,
-    scale,
-    rotation,
-    groups,
-    block
-) {
+class AnimationPlayer(name: String, block: AnimationPlayer.() -> Unit = {}) :
+    Node<AnimationPlayer>(
+        name,
+        block
+    ) {
     private val animations = mutableMapOf<String, Animation>()
     private val logger = logger<AnimationPlayer>()
 
@@ -139,6 +125,7 @@ class AnimationPlayer(
                     anim.loopback()
                     direction *= -1
                 }
+
                 else -> {}
             }
         }
