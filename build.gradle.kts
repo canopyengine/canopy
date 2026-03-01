@@ -1,9 +1,13 @@
+
+import kotlin.jvm.optionals.getOrNull
+import com.github.zafarkhaja.semver.Version
 import org.gradle.plugins.ide.eclipse.model.EclipseModel
 import org.gradle.plugins.ide.idea.model.IdeaModel
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 import org.jetbrains.kotlin.gradle.tasks.KotlinCompile
 import org.jlleitschuh.gradle.ktlint.KtlintExtension
 import org.jlleitschuh.gradle.ktlint.reporter.ReporterType
+import pl.allegro.tech.build.axion.release.CreateReleaseTask
 
 val canopyVersion: String by project
 
@@ -14,13 +18,30 @@ plugins {
     alias(libs.plugins.axion.release) apply true
 }
 
+
 scmVersion {
+    // Basic setup: tag versions like v1.2.3
     tag {
-        prefix.set("v") // tags like v0.1.0
+        prefix.set("v")
     }
-    // Optional: if no tag yet, start from something:
-    versionCreator("simple")
+
+    // Optional but common:
+    // - localOnly avoids any remote interaction for version resolution (still creates a local tag)
+    // - useful if CI has limited git remotes setup
+    repository {
+        // localOnly.set(true)   // uncomment if you want zero remote reads
+        // pushTagsOnly.set(true) // only affects pushing; you won't push from these tasks anyway
+    }
+
+    versionCreator { version, position ->
+        version
+    }
 }
+
+version = scmVersion.version
+
+
+
 
 allprojects {
     apply(plugin = "eclipse")
@@ -142,56 +163,81 @@ tasks.named<Delete>("clean") {
     )
 }
 
-fun relTask(
-    name: String,
-    axionTask: String,
-    props: Map<String, String>
-) = tasks.register<GradleBuild>(name) {
-    group = "versioning"
-    description = "Axion: $axionTask with ${props.entries.joinToString()}"
+fun hasLabel(v: Version, label: String): Boolean =
+    v.preReleaseVersion().getOrNull()?.startsWith(label) == true
 
-    tasks = listOf(axionTask)
-    startParameter.projectProperties.putAll(props)
+fun bumpLabel(v: Version, label: String): Version {
+    val pre = v.preReleaseVersion().getOrNull() ?: ""
+    val m = Regex("^${Regex.escape(label)}(\\d+)$").matchEntire(pre)
+    val next = (m?.groupValues?.get(1)?.toIntOrNull() ?: 0) + 1
+    return v.nextPreReleaseVersion("$label$next")
 }
 
-relTask(
-    name = "alphaPatch",
-    axionTask = "createRelease",
-    props = mapOf(
-        "release.versionIncrementer" to "incrementPatch",
-        "release.prerelease" to "alpha" // or "alpha." depending on your format
-    )
-)
+tasks.register<CreateReleaseTask>("alphaPatch") {
+    group = "release"
+    description = "Release next alpha for patch line (…-alphaN)."
+    versionConfig = scmVersion
 
-relTask(
-    name = "alphaMinor",
-    axionTask = "release",
-    props = mapOf(
-        "release.versionIncrementer" to "incrementMinor",
-        "release.prerelease" to "alpha"
-    )
-)
+    doFirst {
+        versionConfig.versionIncrementer { ctx ->
+            val v = ctx.currentVersion as Version
+            if (hasLabel(v, "alpha")) bumpLabel(v, "alpha") else v.nextPatchVersion("alpha1")
+        }
+    }
+}
 
-relTask(
-    name = "alphaMajor",
-    axionTask = "release",
-    props = mapOf(
-        "release.versionIncrementer" to "incrementMajor",
-        "release.prerelease" to "alpha"
-    )
-)
+tasks.register<CreateReleaseTask>("alphaMinor") {
+    group = "release"
+    description = "Release next alpha for minor line (…-alphaN)."
+    versionConfig = scmVersion
 
-relTask(
-    name = "rc",
-    axionTask = "release",
-    props = mapOf("release.prerelease" to "rc")
-)
+    doFirst {
+        versionConfig.versionIncrementer { ctx ->
+            val v = ctx.currentVersion as Version
+            if (hasLabel(v, "alpha") && v.patchVersion() == 0L) bumpLabel(v, "alpha")
+            else v.nextMinorVersion("alpha1")
+        }
+    }
+}
 
-relTask(
-    name = "stable",
-    axionTask = "release",
-    props = mapOf("release.finalize" to "true")
-)
+tasks.register<CreateReleaseTask>("alphaMajor") {
+    group = "release"
+    description = "Release next alpha for major line (…-alphaN)."
+    versionConfig = scmVersion
+
+    doFirst {
+        versionConfig.versionIncrementer { ctx ->
+            val v = ctx.currentVersion as Version
+            if (hasLabel(v, "alpha") && v.minorVersion() == 0L && v.patchVersion() == 0L) bumpLabel(v, "alpha")
+            else v.nextMajorVersion("alpha1")
+        }
+    }
+}
+
+tasks.register<CreateReleaseTask>("rc") {
+    group = "release"
+    description = "Release/bump RC for the same M.m.p (…-rcN)."
+    versionConfig = scmVersion
+
+    doFirst {
+        versionConfig.versionIncrementer { ctx ->
+            val v = ctx.currentVersion as Version
+            if (hasLabel(v, "rc")) bumpLabel(v, "rc") else v.nextPreReleaseVersion("rc1")
+        }
+    }
+}
+
+tasks.register<CreateReleaseTask>("stable") {
+    group = "release"
+    description = "Finalize current M.m.p by stripping any prerelease."
+    versionConfig = scmVersion
+
+    doFirst {
+        versionConfig.versionIncrementer { ctx ->
+            ctx.currentVersion.toStableVersion()
+        }
+    }
+}
 
 tasks.named("verifyRelease") {
     dependsOn("build")
