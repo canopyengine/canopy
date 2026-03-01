@@ -317,8 +317,3 @@ class SceneManager(private var physicsStep: Float = 1f / 60f, private val block:
         systems.values.flatten().forEach(TreeSystem::onUnregister)
     }
 }
-
-inline fun <reified T : TreeSystem> treeSystem(): T =
-    ManagersRegistry.getManager(SceneManager::class).getSystem(T::class)
-
-inline fun <reified T : TreeSystem> lazyTreeSystem() = lazy { treeSystem<T>() }
