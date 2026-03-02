@@ -10,12 +10,14 @@ import io.canopy.engine.logging.api.Logs
 /**
  * Simple headless terminal app version of a [CanopyApp]
  */
-class TerminalCanopyApp internal constructor() : CanopyApp<CanopyAppConfig>() {
+class TerminalCanopyApp internal constructor() : CanopyApp<CanopyAppConfig>(false) {
     private val log = Logs.get("canopy.app.terminal")
 
     override fun defaultConfig(): CanopyAppConfig = CanopyAppConfig(
         title = "Test Headless Canopy Game"
     )
+
+    override fun render() {}
 
     /**
      * Core owns sync/async + handle lifecycle.
