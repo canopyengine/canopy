@@ -91,6 +91,12 @@ object ManagersRegistry {
     }
 }
 
+/**
+ * Gets manager instance from [ManagersRegistry]
+ */
 inline fun <reified T : Manager> manager(): T = ManagersRegistry.getManager(T::class)
 
+/**
+ * Lazy version of [manager]
+ */
 inline fun <reified T : Manager> lazyManager() = lazy { manager<T>() }

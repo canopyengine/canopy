@@ -9,6 +9,7 @@ import io.canopy.engine.core.CanopyBuildInfo
 import io.canopy.engine.core.managers.InjectionManager
 import io.canopy.engine.core.managers.ManagersRegistry
 import io.canopy.engine.core.managers.SceneManager
+import io.canopy.engine.data.core.assets.AssetsManager
 import io.canopy.engine.logging.api.LogContext
 import io.canopy.engine.logging.api.LogLevel
 import io.canopy.engine.logging.bootstrap.CanopyLogging
@@ -19,7 +20,8 @@ import ktx.async.KtxAsync
 /**
  * Base App class - starting point of a Canopy App
  */
-abstract class CanopyApp<C : CanopyAppConfig> protected constructor() : KtxGame<CanopyScreen>() {
+abstract class CanopyApp<C : CanopyAppConfig> protected constructor(isGraphical: Boolean = true) :
+    KtxGame<CanopyScreen>(clearScreen = isGraphical) {
     /*  ====================
      *     App properties
      *  ==================== */
@@ -121,6 +123,7 @@ abstract class CanopyApp<C : CanopyAppConfig> protected constructor() : KtxGame<
             // Register global managers
             ManagersRegistry.apply {
                 +InjectionManager()
+                +AssetsManager()
                 +sceneManager
             }.setup()
 
@@ -263,6 +266,10 @@ abstract class CanopyApp<C : CanopyAppConfig> protected constructor() : KtxGame<
 
     fun screens(handler: CanopyScreenRegistry.() -> Unit) {
         screenRegistry.registerSetupCallback(handler)
+    }
+
+    fun managers(handler: ManagersRegistry.() -> Unit) {
+        ManagersRegistry.apply(handler)
     }
 }
 

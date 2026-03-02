@@ -5,11 +5,14 @@ plugins {
 
 dependencies {
     // Canopy deps
-    implementation(projects.engine.app.appCore)
-    implementation(projects.engine.logging)
+    api(projects.engine.app.appCore)
+    // implementation(projects.engine.logging)
 
     // Gdx
-    implementation(libs.gdx.backend.headless)
+    api(libs.gdx.backend.headless)
+    val gdxPlatform = libs.gdx.platform.get().module
+    val gdxVer = libs.versions.gdx.get()
+    api("$gdxPlatform:$gdxVer:natives-desktop")
 
     // Logging
     runtimeOnly(libs.logback.classic)
