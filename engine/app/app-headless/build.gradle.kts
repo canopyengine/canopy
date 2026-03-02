@@ -5,8 +5,8 @@ plugins {
 
 dependencies {
     // Canopy deps
-    implementation(projects.engine.core)
     implementation(projects.engine.app.appCore)
+    implementation(projects.engine.logging)
 
     // Gdx
     implementation(libs.gdx.backend.headless)

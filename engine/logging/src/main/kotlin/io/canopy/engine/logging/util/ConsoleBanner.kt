@@ -1,4 +1,4 @@
-package io.canopy.engine.app.core
+package io.canopy.engine.logging.util
 
 import kotlin.math.roundToInt
 import java.lang.management.ManagementFactory

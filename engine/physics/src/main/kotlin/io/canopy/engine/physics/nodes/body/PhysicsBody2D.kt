@@ -3,7 +3,7 @@ package io.canopy.engine.physics.nodes.body
 import com.badlogic.gdx.math.Vector2
 import com.badlogic.gdx.physics.box2d.BodyDef
 import com.badlogic.gdx.physics.box2d.World
-import io.canopy.engine.core.nodes.core.Behavior
+import io.canopy.engine.core.managers.inject
 import io.canopy.engine.core.nodes.core.Node
 import ktx.box2d.body
 import ktx.log.logger
@@ -13,21 +13,10 @@ abstract class PhysicsBody2D<T : PhysicsBody2D<T>>(
     name: String,
     // Specific props
     val bodyType: BodyDef.BodyType,
-    // Base props
-    script: (node: T) -> Behavior<T>? = { null },
-    position: Vector2 = Vector2.Zero,
-    scale: Vector2 = Vector2(1F, 1F),
-    rotation: Float = 0F,
-    groups: MutableList<String>,
     // DSL
     block: T.() -> Unit = {},
 ) : Node<T>(
     name,
-    script,
-    position,
-    scale,
-    rotation,
-    groups,
     block
 ) {
     private val logger = logger<PhysicsBody2D<T>>()
@@ -35,7 +24,7 @@ abstract class PhysicsBody2D<T : PhysicsBody2D<T>>(
     // ==========================
     //          Physics
     // ==========================
-    private val world = injectionManager.inject(World::class)
+    private val world = inject<World>()
     val body =
         world.body(bodyType) {
             this.position.set(globalPosition)

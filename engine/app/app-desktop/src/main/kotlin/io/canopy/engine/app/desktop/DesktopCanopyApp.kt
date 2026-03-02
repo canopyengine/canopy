@@ -10,27 +10,28 @@ import io.canopy.engine.graphics.managers.CameraManager
 import io.canopy.engine.graphics.systems.RenderSystem
 import io.canopy.engine.logging.api.Logs
 import io.canopy.engine.utils.UnstableApi
-import ktx.async.KtxAsync
 
+/**
+ * LWJGL3 Implementation of [CanopyApp]
+ */
 @UnstableApi
 class DesktopCanopyApp internal constructor() : CanopyApp<DesktopCanopyAppConfig>() {
-    // App/variant logger (not engine.*)
     private val log = Logs.get("canopy.app.desktop")
 
     override fun create() {
-        // install the backend exit behavior as soon as libGDX is alive
         installBackendHandle(
             requestExit = { Gdx.app.postRunnable { Gdx.app.exit() } },
             forceClose = { Runtime.getRuntime().halt(0) } // last resort
         )
 
-        // your existing setup
-        KtxAsync.initiate()
-        sceneManager.registerSystem(
-            RenderSystem(config.screenWidth, config.screenHeight)
-        )
-        ManagersRegistry.register(CameraManager())
-        ManagersRegistry.register(AssetsManager())
+        sceneManager.apply {
+            +RenderSystem(config.screenWidth, config.screenHeight)
+        }
+
+        ManagersRegistry.apply {
+            +CameraManager()
+            +AssetsManager()
+        }
 
         super.create()
     }
@@ -56,4 +57,4 @@ class DesktopCanopyApp internal constructor() : CanopyApp<DesktopCanopyAppConfig
 }
 
 @UnstableApi
-fun desktopApp(builder: DesktopCanopyApp.() -> Unit): DesktopCanopyApp = DesktopCanopyApp().apply(builder)
+fun desktopApp(builder: DesktopCanopyApp.() -> Unit = {}): DesktopCanopyApp = DesktopCanopyApp().apply(builder)

@@ -14,7 +14,7 @@ class Slf4jLogger(private val delegate: Slf4j) : Logger {
     override fun isWarnEnabled(): Boolean = delegate.isWarnEnabled
     override fun isErrorEnabled(): Boolean = delegate.isErrorEnabled
 
-    override fun log(level: LogLevel, t: Throwable?, fields: Map<String, Any?>, msg: () -> String) {
+    override fun log(level: LogLevel, t: Throwable?, vararg fields: Pair<String, Any?>, msg: () -> String) {
         val enabled = when (level) {
             LogLevel.TRACE -> delegate.isTraceEnabled
             LogLevel.DEBUG -> delegate.isDebugEnabled
@@ -29,7 +29,7 @@ class Slf4jLogger(private val delegate: Slf4j) : Logger {
         // ✅ Only global context goes here (strings ok: runId, engineVersion).
         // ✅ Scoped context (frame/nodePath) is already in MDC if the caller used LogContext.with(...)
         withMdc(LogContext.globalMdcSnapshot()) {
-            val structured = if (fields.isEmpty()) null else entries(fields)
+            val structured = if (fields.isEmpty()) null else entries(mapOf(*fields))
 
             when (level) {
                 LogLevel.TRACE -> logTrace(message, structured, t)

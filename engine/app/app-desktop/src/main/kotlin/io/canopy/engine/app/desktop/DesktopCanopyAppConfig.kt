@@ -3,6 +3,9 @@ package io.canopy.engine.app.desktop
 import com.badlogic.gdx.backends.lwjgl3.Lwjgl3ApplicationConfiguration
 import io.canopy.engine.app.core.CanopyAppConfig
 
+/**
+ * Config class for [DesktopCanopyApp]
+ */
 class DesktopCanopyAppConfig(
     title: String = "Canopy Desktop Game",
     fps: Int = 60,

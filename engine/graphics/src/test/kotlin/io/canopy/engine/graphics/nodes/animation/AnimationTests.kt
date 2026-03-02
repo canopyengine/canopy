@@ -6,6 +6,7 @@ import kotlin.test.assertEquals
 import com.badlogic.gdx.math.Vector2
 import io.canopy.engine.core.managers.ManagersRegistry
 import io.canopy.engine.core.managers.SceneManager
+import io.canopy.engine.core.managers.lazyManager
 import io.canopy.engine.core.nodes.types.empty.EmptyNode
 import io.canopy.engine.graphics.nodes.animation.tracks.ActionTrack
 import io.canopy.engine.graphics.nodes.animation.tracks.PropertyTrack
@@ -16,7 +17,7 @@ import org.junit.jupiter.api.assertThrows
 @Ignore
 @UnstableApi
 class AnimationTests {
-    val sceneManager by lazy { ManagersRegistry.get(SceneManager::class) }
+    val sceneManager by lazyManager<SceneManager>()
 
     companion object {
         @BeforeAll

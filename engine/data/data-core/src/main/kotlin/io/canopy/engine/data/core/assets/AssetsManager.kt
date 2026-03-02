@@ -5,6 +5,9 @@ import com.badlogic.gdx.graphics.Texture
 import io.canopy.engine.core.managers.Manager
 import ktx.assets.*
 
+/**
+ * Manages asset loading
+ */
 class AssetsManager : Manager {
     fun loadTexture(path: String, source: FileSource, customOptions: Texture.() -> Unit = {}): Texture =
         Texture(loadFile(path, source)).apply { customOptions() }

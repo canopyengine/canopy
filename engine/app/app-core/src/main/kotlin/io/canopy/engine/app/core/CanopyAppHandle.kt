@@ -2,6 +2,9 @@ package io.canopy.engine.app.core
 
 import java.util.concurrent.TimeUnit
 
+/**
+ * Base class for creating handles for closing asynchronous-launched apps
+ */
 open class CanopyAppHandle(
     private val onRequestExit: () -> Unit,
     private val onForceClose: () -> Unit = onRequestExit,

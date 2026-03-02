@@ -1,6 +1,7 @@
 package io.canopy.engine.data.saving
 
 import io.canopy.engine.core.managers.ManagersRegistry
+import io.canopy.engine.core.managers.manager
 import kotlinx.serialization.KSerializer
 import kotlinx.serialization.Serializable
 
@@ -39,5 +40,5 @@ fun <T : @Serializable Any> registerSaveModule(
         """.trimIndent()
     }
 
-    ManagersRegistry.get(SaveManager::class).registerSaveModule(destination, saveModule)
+    manager<SaveManager>().registerSaveModule(destination, saveModule)
 }

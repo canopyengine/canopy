@@ -2,9 +2,10 @@ package io.canopy.engine.core.nodes.core
 
 import kotlin.reflect.KClass
 import com.badlogic.gdx.math.Vector2
-import io.canopy.engine.core.managers.InjectionManager
 import io.canopy.engine.core.managers.ManagersRegistry
 import io.canopy.engine.core.managers.SceneManager
+import io.canopy.engine.core.managers.lazyManager
+import io.canopy.engine.core.managers.manager
 import io.canopy.engine.logging.api.LogContext
 import io.canopy.engine.logging.engine.EngineLogs
 import ktx.math.plus
@@ -15,33 +16,37 @@ import ktx.math.plus
 @Suppress("UNCHECKED_CAST")
 abstract class Node<N : Node<N>> protected constructor(
     /** Node name (unique among siblings) */
-    val name: String,
-    /** Optional behavior script attached to the node */
-    behavior: (node: N) -> Behavior<N>?,
-    /** Local position in 2D space */
-    open var position: Vector2 = Vector2.Zero,
-    /** Local scale in 2D space */
-    open var scale: Vector2 = Vector2(1f, 1f),
-    /** Local rotation in radians */
-    open var rotation: Float = 0f,
-    val groups: MutableList<String> = mutableListOf(),
-    /** Optional DSL block for building children inline */
+    name: String,
     block: N.() -> Unit,
 ) {
+    private var _name = name
+    var name
+        get() = _name
+        set(value) = rename(value)
+
+    // Transform properties
+
+    /** Local position in 2D space */
+    open var position: Vector2 = Vector2.Zero
+
+    /** Local scale in 2D space */
+    open var scale: Vector2 = Vector2(1f, 1f)
+
+    /** Local rotation in radians */
+    open var rotation: Float = 0f
+    val groups: MutableList<String> = mutableListOf()
+
     // Use a stable engine subsystem logger so it routes to engine logs.
     private val log = EngineLogs.node
 
     /** Reference to the scene manager (set automatically on init) */
-    protected val sceneManager: SceneManager by lazy { ManagersRegistry.get(SceneManager::class) }
-
-    /** Reference to the injection manager (for prop injection) */
-    protected val injectionManager: InjectionManager by lazy { ManagersRegistry.get(InjectionManager::class) }
+    protected val sceneManager: SceneManager by lazyManager<SceneManager>()
 
     /** Whether this node is a prefab (not active until instantiated) */
     private var isPrefab: Boolean = false
 
     /** Behavior script instance */
-    private val behavior: Behavior<N>? = behavior(this as N)
+    internal var behavior: Behavior<N>? = null
 
     /** Parent node reference */
     private var _parent: Node<*>? = null
@@ -95,12 +100,17 @@ abstract class Node<N : Node<N>> protected constructor(
         // Build subtree through DSL
         val oldParent = currentParent.get()
         currentParent.set(this)
-        block(this as N)
-        currentParent.set(oldParent)
 
-        // Optional: only log construction at TRACE to avoid noise
-        LogContext.with("nodePath" to path) {
-            log.trace(fields = mapOf("event" to "node.constructed")) { "Node constructed" }
+        try {
+            create()
+            block(this as N)
+        } finally {
+            currentParent.set(oldParent)
+
+            // Optional: only log construction at TRACE to avoid noise
+            LogContext.with("nodePath" to path) {
+                log.trace("event" to "node.constructed") { "Node constructed" }
+            }
         }
     }
 
@@ -121,11 +131,9 @@ abstract class Node<N : Node<N>> protected constructor(
             "childPath" to child.path
         ) {
             log.debug(
-                fields = mapOf(
-                    "event" to "node.add_child_internal",
-                    "parent" to this@Node.name,
-                    "child" to child.name
-                )
+                "event" to "node.add_child_internal",
+                "parent" to this@Node.name,
+                "child" to child.name
             ) { "Attached child" }
         }
 
@@ -140,18 +148,21 @@ abstract class Node<N : Node<N>> protected constructor(
 
         if (child.isPrefab) {
             LogContext.with("nodePath" to child.path) {
-                log.trace(fields = mapOf("event" to "node.add_child.prefab")) { "Child is prefab; skipping lifecycle" }
+                log.trace("event" to "node.add_child.prefab") { "Child is prefab; skipping lifecycle" }
             }
             return
         }
 
         LogContext.with("nodePath" to child.path) {
-            log.trace(fields = mapOf("event" to "node.lifecycle.enter_tree")) { "enterTree()" }
+            log.trace("event" to "node.lifecycle.enter_tree") { "enterTree()" }
             child.nodeEnterTree()
-            log.trace(fields = mapOf("event" to "node.lifecycle.ready")) { "ready()" }
+            log.trace("event" to "node.lifecycle.ready") { "ready()" }
             child.nodeReady()
         }
     }
+
+    operator fun Node<*>.unaryPlus() = addChild(this)
+    operator fun plusAssign(child: Node<*>) = addChild(child)
 
     /** Removes a child node */
     fun removeChild(child: Node<*>) {
@@ -161,12 +172,12 @@ abstract class Node<N : Node<N>> protected constructor(
             "nodePath" to this.path,
             "childPath" to child.path
         ) {
-            log.debug(fields = mapOf("event" to "node.remove_child")) { "Removing child" }
+            log.debug("event" to "node.remove_child") { "Removing child" }
         }
 
         // Lifecycle teardown
         LogContext.with("nodePath" to child.path) {
-            log.trace(fields = mapOf("event" to "node.lifecycle.exit_tree")) { "exitTree()" }
+            log.trace("event" to "node.lifecycle.exit_tree") { "exitTree()" }
             child.nodeExitTree()
         }
 
@@ -179,6 +190,9 @@ abstract class Node<N : Node<N>> protected constructor(
         // Cleanup: remove grandchildren
         child.children.values.toList().forEach { child.removeChild(it) }
     }
+
+    operator fun Node<*>.unaryMinus() = removeChild(this)
+    operator fun minusAssign(child: Node<*>) = removeChild(child)
 
     /** Removes a child node by path */
     fun removeChild(path: String) {
@@ -206,7 +220,9 @@ abstract class Node<N : Node<N>> protected constructor(
         for (part in searchParts) {
             when (part) {
                 "", "." -> {}
+
                 ".." -> current = current?.parent ?: throw IllegalArgumentException("No parent for path: $path")
+
                 else -> {
                     val child = current?.children[part]
                     current = child ?: throw IllegalArgumentException(
@@ -219,11 +235,13 @@ abstract class Node<N : Node<N>> protected constructor(
         return current as? T ?: throw IllegalArgumentException("Node at path '$path' is not of expected type")
     }
 
+    inline operator fun <reified T : Node<T>> get(path: String): T = getNode<T>(path)
+
     /** Marks this node as a prefab (not active until instantiated) */
     fun asPrefab(): N {
         isPrefab = true
         LogContext.with("nodePath" to path) {
-            log.trace(fields = mapOf("event" to "node.prefab")) { "Marked as prefab" }
+            log.trace("event" to "node.prefab") { "Marked as prefab" }
         }
         return this as N
     }
@@ -231,7 +249,7 @@ abstract class Node<N : Node<N>> protected constructor(
     /** Self-remove from parent */
     fun queueFree() {
         LogContext.with("nodePath" to path) {
-            log.debug(fields = mapOf("event" to "node.queue_free")) { "Queue free" }
+            log.debug("event" to "node.queue_free") { "Queue free" }
         }
         parent?.removeChild(this)
     }
@@ -243,7 +261,7 @@ abstract class Node<N : Node<N>> protected constructor(
             "fromParent" to this.path,
             "toParent" to newParent.path
         ) {
-            log.info(fields = mapOf("event" to "node.reparent")) { "Reparenting child" }
+            log.info("event" to "node.reparent") { "Reparenting child" }
         }
         removeChild(child)
         newParent.addChild(child)
@@ -259,14 +277,14 @@ abstract class Node<N : Node<N>> protected constructor(
 
     fun addGroup(group: String) = groups.add(group).also {
         LogContext.with("nodePath" to path, "group" to group) {
-            log.trace(fields = mapOf("event" to "node.group.add")) { "Add group" }
+            log.trace("event" to "node.group.add") { "Add group" }
         }
         sceneManager.addToGroup(group, this)
     }
 
     fun removeGroup(group: String) = groups.remove(group).also {
         LogContext.with("nodePath" to path, "group" to group) {
-            log.trace(fields = mapOf("event" to "node.group.remove")) { "Remove group" }
+            log.trace("event" to "node.group.remove") { "Remove group" }
         }
         sceneManager.removeFromGroup(group, this)
     }
@@ -277,7 +295,7 @@ abstract class Node<N : Node<N>> protected constructor(
 
     fun buildTree() {
         LogContext.with("nodePath" to path) {
-            log.debug(fields = mapOf("event" to "node.build_tree")) { "Building tree" }
+            log.debug("event" to "node.build_tree") { "Building tree" }
         }
         nodeEnterTree()
         nodeReady()
@@ -287,9 +305,16 @@ abstract class Node<N : Node<N>> protected constructor(
     //        LIFECYCLE METHODS
     // ===============================
 
+    /**
+     * Override this function if you want a ``pre-defined`` configuration of the custom node
+     *
+     * > Example: Custom internal structure, behavior, etc...
+     */
+    open fun create() {}
+
     open fun nodeReady() {
         LogContext.with("nodePath" to path) {
-            log.trace(fields = mapOf("event" to "node.ready")) { "nodeReady()" }
+            log.trace("event" to "node.ready") { "nodeReady()" }
         }
         children.values.forEach { it.nodeReady() }
         behavior?.let { runBehavior("ready") { it.onReady() } }
@@ -297,7 +322,7 @@ abstract class Node<N : Node<N>> protected constructor(
 
     open fun nodeEnterTree() {
         LogContext.with("nodePath" to path) {
-            log.trace(fields = mapOf("event" to "node.enter_tree")) { "nodeEnterTree()" }
+            log.trace("event" to "node.enter_tree") { "nodeEnterTree()" }
         }
         groups.forEach { sceneManager.addToGroup(it, this) }
         behavior?.let { runBehavior("enter_tree") { it.onEnterTree() } }
@@ -306,7 +331,7 @@ abstract class Node<N : Node<N>> protected constructor(
 
     open fun nodeExitTree() {
         LogContext.with("nodePath" to path) {
-            log.trace(fields = mapOf("event" to "node.exit_tree")) { "nodeExitTree()" }
+            log.trace("event" to "node.exit_tree") { "nodeExitTree()" }
         }
         children.values.forEach { it.nodeExitTree() }
         behavior?.let { runBehavior("exit_tree") { it.onExitTree() } }
@@ -318,7 +343,7 @@ abstract class Node<N : Node<N>> protected constructor(
 
     open fun nodeUpdate(delta: Float) {
         LogContext.with("nodePath" to path, "delta" to delta) {
-            log.trace(fields = mapOf("event" to "node.update")) { "nodeUpdate()" }
+            log.trace("event" to "node.update") { "nodeUpdate()" }
         }
         children.values.forEach { it.nodeUpdate(delta) }
         behavior?.let { runBehavior("update") { it.onUpdate(delta) } }
@@ -326,7 +351,7 @@ abstract class Node<N : Node<N>> protected constructor(
 
     open fun nodePhysicsUpdate(delta: Float) {
         LogContext.with("nodePath" to path, "delta" to delta) {
-            log.trace(fields = mapOf("event" to "node.physics_update")) { "nodePhysicsUpdate()" }
+            log.trace("event" to "node.physics_update") { "nodePhysicsUpdate()" }
         }
         children.values.forEach { it.nodePhysicsUpdate(delta) }
         behavior?.let { runBehavior("physics_update") { it.onPhysicsUpdate(delta) } }
@@ -337,14 +362,15 @@ abstract class Node<N : Node<N>> protected constructor(
         try {
             block()
         } catch (t: Throwable) {
-            val fields = buildMap<String, Any?> {
+            val fields = buildMap {
                 put("event", "behavior.error")
                 put("phase", phase)
                 put("nodePath", path)
                 put("behavior", behavior?.javaClass?.name)
                 if (delta != null) put("delta", delta)
-            }
-            EngineLogs.node.error(t = t, fields = fields) { "Behavior threw during $phase" }
+            }.map { Pair(it.key, it.value) }
+
+            EngineLogs.node.error(t = t, *fields.toTypedArray()) { "Behavior threw during $phase" }
             throw t // rethrow so you fail fast, unless you want to swallow
         }
     }
@@ -354,7 +380,38 @@ abstract class Node<N : Node<N>> protected constructor(
         _children.values.forEach { it.recomputePathRecursively() }
     }
 
+    private fun rename(newName: String) {
+        if (newName == name) return
+
+        val p = parent
+        if (p != null) {
+            // collision check
+            require(!p._children.containsKey(newName)) {
+                "Sibling with name '$newName' already exists under parent '${p.path}'."
+            }
+
+            // update parent's index
+            p._children.remove(name)
+            p._children[newName] = this
+        }
+
+        _name = newName
+        recomputePathRecursively()
+    }
+
     infix fun child(node: Node<*>) = addChild(node)
+
+    // Builder DSL
+
+    fun at(x: Float, y: Float) = apply { position.set(x, y) }
+    fun at(pos: Vector2) = apply { position.set(pos) }
+
+    fun scaled(x: Float, y: Float) = apply { this.scale.set(x, y) }
+    fun scaled(scale: Vector2) = apply { this.scale.set(scale) }
+
+    fun groups(vararg groups: String) = apply { groups.forEach { addGroup(it) } }
+
+    fun <T : Node<T>> patch(path: String, handler: T.() -> Unit) = getNode<T>(path).apply(handler)
 }
 
 operator fun Node<*>.plus(node: Node<*>): Node<*> {
@@ -368,11 +425,11 @@ operator fun Node<*>.unaryPlus(): Node<*> {
 }
 
 fun Node<*>.asSceneRoot(): Node<*> {
-    val sceneManager = ManagersRegistry.get(SceneManager::class)
+    val sceneManager = manager<SceneManager>()
     sceneManager.currScene = this
 
     LogContext.with("nodePath" to this.path) {
-        EngineLogs.subsystem("scene").info(fields = mapOf("event" to "scene.set_root")) { "Set as scene root" }
+        EngineLogs.subsystem("scene").info("event" to "scene.set_root") { "Set as scene root" }
     }
 
     return this

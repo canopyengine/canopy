@@ -2,8 +2,6 @@ package io.canopy.engine.graphics.nodes.visual
 
 import com.badlogic.gdx.graphics.Texture
 import com.badlogic.gdx.graphics.g2d.Sprite
-import com.badlogic.gdx.math.Vector2
-import io.canopy.engine.core.nodes.core.Behavior
 import io.canopy.engine.core.nodes.core.Node
 import io.canopy.engine.graphics.systems.RenderSystem
 import ktx.log.logger
@@ -11,22 +9,11 @@ import ktx.log.logger
 class Sprite2D(
     name: String,
     // Node specific props
-    val texture: Texture,
+    texture: Texture,
     // Node base props
-    script: (node: Sprite2D) -> Behavior<Sprite2D>? = { null },
-    position: Vector2 = Vector2.Zero,
-    scale: Vector2 = Vector2(1f, 1f),
-    rotation: Float = 0f,
-    groups: MutableList<String> = mutableListOf(),
-    // DSL
     block: Node<*>.() -> Unit = {},
 ) : Node<Sprite2D>(
     name,
-    script,
-    position,
-    scale,
-    rotation,
-    groups,
     block
 ) {
     val sprite = Sprite(texture)

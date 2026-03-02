@@ -6,9 +6,11 @@ import kotlin.time.toDuration
 import com.badlogic.gdx.math.Vector2
 import io.canopy.engine.core.managers.ManagersRegistry
 import io.canopy.engine.core.managers.SceneManager
-import io.canopy.engine.core.nodes.core.Behavior
 import io.canopy.engine.core.nodes.core.Node
+import io.canopy.engine.core.nodes.core.asSceneRoot
+import io.canopy.engine.core.nodes.core.attachBehavior
 import io.canopy.engine.core.nodes.core.behavior
+import io.canopy.engine.core.nodes.core.createBehavior
 import io.canopy.engine.core.nodes.types.empty.EmptyNode
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -30,14 +32,13 @@ class NodeTests {
     fun `structure should pass`() {
         val root = EmptyNode("test-node")
 
-        val scene =
-            EmptyNode("root") {
-                EmptyNode("child-a")
+        val scene = EmptyNode("root") {
+            EmptyNode("child-a")
 
-                EmptyNode("child-b") {
-                    EmptyNode("child-c")
-                }
+            EmptyNode("child-b") {
+                EmptyNode("child-c")
             }
+        }
 
         scene.buildTree()
 
@@ -54,10 +55,10 @@ class NodeTests {
         val childCount: MutableMap<String, Int> = mutableMapOf()
 
         // Behavior factory lambda
-        val behaviour =
-            behavior<EmptyNode>(
+        val lambdaBehavior =
+            createBehavior<EmptyNode>(
                 onReady = {
-                    val parent = parent ?: return@behavior
+                    val parent = parent ?: return@createBehavior
                     childCount.merge(parent.name, 1) { old, new -> old + new }
                     if (name !in childCount) {
                         childCount[name] = 0
@@ -67,10 +68,16 @@ class NodeTests {
 
         // Build scene
         EmptyNode("Test 2") {
-            EmptyNode("child-a", behaviour) // pass node
+            EmptyNode("child-a") {
+                attachBehavior(lambdaBehavior)
+            } // pass node
 
-            EmptyNode("child-b", behaviour) {
-                EmptyNode("child-c", behaviour) // pass node
+            EmptyNode("child-b") {
+                attachBehavior(lambdaBehavior)
+
+                EmptyNode("child-c") {
+                    attachBehavior(lambdaBehavior)
+                } // pass node
             }
         }.buildTree()
 
@@ -89,18 +96,25 @@ class NodeTests {
     fun `ready should execute on correct order`() {
         val callOrder = mutableListOf<String>()
         val behaviour =
-            behavior<EmptyNode>(
+            createBehavior<EmptyNode>(
                 onReady = {
                     callOrder += name
                 }
             )
 
         // Build scene
-        EmptyNode("Test 2", behaviour) {
-            EmptyNode("child-a", behaviour) // pass node
+        EmptyNode("Test 2") {
+            attachBehavior(behaviour)
 
-            EmptyNode("child-b", behaviour) {
-                EmptyNode("child-c", behaviour) // pass node
+            EmptyNode("child-a") {
+                attachBehavior(behaviour) // pass node
+            }
+
+            EmptyNode("child-b") {
+                attachBehavior(behaviour)
+                EmptyNode("child-c") {
+                    attachBehavior(behaviour)
+                } // pass node
             }
         }.buildTree()
 
@@ -121,7 +135,7 @@ class NodeTests {
         var nPhysicsTicks = 0
 
         val behavior =
-            behavior<EmptyNode>(
+            createBehavior<EmptyNode>(
                 onUpdate = {
                     nTicks++
                 },
@@ -130,7 +144,9 @@ class NodeTests {
                 }
             )
 
-        val tree = EmptyNode("root", behavior)
+        val tree = EmptyNode("root") {
+            attachBehavior(behavior)
+        }
         tree.buildTree()
 
         launch {
@@ -152,7 +168,7 @@ class NodeTests {
     fun `adding should call ready on child node`() {
         var wasCalled = false
         val behavior =
-            behavior<EmptyNode>(
+            createBehavior<EmptyNode>(
                 onReady = { wasCalled = true }
             )
 
@@ -161,7 +177,9 @@ class NodeTests {
 
         assertFalse(wasCalled)
 
-        root.addChild(EmptyNode("child", behavior))
+        root += EmptyNode("child") {
+            attachBehavior(behavior)
+        }
 
         assertTrue(wasCalled)
     }
@@ -170,13 +188,15 @@ class NodeTests {
     fun `removing node should call onExitTree`() {
         var wasCalled = false
         val behavior =
-            behavior<EmptyNode>(
+            createBehavior<EmptyNode>(
                 onExitTree = { wasCalled = true }
             )
 
         val tree =
             EmptyNode("root") {
-                EmptyNode("child", behavior)
+                EmptyNode("child") {
+                    attachBehavior(behavior)
+                }
             }
 
         assertFalse(wasCalled)
@@ -203,26 +223,12 @@ class NodeTests {
 
     @Test
     fun `custom scene should work`() {
-        class CustomScene(
-            name: String = "custom",
-            script: (node: CustomScene) -> Behavior<CustomScene>? = { null },
-            position: Vector2 = Vector2.Zero,
-            scale: Vector2 = Vector2(1f, 1f),
-            rotation: Float = 0f,
-            groups: MutableList<String> = mutableListOf(),
-            block: CustomScene.() -> Unit = {},
-        ) : Node<CustomScene>(
-            name,
-            script,
-            position,
-            scale,
-            rotation,
-            groups,
-            block = {
+        class CustomScene(name: String = "custom", block: CustomScene.() -> Unit = {}) :
+            Node<CustomScene>(name, block) {
+            override fun create() {
                 EmptyNode("empty")
-                block()
             }
-        )
+        }
 
         val customScene =
             CustomScene {
@@ -230,5 +236,46 @@ class NodeTests {
             }
 
         assertEquals(2, customScene.children.size)
+    }
+
+    @Test
+    fun `patching internal node should work`() {
+        class CustomScene(name: String = "custom", block: CustomScene.() -> Unit = {}) :
+            Node<CustomScene>(name, block) {
+            override fun create() {
+                EmptyNode("empty")
+            }
+        }
+
+        val node = CustomScene {
+            patch<EmptyNode>("./empty") {
+                name = "patched"
+                at(100f, 100f)
+            }
+        }
+
+        val child = node.getNode<EmptyNode>("./patched")
+
+        assertEquals("patched", child.name)
+        assertEquals(Vector2(100f, 100f), child.position)
+    }
+
+    @Test
+    fun `custom  node class with internal script should work`() {
+        var wasCalled = false
+
+        class CustomScene(name: String, block: CustomScene.() -> Unit = {}) : Node<CustomScene>(name, block = block) {
+            override fun create() {
+                behavior(
+                    onReady = { wasCalled = true }
+                )
+            }
+        }
+
+        val root = CustomScene("root").asSceneRoot()
+
+        root.buildTree()
+
+        assertTrue(wasCalled)
     }
 }

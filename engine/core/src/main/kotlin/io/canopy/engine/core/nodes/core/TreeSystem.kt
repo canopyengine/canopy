@@ -1,12 +1,15 @@
 package io.canopy.engine.core.nodes.core
 
 import kotlin.reflect.KClass
-import io.canopy.engine.core.managers.InjectionManager
-import io.canopy.engine.core.managers.ManagersRegistry
 import io.canopy.engine.core.managers.SceneManager
+import io.canopy.engine.core.managers.lazyManager
+import io.canopy.engine.core.managers.manager
 import io.canopy.engine.logging.api.LogContext
 import io.canopy.engine.logging.engine.EngineLogs
 
+/**
+ * System that spans the whole node tree and processes [Node]s accordingly
+ */
 abstract class TreeSystem(
     internal val phase: UpdatePhase,
     val priority: Int = 0,
@@ -15,8 +18,7 @@ abstract class TreeSystem(
     // Engine subsystem logger for systems
     private val log = EngineLogs.subsystem("system")
 
-    protected val sceneManager: SceneManager by lazy { ManagersRegistry.get(SceneManager::class) }
-    protected val injectionManager: InjectionManager by lazy { ManagersRegistry.get(InjectionManager::class) }
+    protected val sceneManager: SceneManager by lazyManager<SceneManager>()
 
     /** Nodes currently matching the system's type requirements */
     protected val matchingNodes = mutableListOf<Node<*>>()
@@ -49,7 +51,7 @@ abstract class TreeSystem(
             "phase" to phase.name,
             "nodePath" to node.path
         ) {
-            log.trace(fields = mapOf("event" to "system.node_added")) { "Node added to system" }
+            log.trace("event" to "system.node_added") { "Node added to system" }
         }
 
         runHook("onNodeAdded", node = node) { onNodeAdded(node) }
@@ -63,7 +65,7 @@ abstract class TreeSystem(
             "phase" to phase.name,
             "nodePath" to node.path
         ) {
-            log.trace(fields = mapOf("event" to "system.node_removed")) { "Node removed from system" }
+            log.trace("event" to "system.node_removed") { "Node removed from system" }
         }
 
         runHook("onNodeRemoved", node = node) { onNodeRemoved(node) }
@@ -87,7 +89,7 @@ abstract class TreeSystem(
             "delta" to delta
         ) {
             // Very low-noise: you can enable TRACE to see these
-            log.trace(fields = mapOf("event" to "system.tick", "matchingCount" to matchingNodes.size)) {
+            log.trace("event" to "system.tick", "matchingCount" to matchingNodes.size) {
                 "Tick"
             }
 
@@ -124,9 +126,9 @@ abstract class TreeSystem(
                 put("matchingCount", matchingNodes.size)
                 if (delta != null) put("delta", delta)
                 if (node != null) put("nodePath", node.path)
-            }
+            }.map { Pair(it.key, it.value) }
 
-            log.error(t = t, fields = fields) { "System hook threw" }
+            log.error(t = t, *fields.toTypedArray()) { "System hook threw" }
             throw t // fail fast; change to 'return' if you prefer resilience
         }
     }
@@ -142,7 +144,7 @@ abstract class TreeSystem(
 /**
  * Helper method that helps to create tree systems in-place
  */
-fun treeSystem(
+fun createTreeSystem(
     phase: TreeSystem.UpdatePhase,
     priority: Int = 0,
     vararg requiredTypes: KClass<out Node<*>>,
@@ -160,3 +162,7 @@ fun treeSystem(
         override fun processNode(node: Node<*>, delta: Float) = processNode.invoke(this, node, delta)
     }
 }
+
+inline fun <reified T : TreeSystem> treeSystem(): T = manager<SceneManager>().getSystem(T::class)
+
+inline fun <reified T : TreeSystem> lazyTreeSystem() = lazy { treeSystem<T>() }

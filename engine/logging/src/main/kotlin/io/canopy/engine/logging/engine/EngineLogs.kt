@@ -15,4 +15,6 @@ object EngineLogs {
     val system: Logger = subsystem("system")
     val managers: Logger = subsystem("managers")
     val scene: Logger = subsystem("scene")
+
+    val app: Logger = subsystem("app")
 }

@@ -5,8 +5,17 @@ import com.badlogic.gdx.backends.headless.HeadlessApplication
 import com.badlogic.gdx.backends.headless.HeadlessApplicationConfiguration
 import io.canopy.engine.app.core.CanopyApp
 import io.canopy.engine.app.core.CanopyAppConfig
+import io.canopy.engine.core.managers.ManagersRegistry
 
+/**
+ * Test headless version of [CanopyApp] used for testing
+ */
 class TestHeadlessCanopyApp internal constructor() : CanopyApp<CanopyAppConfig>() {
+
+    init {
+        ManagersRegistry.teardown() // Clear managers inserted by other tests
+    }
+
     // Testkit: no-op lifecycle for deterministic tests
     override fun render() {}
     override fun pause() {}
@@ -36,5 +45,5 @@ class TestHeadlessCanopyApp internal constructor() : CanopyApp<CanopyAppConfig>(
     }
 }
 
-fun testHeadlessApp(builder: TestHeadlessCanopyApp.() -> Unit): TestHeadlessCanopyApp =
+fun testHeadlessApp(builder: TestHeadlessCanopyApp.() -> Unit = {}): TestHeadlessCanopyApp =
     TestHeadlessCanopyApp().apply(builder)

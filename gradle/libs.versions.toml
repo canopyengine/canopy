@@ -31,6 +31,9 @@ graalHelper = "2.0.1"
 # TOML
 tomlkt = "0.6.0"
 
+# Release
+axion-release = "1.21.1"
+
 #####
 #####
 
@@ -89,3 +92,4 @@ tomlkt = { module = "dev.eav.tomlkt:tomlkt", version.ref = "tomlkt" }
 kotlin-jvm = { id = "org.jetbrains.kotlin.jvm", version.ref = "kotlin" }
 kotlin-serialization = { id = "org.jetbrains.kotlin.plugin.serialization", version.ref = "kotlin" }
 ktlint = { id = "org.jlleitschuh.gradle.ktlint", version.ref = "ktlint" }
+axion-release = {id = "pl.allegro.tech.build.axion-release", version.ref = "axion-release" }

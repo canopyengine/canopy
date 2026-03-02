@@ -1,9 +1,7 @@
 package io.canopy.engine.physics.nodes.fixture
 
-import com.badlogic.gdx.math.Vector2
 import com.badlogic.gdx.physics.box2d.Filter
 import com.badlogic.gdx.physics.box2d.Fixture
-import io.canopy.engine.core.nodes.core.Behavior
 import io.canopy.engine.core.nodes.core.Node
 import io.canopy.engine.core.signals.createSignal
 import io.canopy.engine.physics.nodes.body.PhysicsBody2D
@@ -18,21 +16,10 @@ class Collider2D(
     var restitution: Float = 0.0f,
     var density: Float = 0.0f,
     val filter: Filter = Filter(),
-    // Base props
-    script: (node: Collider2D) -> Behavior<Collider2D>? = { null },
-    position: Vector2 = Vector2.Zero,
-    scale: Vector2 = Vector2(1F, 1F),
-    rotation: Float = 0F,
-    groups: MutableList<String> = mutableListOf(),
     // DSL
     block: Node<*>.() -> Unit = {},
 ) : Node<Collider2D>(
     name,
-    script,
-    position,
-    scale,
-    rotation,
-    groups,
     block
 ) {
     private var fixture: Fixture? = null

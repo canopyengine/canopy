@@ -3,8 +3,7 @@ package io.canopy.engine.graphics.nodes.camera
 import com.badlogic.gdx.graphics.OrthographicCamera
 import com.badlogic.gdx.math.Vector2
 import com.badlogic.gdx.math.Vector3
-import io.canopy.engine.core.managers.ManagersRegistry
-import io.canopy.engine.core.nodes.core.Behavior
+import io.canopy.engine.core.managers.manager
 import io.canopy.engine.core.nodes.core.Node
 import io.canopy.engine.core.nodes.core.NodeRef
 import io.canopy.engine.core.signals.asSignalVal
@@ -18,21 +17,10 @@ class Camera2D(
     var zoom: Float = 1f,
     var enableSmoothing: Boolean = true,
     var smoothingSpeed: Float = 8f,
-    // Base props
-    script: (node: Camera2D) -> Behavior<Camera2D>? = { null },
-    position: Vector2 = Vector2.Zero,
-    scale: Vector2 = Vector2.Zero,
-    rotation: Float = 0f,
-    groups: MutableList<String> = mutableListOf(),
     // DSL
     block: Camera2D.() -> Unit = {},
 ) : Node<Camera2D>(
     name,
-    script,
-    position,
-    scale,
-    rotation,
-    groups,
     block
 ) {
     val camera = OrthographicCamera()
@@ -47,7 +35,7 @@ class Camera2D(
     var limitBottom: Float? = null
 
     // Managers
-    private val cameraManager = ManagersRegistry.get(CameraManager::class)
+    private val cameraManager = manager<CameraManager>()
 
     override fun nodeEnterTree() {
         super.nodeEnterTree()

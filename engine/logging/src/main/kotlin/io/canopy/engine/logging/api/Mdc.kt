@@ -1,6 +1,5 @@
 package io.canopy.engine.logging.api
 
-import kotlin.collections.iterator
 import org.slf4j.MDC
 
 internal inline fun <T> withMdc(fields: Map<String, Any?>, block: () -> T): T {

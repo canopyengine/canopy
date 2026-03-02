@@ -4,6 +4,9 @@ import io.canopy.engine.core.nodes.core.Behavior
 import io.canopy.engine.core.nodes.core.Node
 import io.canopy.engine.input.InputEvent
 
+/**
+ *
+ */
 abstract class InputBehavior<N : Node<N>>(override val node: N? = null) : Behavior<N>(node) {
     // ===============================
     //           INPUT

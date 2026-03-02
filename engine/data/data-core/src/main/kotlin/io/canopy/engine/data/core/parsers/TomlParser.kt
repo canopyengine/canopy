@@ -20,7 +20,7 @@ object TomlParser {
         file: FileHandle,
         module: SerializersModule? = null,
         noinline config: TomlConfigBuilder.() -> Unit = {},
-    ): T = fromString(file.readString(), module, config)
+    ): T = fromString<T>(file.readString(), module, config)
 
     /**
      * Parses a TOML string into an instance of the specified type [T].
