@@ -201,7 +201,7 @@ abstract class CanopyApp<C : CanopyAppConfig> protected constructor() : KtxGame<
 
     /** Async launch returns immediately with [handle]. */
     fun launchAsync(threadName: String = "canopy-app", vararg args: String): CanopyAppHandle {
-        val t = Thread({
+        val runnable = {
             try {
                 internalLaunch(config, *args)
             } catch (t: Throwable) {
@@ -210,7 +210,9 @@ abstract class CanopyApp<C : CanopyAppConfig> protected constructor() : KtxGame<
             } finally {
                 finished.countDown()
             }
-        }, threadName).apply {
+        }
+
+        val t = Thread(runnable, threadName).apply {
             isDaemon = false
         }
 

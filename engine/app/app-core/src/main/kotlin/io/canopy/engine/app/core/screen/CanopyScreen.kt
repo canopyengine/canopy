@@ -1,12 +1,14 @@
 package io.canopy.engine.app.core.screen
 
 import io.canopy.engine.core.managers.SceneManager
-import io.canopy.engine.core.managers.lazyManager
+import io.canopy.engine.core.managers.manager
 import ktx.app.KtxScreen
 
+/**
+ * Base screen for a Canopy Game
+ */
 abstract class CanopyScreen : KtxScreen {
-    protected val sceneManager by lazyManager<SceneManager>()
-
+    // Used as a way to override the default behavior of ktxScreens
     private var setupCalled = false
 
     /**
@@ -20,13 +22,17 @@ abstract class CanopyScreen : KtxScreen {
         if (!setupCalled) {
             setup()
             setupCalled = true
+            super.show()
             return
         }
         super.show()
     }
 
+    /**
+     * Called on each frame - equivalent to an onUpdate
+     */
     override fun render(delta: Float) {
         super.render(delta)
-        sceneManager.tick(delta)
+        manager<SceneManager>().tick(delta)
     }
 }

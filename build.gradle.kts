@@ -164,7 +164,7 @@ tasks.named<Delete>("clean") {
 }
 
 fun hasLabel(v: Version, label: String): Boolean =
-    v.preReleaseVersion().getOrNull()?.startsWith(label) == true
+    v.preReleaseVersion().getOrNull()?.startsWith(label, ignoreCase = true) == true
 
 fun bumpLabel(v: Version, label: String): Version {
     val pre = v.preReleaseVersion().getOrNull() ?: ""
@@ -181,7 +181,8 @@ tasks.register<CreateReleaseTask>("alphaPatch") {
     doFirst {
         versionConfig.versionIncrementer { ctx ->
             val v = ctx.currentVersion as Version
-            if (hasLabel(v, "alpha")) bumpLabel(v, "alpha") else v.nextPatchVersion("alpha1")
+            if (hasLabel(v, "alpha")) bumpLabel(v, "alpha")
+            else v.nextPatchVersion("alpha1")
         }
     }
 }
@@ -208,6 +209,7 @@ tasks.register<CreateReleaseTask>("alphaMajor") {
     doFirst {
         versionConfig.versionIncrementer { ctx ->
             val v = ctx.currentVersion as Version
+
             if (hasLabel(v, "alpha") && v.minorVersion() == 0L && v.patchVersion() == 0L) bumpLabel(v, "alpha")
             else v.nextMajorVersion("alpha1")
         }
@@ -222,7 +224,8 @@ tasks.register<CreateReleaseTask>("rc") {
     doFirst {
         versionConfig.versionIncrementer { ctx ->
             val v = ctx.currentVersion as Version
-            if (hasLabel(v, "rc")) bumpLabel(v, "rc") else v.nextPreReleaseVersion("rc1")
+            if (hasLabel(v, "rc")) bumpLabel(v, "rc")
+            else v.nextPreReleaseVersion("rc1")
         }
     }
 }

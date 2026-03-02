@@ -8,6 +8,7 @@ import io.canopy.engine.core.managers.ManagersRegistry
 import io.canopy.engine.core.managers.SceneManager
 import io.canopy.engine.core.nodes.core.Node
 import io.canopy.engine.core.nodes.core.asSceneRoot
+import io.canopy.engine.core.nodes.core.attachBehavior
 import io.canopy.engine.core.nodes.core.behavior
 import io.canopy.engine.core.nodes.core.createBehavior
 import io.canopy.engine.core.nodes.types.empty.EmptyNode
@@ -68,14 +69,14 @@ class NodeTests {
         // Build scene
         EmptyNode("Test 2") {
             EmptyNode("child-a") {
-                behavior(lambdaBehavior)
+                attachBehavior(lambdaBehavior)
             } // pass node
 
             EmptyNode("child-b") {
-                behavior(lambdaBehavior)
+                attachBehavior(lambdaBehavior)
 
                 EmptyNode("child-c") {
-                    behavior(lambdaBehavior)
+                    attachBehavior(lambdaBehavior)
                 } // pass node
             }
         }.buildTree()
@@ -103,16 +104,16 @@ class NodeTests {
 
         // Build scene
         EmptyNode("Test 2") {
-            behavior(behaviour)
+            attachBehavior(behaviour)
 
             EmptyNode("child-a") {
-                behavior(behaviour) // pass node
+                attachBehavior(behaviour) // pass node
             }
 
             EmptyNode("child-b") {
-                behavior(behaviour)
+                attachBehavior(behaviour)
                 EmptyNode("child-c") {
-                    behavior(behaviour)
+                    attachBehavior(behaviour)
                 } // pass node
             }
         }.buildTree()
@@ -144,7 +145,7 @@ class NodeTests {
             )
 
         val tree = EmptyNode("root") {
-            behavior(behavior)
+            attachBehavior(behavior)
         }
         tree.buildTree()
 
@@ -177,7 +178,7 @@ class NodeTests {
         assertFalse(wasCalled)
 
         root += EmptyNode("child") {
-            behavior(behavior)
+            attachBehavior(behavior)
         }
 
         assertTrue(wasCalled)
@@ -194,7 +195,7 @@ class NodeTests {
         val tree =
             EmptyNode("root") {
                 EmptyNode("child") {
-                    behavior(behavior)
+                    attachBehavior(behavior)
                 }
             }
 

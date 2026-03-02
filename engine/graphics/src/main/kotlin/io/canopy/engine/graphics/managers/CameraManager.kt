@@ -5,6 +5,9 @@ import io.canopy.engine.core.signals.asNullableSignalVal
 import io.canopy.engine.graphics.nodes.camera.Camera2D
 import ktx.log.logger
 
+/**
+ * Manages cameras configured in a scene
+ */
 class CameraManager : Manager {
     val activeCamera = null.asNullableSignalVal<Camera2D>()
 

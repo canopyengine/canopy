@@ -2,6 +2,9 @@ package io.canopy.engine.core
 
 import java.util.jar.JarFile
 
+/**
+ * Holds information about the build, such as engine version
+ */
 object CanopyBuildInfo {
 
     private val attributes by lazy {

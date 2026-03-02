@@ -3,6 +3,9 @@ package io.canopy.engine.core.managers
 import kotlin.reflect.KClass
 import io.canopy.engine.logging.engine.EngineLogs
 
+/**
+ * Manages DI across the app
+ */
 class InjectionManager : Manager {
 
     // Store provider functions (weakly)

@@ -7,6 +7,9 @@ import io.canopy.engine.core.managers.manager
 import io.canopy.engine.logging.api.LogContext
 import io.canopy.engine.logging.engine.EngineLogs
 
+/**
+ * System that spans the whole node tree and processes [Node]s accordingly
+ */
 abstract class TreeSystem(
     internal val phase: UpdatePhase,
     val priority: Int = 0,

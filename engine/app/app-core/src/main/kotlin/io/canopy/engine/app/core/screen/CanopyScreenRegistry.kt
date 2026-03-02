@@ -3,17 +3,29 @@ package io.canopy.engine.app.core.screen
 import kotlin.reflect.KClass
 import io.canopy.engine.app.core.CanopyApp
 
+/**
+ * Used to allow for DSL-like syntax when registering and starting a screen
+ */
 class CanopyScreenRegistry(val app: CanopyApp<*>) {
     private var setupCallback: CanopyScreenRegistry.() -> Unit = {}
 
+    /**
+     * Adds a new screen
+     */
     inline fun <reified T : CanopyScreen> screen(screen: T) {
         app.addScreen(screen)
     }
 
+    /**
+     * Sets a screen as main
+     */
     inline fun <reified T : CanopyScreen> start() {
         app.setScreen<T>()
     }
 
+    /**
+     * Registers and sets the screen as main
+     */
     inline fun <reified T : CanopyScreen> start(screen: T) {
         screen(screen)
         start<T>()

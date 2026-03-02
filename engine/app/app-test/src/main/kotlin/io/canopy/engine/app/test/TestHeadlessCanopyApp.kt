@@ -7,6 +7,9 @@ import io.canopy.engine.app.core.CanopyApp
 import io.canopy.engine.app.core.CanopyAppConfig
 import io.canopy.engine.core.managers.ManagersRegistry
 
+/**
+ * Test headless version of [CanopyApp] used for testing
+ */
 class TestHeadlessCanopyApp internal constructor() : CanopyApp<CanopyAppConfig>() {
 
     init {

@@ -81,9 +81,14 @@ fun <N : Node<N>> N.behavior(
     behavior = createBehavior(onEnterTree, onReady, onExitTree, onUpdate, onPhysicsUpdate)()
 }
 
-fun <N : Node<N>> N.behavior(builder: (node: N) -> Behavior<N>) {
-    this.behavior = builder(this)
+/**
+ * Allows you to attach a behavior
+ */
+fun <N : Node<N>> N.attachBehavior(builder: (node: N) -> Behavior<N>) {
+    behavior = builder(this)
 }
+
+operator fun <N : Node<N>> N.plusAssign(builder: (node: N) -> Behavior<N>) = attachBehavior(builder)
 
 fun <N : Node<N>> createBehavior(
     onEnterTree: N.() -> Unit = {},
