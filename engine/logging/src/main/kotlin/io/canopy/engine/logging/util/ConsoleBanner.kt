@@ -2,7 +2,6 @@ package io.canopy.engine.logging.util
 
 import kotlin.math.roundToInt
 import java.lang.management.ManagementFactory
-import org.slf4j.LoggerFactory
 
 /**
  * Prints the engine startup banner to the console.
@@ -48,22 +47,18 @@ object ConsoleBanner {
         System.console() != null && System.getenv("NO_COLOR") == null
 
     fun print(version: String, mode: Mode = Mode.SIMPLE) {
-        val logger = LoggerFactory.getLogger("BOOT")
-
         val width = detectTerminalWidth(defaultWidth = 120)
         val lines = readBannerLines()
 
         val bannerLines: List<String> = when (mode) {
-            Mode.SIMPLE -> lines.map { line ->
-                "$BANNER${centerLine(line, width)}$RESET"
-            }
+            Mode.SIMPLE -> lines.map { line -> "$BANNER${line}$RESET" }
 
             Mode.GRADIENT -> lines.mapIndexed { index, line ->
                 if (!ansiEnabled) return@mapIndexed line
 
                 val colored = colorizeLine(line, index, lines.size)
                 // center based on visible text (without ANSI)
-                val centeredPlain = centerLine(line, width)
+                val centeredPlain = colored
                 // re-apply the computed color to the centered plain line
                 val ratio = index.toDouble() / (lines.size - 1).coerceAtLeast(1)
                 val (r, g, b) = interpolateColor(ratio)
@@ -73,10 +68,11 @@ object ConsoleBanner {
 
         val infoLine = centerLine(buildInfoLine(version), width)
 
-        logger.info(
+        kotlin.io.print(
             buildString {
                 appendLine()
                 bannerLines.forEach { appendLine(it) }
+                appendLine()
                 appendLine(infoLine)
                 appendLine()
             }

@@ -1,8 +1,8 @@
 package io.canopy.engine.logging
 
-import io.canopy.engine.logging.core.DefaultProvider
-import io.canopy.engine.logging.core.LogProvider
 import io.canopy.engine.logging.core.Logger
+import io.canopy.engine.logging.slf4j.Slf4jLogger
+import org.slf4j.LoggerFactory
 
 /**
  * Entry point for obtaining [Logger] instances.
@@ -31,7 +31,7 @@ object Logs {
      * visible across threads.
      */
     @Volatile
-    private var provider: LogProvider = DefaultProvider
+    private var provider: (name: String) -> Logger = { name -> Slf4jLogger(LoggerFactory.getLogger(name)) }
 
     /**
      * Replaces the current logging provider.
@@ -43,7 +43,7 @@ object Logs {
      *
      * Should typically be called during application bootstrap.
      */
-    fun setProvider(provider: LogProvider) {
+    fun setProvider(provider: (String) -> Logger) {
         this.provider = provider
     }
 
@@ -53,7 +53,7 @@ object Logs {
      * The name typically represents a logging category, often a
      * fully-qualified class name.
      */
-    fun get(name: String): Logger = provider.get(name)
+    fun get(name: String): Logger = provider(name)
 
     /**
      * Returns a logger using the fully-qualified class name of [T]
