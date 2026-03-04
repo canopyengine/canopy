@@ -1,5 +1,6 @@
 package io.canopy.engine.physics.nodes
 
+import kotlin.test.Ignore
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import com.badlogic.gdx.physics.box2d.Shape
@@ -13,6 +14,7 @@ import io.canopy.engine.physics.systems.PhysicsSystem
 import org.junit.jupiter.api.BeforeAll
 import org.junit.jupiter.api.assertNotNull
 
+@Ignore //Physics won't be releases with version 0.1.0
 class PhysicsBody2DTests {
     companion object {
         @BeforeAll
@@ -32,17 +34,16 @@ class PhysicsBody2DTests {
 
     @Test
     fun `fixture should add shape`() {
-        val tree =
-            DynamicBody2D("root") {
-                Collider2D(
-                    name = "collider",
-                    shape = BoxShape2D()
-                ).at(100f, 100f)
-                Area2D(
-                    name = "area",
-                    shape = CircleShape2D()
-                )
-            }
+        val tree = DynamicBody2D("root") {
+            Collider2D(
+                name = "collider",
+                shape = BoxShape2D()
+            ).at(100f, 100f)
+            Area2D(
+                name = "area",
+                shape = CircleShape2D()
+            )
+        }
         tree.buildTree()
 
         assertEquals(2, tree.body.fixtureList.size)

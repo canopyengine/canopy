@@ -8,15 +8,29 @@ import io.canopy.engine.app.core.CanopyAppConfig
 import io.canopy.engine.core.managers.ManagersRegistry
 
 /**
- * Test headless version of [CanopyApp] used for testing
+ * Headless Canopy application backend intended for tests.
+ *
+ * Goals:
+ * - Deterministic behavior (avoid backend-driven side effects)
+ * - Isolation between tests (no leaking managers / global state)
+ * - A reliable shutdown mechanism for CI
+ *
+ * Differences from other backends:
+ * - Lifecycle methods like render/pause/resume are overridden to no-op to keep
+ *   tests focused on explicit actions rather than frame-driven behavior.
+ * - Global manager state is cleared on construction to avoid cross-test contamination.
  */
 class TestHeadlessCanopyApp internal constructor() : CanopyApp<CanopyAppConfig>() {
 
     init {
-        ManagersRegistry.teardown() // Clear managers inserted by other tests
+        // Tests often run in the same JVM. If a previous test registered managers and did not
+        // fully tear down (or the order differed), state can leak across test cases.
+        // Clearing here makes each TestHeadlessCanopyApp start from a clean baseline.
+        ManagersRegistry.teardown()
     }
 
-    // Testkit: no-op lifecycle for deterministic tests
+    // Test backend: no-op lifecycle for deterministic tests.
+    // If a specific test needs ticking, it should drive it explicitly.
     override fun render() {}
     override fun pause() {}
     override fun resume() {}
@@ -26,24 +40,52 @@ class TestHeadlessCanopyApp internal constructor() : CanopyApp<CanopyAppConfig>(
     )
 
     /**
-     * Core owns sync/async + handle lifecycle.
-     * This backend only starts the HeadlessApplication and installs exit hooks.
+     * Starts the LibGDX headless runtime and installs exit hooks for [CanopyAppHandle].
+     *
+     * Core (CanopyApp) owns:
+     * - sync/async launch semantics
+     * - latches + handle lifecycle
+     * - boot order (logging/managers/screens)
+     *
+     * This backend only:
+     * - constructs the headless application
+     * - wires graceful/forced exit behavior
      */
     override fun internalLaunch(config: CanopyAppConfig, vararg args: String) {
         val headless = HeadlessApplication(this, HeadlessApplicationConfiguration())
 
         installBackendHandle(
             requestExit = {
+                // Prefer posting exit on the LibGDX thread when available.
                 val app = Gdx.app
                 if (app != null) app.postRunnable { app.exit() } else headless.exit()
             },
             forceClose = {
-                // For tests, prefer a clean exit. Keep JVM halt out of testkit by default.
+                // For tests, prefer a clean exit. Avoid Runtime.halt in the testkit by default.
                 headless.exit()
             }
         )
+
+        // HeadlessApplication returns immediately; the loop runs on its own thread.
+        // Tests should use the CanopyAppHandle to await start/exit where needed.
     }
 }
 
+/**
+ * Convenience DSL entry point for building a test headless app.
+ *
+ * Example:
+ * ```
+ * val app = testHeadlessApp {
+ *   onCreate { ... }
+ *   screens { ... }
+ * }
+ *
+ * val handle = app.launchAsync()
+ * handle.awaitStarted(5, TimeUnit.SECONDS)
+ * handle.requestExit()
+ * handle.join()
+ * ```
+ */
 fun testHeadlessApp(builder: TestHeadlessCanopyApp.() -> Unit = {}): TestHeadlessCanopyApp =
     TestHeadlessCanopyApp().apply(builder)

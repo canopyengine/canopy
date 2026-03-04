@@ -5,50 +5,85 @@ import com.badlogic.gdx.backends.headless.HeadlessApplication
 import com.badlogic.gdx.backends.headless.HeadlessApplicationConfiguration
 import io.canopy.engine.app.core.CanopyApp
 import io.canopy.engine.app.core.CanopyAppConfig
-import io.canopy.engine.logging.api.Logs
+import io.canopy.engine.logging.logger
 
 /**
- * Simple headless terminal app version of a [CanopyApp]
+ * Headless (no window) Canopy application backend.
+ *
+ * Intended use cases:
+ * - Automated tests / CI
+ * - Server-side simulation
+ * - Tools that need the engine loop without graphics
+ *
+ * Notes about lifecycle:
+ * - The engine core owns boot/teardown ordering (logging, managers, screens).
+ * - This backend is responsible only for starting LibGDX's headless runtime
+ *   and wiring shutdown hooks through [installBackendHandle].
  */
-class TerminalCanopyApp internal constructor() : CanopyApp<CanopyAppConfig>(false) {
-    private val log = Logs.get("canopy.app.terminal")
+class TerminalCanopyApp internal constructor() : CanopyApp<CanopyAppConfig>(isGraphical = false) {
+
+    private val log = logger<TerminalCanopyApp>()
 
     override fun defaultConfig(): CanopyAppConfig = CanopyAppConfig(
         title = "Test Headless Canopy Game"
     )
 
+    /**
+     * Headless backend does not render graphics. The engine loop is still driven
+     * by LibGDX, but we intentionally skip the normal render path.
+     *
+     * (If you later want simulation updates here, you can call super.render()
+     * or invoke your own tick logic.)
+     */
     override fun render() {}
 
     /**
-     * Core owns sync/async + handle lifecycle.
-     * This backend just starts the HeadlessApplication and installs exit hooks.
+     * Starts the LibGDX headless application and installs exit/force-close hooks.
+     *
+     * Important:
+     * - [HeadlessApplication] starts its loop on its own thread and returns immediately.
+     * - This method may therefore return quickly even though the app keeps running.
+     * - The core layer (CanopyApp) handles sync/async launch semantics via latches/handle.
      */
     override fun internalLaunch(config: CanopyAppConfig, vararg args: String) {
+        log.info { "Starting headless backend" }
+
         val headless = HeadlessApplication(this, HeadlessApplicationConfiguration())
 
         // As soon as libGDX is alive, install how to exit this backend.
-        // (Gdx.app should be available around now, but we keep a direct reference too.)
+        // We prefer using Gdx.app when available so we can schedule exit on the libGDX thread.
         installBackendHandle(
             requestExit = {
-                // safest: schedule on the libGDX thread when available
                 val app = Gdx.app
-                if (app != null) app.postRunnable { app.exit() } else headless.exit()
+                if (app != null) {
+                    // Schedule exit on the libGDX thread to avoid threading edge-cases.
+                    app.postRunnable { app.exit() }
+                } else {
+                    // Fallback: use the direct HeadlessApplication reference.
+                    headless.exit()
+                }
             },
             forceClose = {
-                // Headless should exit cleanly; last resort still halts JVM.
-                // You can choose to just call headless.exit() here if you prefer.
-                try {
-                    headless.exit()
-                } finally {
-                    // optional last resort:
-                    // Runtime.getRuntime().halt(0)
-                }
+                // Headless should exit cleanly; this is here for callers that require a "hard" stop.
+                // If you ever see hangs in CI, you can consider adding Runtime.halt(0) as a last resort.
+                headless.exit()
             }
         )
 
-        // HeadlessApplication constructor returns immediately; loop runs in its own thread.
-        // So internalLaunch returns quickly here (good for sync launch()).
+        // HeadlessApplication constructor returns immediately; the loop runs in its own thread.
+        // internalLaunch returning quickly is expected.
     }
 }
 
+/**
+ * Convenience DSL entry point for building a headless app.
+ *
+ * Example:
+ * ```
+ * terminalApp {
+ *   onCreate { ... }
+ *   screens { ... }
+ * }.launchBlocking()
+ * ```
+ */
 fun terminalApp(builder: TerminalCanopyApp.() -> Unit = {}): TerminalCanopyApp = TerminalCanopyApp().apply(builder)

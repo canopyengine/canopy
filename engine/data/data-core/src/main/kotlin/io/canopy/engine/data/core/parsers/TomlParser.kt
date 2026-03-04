@@ -8,65 +8,81 @@ import kotlinx.serialization.encodeToString
 import kotlinx.serialization.modules.SerializersModule
 
 /**
- * Utility for serializing and parsing TOML data using ktoml + kotlinx.serialization.
- * STRICT (TOML-compliant) by default.
+ * TOML helper built on top of tomlkt + kotlinx.serialization.
+ *
+ * Primary use cases:
+ * - Read engine/app configuration files written in TOML
+ * - Write configuration back to disk in a TOML-friendly format
+ *
+ * Defaults (applied unless overridden via [config]):
+ * - `classDiscriminator = "type"`: polymorphic values use `"type"` to select the subtype
+ * - `ignoreUnknownKeys = true`: forward-compatible parsing (extra fields are ignored)
+ * - `explicitNulls = false`: TOML has no null literal; missing keys are treated as absent/defaults
+ *
+ * Note on "STRICT":
+ * tomlkt parses TOML according to the TOML specification. This parser does not attempt
+ * to accept non-standard TOML extensions by default.
  */
 object TomlParser {
 
+    /* ============================================================
+     * Decoding
+     * ============================================================ */
+
     /**
-     * Parses a TOML file into an instance of the specified type [T].
+     * Reads a TOML file and decodes it into [T].
+     *
+     * @param file Source file handle
+     * @param module Optional serializers module for polymorphic/custom serializers
+     * @param config Optional tomlkt config customization (applied last; can override defaults)
      */
     inline fun <reified T> fromFile(
         file: FileHandle,
         module: SerializersModule? = null,
         noinline config: TomlConfigBuilder.() -> Unit = {},
-    ): T = fromString<T>(file.readString(), module, config)
+    ): T = fromString(file.readString(), module, config)
 
     /**
-     * Parses a TOML string into an instance of the specified type [T].
+     * Decodes a TOML string into [T].
      */
     inline fun <reified T> fromString(
         tomlString: String,
         module: SerializersModule? = null,
         noinline config: TomlConfigBuilder.() -> Unit = {},
-    ): T {
-        val toml = Toml {
-            if (module != null) serializersModule = module
-            classDiscriminator = "type"
-            ignoreUnknownKeys = true
-            explicitNulls = false // TOML spec doesn't support null; treat missing keys as null/defaults.
-            config()
-        }
-        return toml.decodeFromString(tomlString)
-    }
+    ) = buildToml(module, config).decodeFromString<T>(tomlString)
 
-    // -------------------------------
-    // Serialization
-    // -------------------------------
+    /* ============================================================
+     * Encoding
+     * ============================================================ */
 
     /**
-     * Serializes an object of type [T] into a serialized [String].
+     * Serializes [obj] into a TOML string.
+     *
+     * @param obj Object to serialize
+     * @param module Optional serializers module for polymorphic/custom serializers
+     * @param config Optional tomlkt config customization (applied last; can override defaults)
      */
     inline fun <reified T> toString(
         obj: T,
         module: SerializersModule? = null,
         noinline config: TomlConfigBuilder.() -> Unit = {},
-    ): String {
-        val toml = Toml {
-            if (module != null) serializersModule = module
-            classDiscriminator = "type"
-            ignoreUnknownKeys = true
-            explicitNulls = false // TOML spec doesn't support null; treat missing keys as null/defaults.
-            config()
-        }
-        return toml.encodeToString(obj)
-    }
+    ) = buildToml(module, config).encodeToString(obj)
 
     /**
-     * Serializes an object of type [T] and writes it to the given [file].
+     * Serializes [obj] and writes it to [file], replacing existing contents.
      */
     inline fun <reified T> toFile(obj: T, file: FileHandle, module: SerializersModule? = null) {
         val tomlString = toString(obj, module)
         file.writeString(tomlString, false)
+    }
+
+    fun buildToml(module: SerializersModule? = null, config: TomlConfigBuilder.() -> Unit) = Toml {
+        if (module != null) serializersModule = module
+
+        classDiscriminator = "type"
+        ignoreUnknownKeys = true
+        explicitNulls = false
+
+        config()
     }
 }

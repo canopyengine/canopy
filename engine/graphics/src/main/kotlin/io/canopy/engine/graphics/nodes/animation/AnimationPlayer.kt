@@ -2,7 +2,7 @@ package io.canopy.engine.graphics.nodes.animation
 
 import kotlin.math.abs
 import io.canopy.engine.core.nodes.core.Node
-import io.canopy.engine.core.signals.createSignal
+import io.canopy.engine.core.reactive.event
 import io.canopy.engine.graphics.systems.AnimationSystem
 import io.canopy.engine.utils.UnstableApi
 import ktx.log.logger
@@ -21,8 +21,8 @@ class AnimationPlayer(name: String, block: AnimationPlayer.() -> Unit = {}) :
     private var playing = true
 
     // Signals
-    val onAnimationChanged = createSignal<Animation>()
-    val onAnimationFinished = createSignal<Animation?>()
+    val onAnimationChanged = event<Animation>()
+    val onAnimationFinished = event<Animation?>()
 
     var currentAnimation: Animation? = null
         private set

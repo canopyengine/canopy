@@ -10,88 +10,100 @@ import io.canopy.engine.core.managers.InjectionManager
 import io.canopy.engine.core.managers.ManagersRegistry
 import io.canopy.engine.core.managers.SceneManager
 import io.canopy.engine.data.core.assets.AssetsManager
-import io.canopy.engine.logging.api.LogContext
-import io.canopy.engine.logging.api.LogLevel
-import io.canopy.engine.logging.bootstrap.CanopyLogging
-import io.canopy.engine.logging.engine.EngineLogs
+import io.canopy.engine.logging.CanopyLogging
+import io.canopy.engine.logging.EngineLogs
+import io.canopy.engine.logging.LogContext
+import io.canopy.engine.logging.LogLevel
 import ktx.app.KtxGame
 import ktx.async.KtxAsync
 
 /**
- * Base App class - starting point of a Canopy App
+ * Base application class and primary entry point for a Canopy app.
+ *
+ * Responsibilities:
+ * - Bootstraps engine services (logging, async, managers, screens)
+ * - Provides lifecycle hooks (onCreate / onRender / onResize / onDispose)
+ * - Supports both blocking and async launch styles
+ * - Exposes a [CanopyAppHandle] so callers can request graceful exit or force close
+ *
+ * Backends:
+ * Subclasses implement [internalLaunch] to start a specific backend (e.g., LWJGL3).
+ * Some backends block until exit; others may return immediately.
  */
 abstract class CanopyApp<C : CanopyAppConfig> protected constructor(isGraphical: Boolean = true) :
     KtxGame<CanopyScreen>(clearScreen = isGraphical) {
-    /*  ====================
-     *     App properties
-     *  ==================== */
+
+    /* ============================================================
+     * App state
+     * ============================================================ */
+
     private val screenRegistry = CanopyScreenRegistry(this)
     val sceneManager: SceneManager = SceneManager()
 
-    /* App config */
     private var _config: C? = null
     protected val config: C get() = _config ?: defaultConfig()
 
-    /* Holds track of frame count */
     private var frame: Long = 0
 
-    /*  ========================
-     *      Lifecycle callbacks
-     *  ======================== */
+    /* ============================================================
+     * Lifecycle callbacks (user hooks)
+     * ============================================================ */
+
     protected var onCreate: (CanopyApp<C>) -> Unit = {}
     protected var onRender: (CanopyApp<C>) -> Unit = {}
     protected var onResize: (CanopyApp<C>, width: Int, height: Int) -> Unit = { _, _, _ -> }
     protected var onDispose: (CanopyApp<C>) -> Unit = {}
+
+    /**
+     * User log verbosity written to `user.log`.
+     */
     protected var logLevel: LogLevel = LogLevel.DEBUG
 
-    /*  =============================================
-     *      Async helpers - allow async app handling
-     *  ============================================= */
+    /* ============================================================
+     * Async launch / app handle plumbing
+     * ============================================================ */
 
-    // Countdown latches - to control when an app started and finished
-    private val started = CountDownLatch(1)
-    private val finished = CountDownLatch(1)
+    /**
+     * Signals:
+     * - startedLatch: boot completed (logging/managers/screens installed)
+     * - finishedLatch: application finished (dispose completed / thread ended)
+     */
+    private val startedLatch = CountDownLatch(1)
+    private val finishedLatch = CountDownLatch(1)
 
-    // Refs to callbacks - used to 'install' the handler before running the app
+    /**
+     * Exit hooks provided by the backend once it is initialized.
+     * Until installed, the handle falls back to best-effort mechanisms.
+     */
     private val backendExitRef = AtomicReference<(() -> Unit)?>(null)
     private val backendForceRef = AtomicReference<(() -> Unit)?>(null)
 
-    // References the launch thread
     private val launchThreadRef = AtomicReference<Thread?>(null)
-
-    // Reference errors thrown by the launch thread
     private val launchErrorRef = AtomicReference<Throwable?>(null)
 
-    /*
-     * App Handle - useful for forcing or scheduling app close
-     */
     val handle: CanopyAppHandle = ProxyAppHandle(
-        finished = finished,
+        finished = finishedLatch,
         onRequestExit = {
             backendExitRef.get()?.invoke() ?: run {
-                // if backend not installed yet, best-effort: interrupt launch thread (set by launchAsync)
+                // Backend not installed yet: best-effort exit by interrupting the launch thread.
                 launchThreadRef.get()?.interrupt()
             }
         },
         onForceClose = {
             backendForceRef.get()?.invoke() ?: run {
-                // last resort; you can prefer waiting then halting
+                // Last resort: halt the JVM. Prefer graceful shutdown when possible.
                 Runtime.getRuntime().halt(0)
             }
         },
-        onAwaitStarted = { timeout, timeUnit -> started.await(timeout, timeUnit) }
+        onAwaitStarted = { timeout, timeUnit -> startedLatch.await(timeout, timeUnit) }
     )
 
-    /* =========================================
-     *      LIFECYCLE OPERATIONS
-     * =========================================
-     */
+    /* ============================================================
+     * Engine lifecycle (KtxGame hooks)
+     * ============================================================ */
 
-    /**
-     * Called on app setup - similar to nodes' 'onReady' callbacks
-     */
     override fun create() {
-        // Init logging FIRST (so startup logs are captured)
+        // 1) Logging first (captures the rest of startup)
         val runId = CanopyLogging.defaultRunId()
         val logDir = CanopyLogging.defaultBaseLogDir()
         val engineVersion = CanopyBuildInfo.projectVersion
@@ -107,42 +119,33 @@ abstract class CanopyApp<C : CanopyAppConfig> protected constructor(isGraphical:
             )
         )
 
-        LogContext.with(
-            "backend" to (this::class.simpleName ?: "unknown")
-        ) {
-            EngineLogs.lifecycle.info(
-                "backend" to (this::class.simpleName ?: "unknown")
-            ) { "Booting Canopy..." }
+        // Provide backend identity via MDC for all logs produced during boot.
+        val backendName = this::class.simpleName ?: "unknown"
+        LogContext.with("backend" to backendName) {
+            // No need to also attach "backend" as per-call fields: it's already in MDC.
+            EngineLogs.lifecycle.info { "Booting Canopy..." }
 
-            // Should be called before managers are registered just in case the user decides to do setup here
             onCreate(this)
 
-            // Allows async asset loading
             KtxAsync.initiate()
 
-            // Register global managers
             ManagersRegistry.apply {
                 +InjectionManager()
                 +AssetsManager()
                 +sceneManager
             }.setup()
 
-            // Screens added on the screen registry are added here
             screenRegistry.setup()
 
-            // Countdown so main thread stops blocking after app boots
-            started.countDown()
+            // Unblock async launch callers (handle.awaitStarted / launchAsync waiting).
+            startedLatch.countDown()
+
             super.create()
 
-            EngineLogs.lifecycle.info(
-                "event" to "app.launch.init"
-            ) { "Application started." }
+            EngineLogs.lifecycle.info("event" to "app.launch.init") { "Application started." }
         }
     }
 
-    /**
-     * Called on each game loop - equivalent to 'update'
-     */
     override fun render() {
         frame++
         LogContext.with("frame" to frame) {
@@ -151,18 +154,12 @@ abstract class CanopyApp<C : CanopyAppConfig> protected constructor(isGraphical:
         }
     }
 
-    /**
-     * Called on screen resize
-     */
     override fun resize(width: Int, height: Int) {
         super.resize(width, height)
         sceneManager.resize(width, height)
         onResize(this, width, height)
     }
 
-    /**
-     * Called on app disposal
-     */
     override fun dispose() {
         try {
             EngineLogs.lifecycle.info("event" to "app.dispose") { "Disposing app" }
@@ -173,28 +170,29 @@ abstract class CanopyApp<C : CanopyAppConfig> protected constructor(isGraphical:
             throw t
         } finally {
             onDispose(this)
-            finished.countDown()
+            finishedLatch.countDown()
             super.dispose()
         }
     }
 
-    /**
-     * Default config
-     */
+    /* ============================================================
+     * Configuration + backend contract
+     * ============================================================ */
+
     abstract fun defaultConfig(): C
 
     /**
-     * Backend-specific start. May block until the app exits (LWJGL3 does).
-     * Returns a backend handle (maybe "post-exit" for blocking backends).
+     * Backend-specific launch implementation.
+     *
+     * Backend implementer checklist:
+     * - Call [installBackendHandle] once the backend can handle exit requests.
+     * - Ensure that backend shutdown triggers [dispose] (so teardown + session end logs happen).
+     * - If the backend blocks (common), this method may not return until exit.
+     * - If the backend is non-blocking, the method may return immediately.
      */
     protected abstract fun internalLaunch(config: C, vararg args: String)
 
-    /**
-     * Fully synchronous "run": starts and blocks until the app exits.
-     */
     fun launchBlocking(vararg args: String) {
-        // For non-blocking backends, this ensures the caller still blocks until done.
-        // For blocking backends, join() will return immediately since launch() returns post-exit.
         launchAsync(threadName = "canopy-app", *args).join()
     }
 
@@ -202,7 +200,6 @@ abstract class CanopyApp<C : CanopyAppConfig> protected constructor(isGraphical:
         internalLaunch(config, *args)
     }
 
-    /** Async launch returns immediately with [handle]. */
     fun launchAsync(threadName: String = "canopy-app", vararg args: String): CanopyAppHandle {
         val runnable = {
             try {
@@ -211,35 +208,37 @@ abstract class CanopyApp<C : CanopyAppConfig> protected constructor(isGraphical:
                 launchErrorRef.set(t)
                 throw t
             } finally {
-                finished.countDown()
+                finishedLatch.countDown()
             }
         }
 
-        val t = Thread(runnable, threadName).apply {
-            isDaemon = false
-        }
-
+        val t = Thread(runnable, threadName).apply { isDaemon = false }
         launchThreadRef.set(t)
         t.start()
 
-        // Ensure thread is started so handle.requestExit() can at least interrupt it
-        started.await()
+        // Wait until boot is complete so the handle can safely request exit.
+        startedLatch.await()
 
         launchErrorRef.get()?.let { throw it }
 
         return handle
     }
 
+    /**
+     * Installs backend exit callbacks so external callers can stop the app cleanly.
+     *
+     * @param requestExit graceful shutdown request (close window / stop loop)
+     * @param forceClose optional hard shutdown; defaults to [requestExit] if omitted
+     */
     protected fun installBackendHandle(requestExit: () -> Unit, forceClose: (() -> Unit)? = null) {
         backendExitRef.set(requestExit)
         backendForceRef.set(forceClose ?: requestExit)
     }
 
-    /** ===================================
-     *      Declarative builder helpers
-     *  =================================== */
+    /* ============================================================
+     * Declarative builder helpers (DSL-like)
+     * ============================================================ */
 
-    /* Helper methods for building the app */
     fun sceneManager(lambda: SceneManager.() -> Unit) {
         sceneManager.apply(lambda)
     }
