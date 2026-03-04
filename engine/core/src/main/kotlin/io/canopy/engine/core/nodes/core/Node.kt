@@ -2,121 +2,165 @@ package io.canopy.engine.core.nodes.core
 
 import kotlin.reflect.KClass
 import com.badlogic.gdx.math.Vector2
-import io.canopy.engine.core.managers.ManagersRegistry
 import io.canopy.engine.core.managers.SceneManager
 import io.canopy.engine.core.managers.lazyManager
 import io.canopy.engine.core.managers.manager
-import io.canopy.engine.logging.api.LogContext
-import io.canopy.engine.logging.engine.EngineLogs
+import io.canopy.engine.core.reactive.ContextScopeNode
+import io.canopy.engine.logging.EngineLogs
+import io.canopy.engine.logging.LogContext
 import ktx.math.plus
+import ktx.math.times
 
 /**
- * Base node class for 2D scene graph systems.
+ * Base node class for a 2D scene graph.
+ *
+ * Design overview:
+ * - Nodes form a tree (parent/children) and expose a small DSL for building that tree.
+ * - Nodes can optionally have a [Behavior] attached (script-like logic).
+ * - The [SceneManager] uses the node tree to:
+ *   - drive lifecycle callbacks (enter/ready/exit)
+ *   - run updates (frame + physics)
+ *   - register nodes into systems and groups
+ *
+ * Construction vs initialization:
+ * - `init { ... }` attaches this node to the current DSL parent (if any).
+ * - `nodeReady()` runs `create()` and the user-provided DSL [block] exactly once
+ *   to build children and configure the node.
+ *
+ * Generic type parameter:
+ * - `N : Node<N>` enables DSL blocks to have the concrete node type as receiver.
  */
 @Suppress("UNCHECKED_CAST")
 abstract class Node<N : Node<N>> protected constructor(
-    /** Node name (unique among siblings) */
+    /** Node name (expected to be unique among siblings). */
     name: String,
-    block: N.() -> Unit,
+    /**
+     * Node DSL block used to configure/build the node subtree.
+     * Executed once during [nodeReady].
+     */
+    private val block: N.() -> Unit,
 ) {
+
+    /* ============================================================
+     * Identity
+     * ============================================================ */
+
     private var _name = name
+
+    /**
+     * Node name. Renaming updates:
+     * - the parent’s children map key
+     * - this node’s [path] and all descendant paths
+     */
     var name
         get() = _name
         set(value) = rename(value)
 
-    // Transform properties
+    /* ============================================================
+     * Global transform helpers
+     * ============================================================ */
 
-    /** Local position in 2D space */
+    /** Position in world space (local position + parent global position). */
+    val globalPosition: Vector2
+        get() = position + (parent?.globalPosition ?: Vector2.Zero)
+
+    /** Scale in world space (local scale + parent global scale). */
+    val globalScale: Vector2
+        get() = scale * (parent?.globalScale ?: Vector2.Zero)
+
+    /** Rotation in world space (local rotation + parent global rotation). */
+    val globalRotation: Float
+        get() = rotation + (parent?.globalRotation ?: 0f)
+
+    /* ============================================================
+     * Local transform
+     * ============================================================ */
+
+    /** Local position in 2D space. */
     open var position: Vector2 = Vector2.Zero
 
-    /** Local scale in 2D space */
+    /** Local scale in 2D space. */
     open var scale: Vector2 = Vector2(1f, 1f)
 
-    /** Local rotation in radians */
+    /** Local rotation in radians. */
     open var rotation: Float = 0f
+
+    /**
+     * Local group memberships. Groups are also mirrored into the [SceneManager] registry
+     * when the node enters the tree.
+     */
     val groups: MutableList<String> = mutableListOf()
 
-    // Use a stable engine subsystem logger so it routes to engine logs.
+    /** Stable engine logger for node operations (routable to engine logs). */
     private val log = EngineLogs.node
 
-    /** Reference to the scene manager (set automatically on init) */
-    protected val sceneManager: SceneManager by lazyManager<SceneManager>()
+    /** Scene manager instance (resolved lazily from ManagersRegistry). */
+    protected val sceneManager: SceneManager by lazyManager()
 
-    /** Whether this node is a prefab (not active until instantiated) */
+    /** Prefab nodes do not run lifecycle automatically when attached. */
     private var isPrefab: Boolean = false
 
-    /** Behavior script instance */
+    /** Optional behavior instance attached to this node. */
     internal var behavior: Behavior<N>? = null
 
-    /** Parent node reference */
+    /* ============================================================
+     * Tree structure
+     * ============================================================ */
+
     private var _parent: Node<*>? = null
     val parent get() = _parent
 
-    /** Child nodes mapped by name */
     private val _children: MutableMap<String, Node<*>> = mutableMapOf()
     val children: Map<String, Node<*>> get() = _children
 
     /**
-     * Full path from scene root (or from this node if detached).
-     * Format: "/Root/Player/Weapon"
+     * Full path from the tree root.
+     *
+     * Format: `/Root/Player/Weapon`
+     *
+     * Notes:
+     * - Root nodes have paths like `/RootName`
+     * - Paths are recomputed when:
+     *   - a node is attached/detached
+     *   - a node is renamed
      */
     private var _path: String = name
     val path: String get() = _path
 
-    // ===============================
-    //      GLOBAL TRANSFORMS
-    // ===============================
+    /* ============================================================
+     * DSL support
+     * ============================================================ */
 
-    val globalPosition: Vector2
-        get() = position + (parent?.globalPosition ?: Vector2.Zero)
-
-    val globalScale: Vector2
-        get() = scale + (parent?.globalScale ?: Vector2.Zero)
-
-    val globalRotation: Float
-        get() = rotation + (parent?.globalRotation ?: 0f)
-
-    // ===============================
-    //           DSL SUPPORT
-    // ===============================
     companion object {
+        /**
+         * DSL builder state: the "current parent" node.
+         *
+         * During `nodeReady()`, this is temporarily set to the node being built so that
+         * children constructed in the DSL `block { ... }` automatically attach to it.
+         */
         private val currentParent = ThreadLocal.withInitial<Node<*>?> { null }
     }
 
     init {
-        // Fail fast with a real message; do not log in a require/check lambda.
-        check(ManagersRegistry.has(SceneManager::class)) {
-            """
-            [NODE]
-            You're trying to create nodes without a Scene Manager!
-            This will cause critical errors along the way!
-            To fix it: Register the Scene Manager on 'ManagersRegistry'.
-            """.trimIndent()
-        }
-
-        // Attach to current DSL parent if exists
+        // If we are inside a DSL build block, auto-attach to the current parent.
+        // This is intentionally done in init to allow nested construction:
+        //
+        // parent.nodeReady() sets currentParent = parent
+        // child init reads it and attaches itself to parent
         currentParent.get()?.addChildInternal(this)
-
-        // Build subtree through DSL
-        val oldParent = currentParent.get()
-        currentParent.set(this)
-
-        try {
-            create()
-            block(this as N)
-        } finally {
-            currentParent.set(oldParent)
-
-            // Optional: only log construction at TRACE to avoid noise
-            LogContext.with("nodePath" to path) {
-                log.trace("event" to "node.constructed") { "Node constructed" }
-            }
-        }
     }
 
-    // ===============================
-    //          CHILD MANAGEMENT
-    // ===============================
+    /* ============================================================
+     * Child management
+     * ============================================================ */
+
+    /**
+     * Internal attach without lifecycle calls.
+     *
+     * Used by:
+     * - DSL construction (children attach during init)
+     * - runtime attach via [addChild] (then lifecycle is applied unless prefab)
+     */
     private fun addChildInternal(child: Node<*>) {
         check(child.name !in children) {
             "Child with name '${child.name}' already exists under '${this.name}'"
@@ -126,10 +170,7 @@ abstract class Node<N : Node<N>> protected constructor(
         child._parent = this
         child.recomputePathRecursively()
 
-        LogContext.with(
-            "nodePath" to this.path,
-            "childPath" to child.path
-        ) {
+        LogContext.with("nodePath" to this.path, "childPath" to child.path) {
             log.debug(
                 "event" to "node.add_child_internal",
                 "parent" to this@Node.name,
@@ -137,10 +178,17 @@ abstract class Node<N : Node<N>> protected constructor(
             ) { "Attached child" }
         }
 
+        // Register nodes into systems/groups indices maintained by SceneManager.
         sceneManager.registerSubtree(child)
     }
 
-    /** Adds a child node at runtime */
+    /**
+     * Attaches a child node at runtime and runs its lifecycle (unless it is a prefab).
+     *
+     * Lifecycle order for the attached subtree:
+     * - enterTree
+     * - ready
+     */
     fun addChild(child: Node<*>) {
         check(child.parent == null) { "Node '${child.name}' already has a parent!" }
 
@@ -161,21 +209,27 @@ abstract class Node<N : Node<N>> protected constructor(
         }
     }
 
+    /** DSL: `+childNode` inside a node scope. */
     operator fun Node<*>.unaryPlus() = addChild(this)
+
+    /** DSL: `node += child` */
     operator fun plusAssign(child: Node<*>) = addChild(child)
 
-    /** Removes a child node */
+    /**
+     * Removes a child node and runs teardown lifecycle.
+     *
+     * Order:
+     * - exitTree on subtree
+     * - detach from parent
+     * - unregister subtree from SceneManager
+     */
     fun removeChild(child: Node<*>) {
         check(child.parent == this) { "Node '${child.name}' is not a child of '$name'!" }
 
-        LogContext.with(
-            "nodePath" to this.path,
-            "childPath" to child.path
-        ) {
+        LogContext.with("nodePath" to this.path, "childPath" to child.path) {
             log.debug("event" to "node.remove_child") { "Removing child" }
         }
 
-        // Lifecycle teardown
         LogContext.with("nodePath" to child.path) {
             log.trace("event" to "node.lifecycle.exit_tree") { "exitTree()" }
             child.nodeExitTree()
@@ -187,57 +241,119 @@ abstract class Node<N : Node<N>> protected constructor(
 
         sceneManager.unregisterSubtree(child)
 
-        // Cleanup: remove grandchildren
+        // Remove remaining descendants by detaching them from the child.
         child.children.values.toList().forEach { child.removeChild(it) }
     }
 
+    /** DSL: `-childNode` */
     operator fun Node<*>.unaryMinus() = removeChild(this)
+
+    /** DSL: `node -= child` */
     operator fun minusAssign(child: Node<*>) = removeChild(child)
 
-    /** Removes a child node by path */
+    /** Removes a child node by path. */
     fun removeChild(path: String) {
         val child = getNode(path)
         removeChild(child)
     }
 
-    /** Returns a child node by relative path (e.g., "parent/child") */
+    /* ============================================================
+     * Node lookup
+     * ============================================================ */
+
+    /**
+     * Resolves a node by path.
+     *
+     * Path rules:
+     * - "$/..." resolves from the current scene root
+     * - "./..." resolves from this node
+     * - "../" goes to parent (skipping [ContextScopeNode] wrappers)
+     * - Paths may omit ContextScopeNode segments; lookup searches through context wrappers
+     *   to make DSL context blocks transparent.
+     *
+     * Examples:
+     * - `$/Player/Weapon`
+     * - `./UI/HUD`
+     * - `../Camera`
+     */
     @Suppress("UNCHECKED_CAST")
     fun <T : Node<T>> getNode(path: String): T {
         val parts = path.split("/")
 
-        if (parts.size == 1) return this.children[parts[0]] as T
-
-        var current: Node<*>? =
-            when (parts.first()) {
-                "$" -> sceneManager.currScene
-                "", "." -> this
-                else -> this
-            }
+        var current: Node<*>? = when (parts.firstOrNull()) {
+            "$" -> sceneManager.currScene
+            "", "." -> this
+            else -> this
+        }
 
         val searchParts =
-            if (parts.first() in listOf("$", ".") || path.startsWith("/")) parts.drop(1) else parts
+            if (parts.firstOrNull() in listOf("$", ".") || path.startsWith("/")) {
+                parts.drop(1)
+            } else {
+                parts
+            }
+
+        // Walk up skipping ContextScopeNode wrappers (they are implementation details).
+        fun Node<*>.visibleParent(): Node<*>? {
+            var p = this.parent
+            while (p is ContextScopeNode) p = p.parent
+            return p
+        }
+
+        // Find child, treating ContextScopeNode as transparent containers.
+        fun Node<*>.findChildSkippingContext(name: String): Node<*>? {
+            // 1) direct child wins
+            this.children[name]?.let { return it }
+
+            // 2) otherwise, search one level into context scopes
+            for (c in this.children.values) {
+                if (c is ContextScopeNode) {
+                    c.children[name]?.let { return it }
+
+                    // 3) also allow nested context scopes (common with nested context blocks)
+                    for (nested in c.children.values) {
+                        if (nested is ContextScopeNode) {
+                            nested.children[name]?.let { return it }
+                        }
+                    }
+                }
+            }
+
+            return null
+        }
 
         for (part in searchParts) {
             when (part) {
-                "", "." -> {}
-
-                ".." -> current = current?.parent ?: throw IllegalArgumentException("No parent for path: $path")
-
+                "", "." -> Unit
+                ".." -> {
+                    current = current?.visibleParent()
+                        ?: throw IllegalArgumentException("No parent for path: $path")
+                }
                 else -> {
-                    val child = current?.children[part]
-                    current = child ?: throw IllegalArgumentException(
-                        "No child '$part' under '${current?.name}' for path '$path'"
-                    )
+                    val cur = current ?: throw IllegalArgumentException("Null node while resolving path: $path")
+                    val next = cur.findChildSkippingContext(part)
+                        ?: throw IllegalArgumentException("No child '$part' under '${cur.name}' for path '$path'")
+                    current = next
                 }
             }
         }
 
-        return current as? T ?: throw IllegalArgumentException("Node at path '$path' is not of expected type")
+        return current as T
     }
 
-    inline operator fun <reified T : Node<T>> get(path: String): T = getNode<T>(path)
+    /** Kotlin shorthand: `node["Player/Weapon"]` */
+    inline operator fun <reified T : Node<T>> get(path: String): T = getNode(path)
 
-    /** Marks this node as a prefab (not active until instantiated) */
+    /* ============================================================
+     * Prefab / instancing
+     * ============================================================ */
+
+    /**
+     * Marks this node as a prefab.
+     *
+     * Prefabs are attachable as children but do not automatically run lifecycle.
+     * Intended for templates that are instantiated/activated later.
+     */
     fun asPrefab(): N {
         isPrefab = true
         LogContext.with("nodePath" to path) {
@@ -246,7 +362,7 @@ abstract class Node<N : Node<N>> protected constructor(
         return this as N
     }
 
-    /** Self-remove from parent */
+    /** Removes this node from its parent. */
     fun queueFree() {
         LogContext.with("nodePath" to path) {
             log.debug("event" to "node.queue_free") { "Queue free" }
@@ -254,13 +370,11 @@ abstract class Node<N : Node<N>> protected constructor(
         parent?.removeChild(this)
     }
 
-    /** Reparent a child to another node */
+    /**
+     * Moves an existing child from this parent to [newParent].
+     */
     fun reparent(child: Node<*>, newParent: Node<*>) {
-        LogContext.with(
-            "childPath" to child.path,
-            "fromParent" to this.path,
-            "toParent" to newParent.path
-        ) {
+        LogContext.with("childPath" to child.path, "fromParent" to this.path, "toParent" to newParent.path) {
             log.info("event" to "node.reparent") { "Reparenting child" }
         }
         removeChild(child)
@@ -269,9 +383,9 @@ abstract class Node<N : Node<N>> protected constructor(
 
     fun hasChildType(type: KClass<out Node<*>>) = children.values.any { it::class == type }
 
-    // ===============================
-    //         GROUP MANAGEMENT
-    // ===============================
+    /* ============================================================
+     * Group management (mirrors into SceneManager)
+     * ============================================================ */
 
     fun inGroup(group: String) = group in groups
 
@@ -289,10 +403,15 @@ abstract class Node<N : Node<N>> protected constructor(
         sceneManager.removeFromGroup(group, this)
     }
 
-    // ===============================
-    //       SCENE TREE BUILDING
-    // ===============================
+    /* ============================================================
+     * Tree building
+     * ============================================================ */
 
+    /**
+     * Builds this node as a root/subtree:
+     * - enterTree
+     * - ready (which executes create() + DSL block once)
+     */
     fun buildTree() {
         LogContext.with("nodePath" to path) {
             log.debug("event" to "node.build_tree") { "Building tree" }
@@ -301,25 +420,66 @@ abstract class Node<N : Node<N>> protected constructor(
         nodeReady()
     }
 
-    // ===============================
-    //        LIFECYCLE METHODS
-    // ===============================
+    /* ============================================================
+     * Lifecycle hooks
+     * ============================================================ */
 
     /**
-     * Override this function if you want a ``pre-defined`` configuration of the custom node
+     * Override for predefined node configuration.
      *
-     * > Example: Custom internal structure, behavior, etc...
+     * Example uses:
+     * - internal child structure
+     * - default components/behavior
+     * - setting initial transforms
      */
     open fun create() {}
 
+    private var built = false
+
+    /**
+     * Called when the node and its subtree should finish initialization.
+     *
+     * This method:
+     * - runs `create()` + the DSL [block] once (guarded by [built])
+     * - then recurses into children (so the entire subtree becomes ready)
+     * - then fires behavior.onReady()
+     */
     open fun nodeReady() {
         LogContext.with("nodePath" to path) {
             log.trace("event" to "node.ready") { "nodeReady()" }
         }
+
+        // Avoid executing DSL/build twice (e.g., if nodeReady is triggered again).
+        if (built) return
+        built = true
+
+        // Build subtree via DSL after full construction.
+        val oldParent = currentParent.get()
+        currentParent.set(this)
+
+        try {
+            create()
+            block(this as N)
+        } finally {
+            currentParent.set(oldParent)
+            LogContext.with("nodePath" to path) {
+                log.trace("event" to "node.constructed") { "Node constructed" }
+            }
+        }
+
+        // Children were attached during their init; now recurse.
         children.values.forEach { it.nodeReady() }
         behavior?.let { runBehavior("ready") { it.onReady() } }
     }
 
+    /**
+     * Called when the node enters the tree.
+     *
+     * Order:
+     * - register groups in SceneManager
+     * - behavior.onEnterTree()
+     * - recurse into children
+     */
     open fun nodeEnterTree() {
         LogContext.with("nodePath" to path) {
             log.trace("event" to "node.enter_tree") { "nodeEnterTree()" }
@@ -329,6 +489,13 @@ abstract class Node<N : Node<N>> protected constructor(
         children.values.forEach { it.nodeEnterTree() }
     }
 
+    /**
+     * Called when the node exits the tree.
+     *
+     * Order:
+     * - recurse into children
+     * - behavior.onExitTree()
+     */
     open fun nodeExitTree() {
         LogContext.with("nodePath" to path) {
             log.trace("event" to "node.exit_tree") { "nodeExitTree()" }
@@ -337,9 +504,9 @@ abstract class Node<N : Node<N>> protected constructor(
         behavior?.let { runBehavior("exit_tree") { it.onExitTree() } }
     }
 
-    // ===============================
-    //          UPDATES
-    // ===============================
+    /* ============================================================
+     * Updates
+     * ============================================================ */
 
     open fun nodeUpdate(delta: Float) {
         LogContext.with("nodePath" to path, "delta" to delta) {
@@ -357,7 +524,14 @@ abstract class Node<N : Node<N>> protected constructor(
         behavior?.let { runBehavior("physics_update") { it.onPhysicsUpdate(delta) } }
     }
 
-    // Helpers
+    /* ============================================================
+     * Internals
+     * ============================================================ */
+
+    /**
+     * Executes a behavior callback and logs/rethrows exceptions with useful context.
+     * This is intentionally fail-fast: behavior errors should be surfaced quickly.
+     */
     private inline fun runBehavior(phase: String, delta: Float? = null, block: () -> Unit) {
         try {
             block()
@@ -371,26 +545,28 @@ abstract class Node<N : Node<N>> protected constructor(
             }.map { Pair(it.key, it.value) }
 
             EngineLogs.node.error(t = t, *fields.toTypedArray()) { "Behavior threw during $phase" }
-            throw t // rethrow so you fail fast, unless you want to swallow
+            throw t
         }
     }
 
+    /** Recomputes this node path and all descendant paths. */
     private fun recomputePathRecursively() {
         _path = parent?.let { "${it.path}/$name" } ?: "/$name"
         _children.values.forEach { it.recomputePathRecursively() }
     }
 
+    /**
+     * Renames this node and updates the parent index + paths.
+     */
     private fun rename(newName: String) {
         if (newName == name) return
 
         val p = parent
         if (p != null) {
-            // collision check
             require(!p._children.containsKey(newName)) {
                 "Sibling with name '$newName' already exists under parent '${p.path}'."
             }
 
-            // update parent's index
             p._children.remove(name)
             p._children[newName] = this
         }
@@ -399,9 +575,11 @@ abstract class Node<N : Node<N>> protected constructor(
         recomputePathRecursively()
     }
 
-    infix fun child(node: Node<*>) = addChild(node)
+    /* ============================================================
+     * DSL helpers
+     * ============================================================ */
 
-    // Builder DSL
+    infix fun child(node: Node<*>) = addChild(node)
 
     fun at(x: Float, y: Float) = apply { position.set(x, y) }
     fun at(pos: Vector2) = apply { position.set(pos) }
@@ -414,16 +592,27 @@ abstract class Node<N : Node<N>> protected constructor(
     fun <T : Node<T>> patch(path: String, handler: T.() -> Unit) = getNode<T>(path).apply(handler)
 }
 
+/* ------------------------------------------------------------------
+ * Top-level DSL helpers
+ * ------------------------------------------------------------------ */
+
+/** `parent + child` attaches [child] to [parent] and returns [parent]. */
 operator fun Node<*>.plus(node: Node<*>): Node<*> {
     addChild(node)
     return this
 }
 
+/** Unary plus attaches this node to its parent (if present). */
 operator fun Node<*>.unaryPlus(): Node<*> {
     parent?.addChild(this)
     return this
 }
 
+/**
+ * Sets this node as the active scene root in the global [SceneManager].
+ *
+ * This triggers SceneManager scene replacement logic (unregister old scene, register new scene).
+ */
 fun Node<*>.asSceneRoot(): Node<*> {
     val sceneManager = manager<SceneManager>()
     sceneManager.currScene = this

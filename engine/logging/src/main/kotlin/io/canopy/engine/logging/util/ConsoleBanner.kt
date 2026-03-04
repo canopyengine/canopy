@@ -4,6 +4,27 @@ import kotlin.math.roundToInt
 import java.lang.management.ManagementFactory
 import org.slf4j.LoggerFactory
 
+/**
+ * Prints the engine startup banner to the console.
+ *
+ * The banner is loaded from a resource file (`/logo-banner.txt`) and printed
+ * using the logging system so that it integrates with the application's
+ * logging configuration.
+ *
+ * Two rendering modes are supported:
+ *
+ * - [Mode.SIMPLE]   → Single brand color
+ * - [Mode.GRADIENT] → Vertical gradient across banner lines
+ *
+ * The banner output includes additional runtime metadata such as:
+ * - Engine version
+ * - JVM version
+ * - Operating system
+ * - Process ID
+ *
+ * ANSI escape sequences are used for coloring. If the terminal does not
+ * support ANSI colors, the banner will still render as plain text.
+ */
 object ConsoleBanner {
 
     enum class Mode { SIMPLE, GRADIENT }
@@ -11,43 +32,56 @@ object ConsoleBanner {
     private const val RESOURCE = "/logo-banner.txt"
 
     // Brand colors
-    private const val BANNER = "\u001B[38;2;56;142;60m" // canopy green (simple mode)
+    private const val BANNER = "\u001B[38;2;56;142;60m"
     private const val DIM = "\u001B[38;2;180;180;180m"
-    private const val LABEL = "\u001B[38;2;120;180;90m" // soft leaf green
-    private const val VALUE = "\u001B[38;2;255;193;7m" // golden
+    private const val LABEL = "\u001B[38;2;120;180;90m"
+    private const val VALUE = "\u001B[38;2;255;193;7m"
     private const val RESET = "\u001B[0m"
 
-    // Gradient for banner (top -> bottom)
     private val gradient: List<Triple<Int, Int, Int>> = listOf(
-        Triple(56, 142, 60), // deep canopy green
-        Triple(139, 195, 74), // light leaf green
-        Triple(255, 193, 7) // golden bird yellow
+        Triple(56, 142, 60),
+        Triple(139, 195, 74),
+        Triple(255, 193, 7)
     )
+
+    private val ansiEnabled: Boolean =
+        System.console() != null && System.getenv("NO_COLOR") == null
 
     fun print(version: String, mode: Mode = Mode.SIMPLE) {
         val logger = LoggerFactory.getLogger("BOOT")
 
-        val bannerText = when (mode) {
-            Mode.SIMPLE -> "$BANNER${readBannerText()}$RESET"
-            Mode.GRADIENT -> colorizeBanner(readBannerLines())
+        val width = detectTerminalWidth(defaultWidth = 120)
+        val lines = readBannerLines()
+
+        val bannerLines: List<String> = when (mode) {
+            Mode.SIMPLE -> lines.map { line ->
+                "$BANNER${centerLine(line, width)}$RESET"
+            }
+
+            Mode.GRADIENT -> lines.mapIndexed { index, line ->
+                if (!ansiEnabled) return@mapIndexed line
+
+                val colored = colorizeLine(line, index, lines.size)
+                // center based on visible text (without ANSI)
+                val centeredPlain = centerLine(line, width)
+                // re-apply the computed color to the centered plain line
+                val ratio = index.toDouble() / (lines.size - 1).coerceAtLeast(1)
+                val (r, g, b) = interpolateColor(ratio)
+                "\u001B[38;2;$r;$g;$b" + "m$centeredPlain$RESET"
+            }
         }
 
-        val infoLine = buildInfoLine(version)
+        val infoLine = centerLine(buildInfoLine(version), width)
 
         logger.info(
             buildString {
                 appendLine()
-                appendLine(bannerText)
+                bannerLines.forEach { appendLine(it) }
                 appendLine(infoLine)
                 appendLine()
             }
         )
     }
-
-    private fun readBannerText(): String = ConsoleBanner::class.java.getResourceAsStream(RESOURCE)
-        ?.bufferedReader()
-        ?.readText()
-        ?: error("Banner not found on classpath: $RESOURCE")
 
     private fun readBannerLines(): List<String> = ConsoleBanner::class.java.getResourceAsStream(RESOURCE)
         ?.bufferedReader()
@@ -81,9 +115,26 @@ object ConsoleBanner {
         }
     }
 
-    private fun colorizeBanner(lines: List<String>): String = lines.mapIndexed { index, line ->
-        colorizeLine(line, index, lines.size)
-    }.joinToString("\n")
+    /**
+     * Centers [text] within [width] columns.
+     * Note: This expects plain text (no ANSI codes).
+     */
+    private fun centerLine(text: String, width: Int): String {
+        val visible = text.length
+        if (visible >= width) return text
+        val padLeft = (width - visible) / 2
+        return " ".repeat(padLeft) + text
+    }
+
+    /**
+     * Best-effort terminal width detection.
+     * - Works in many shells via $COLUMNS
+     * - Falls back to [defaultWidth] (useful in CI)
+     */
+    private fun detectTerminalWidth(defaultWidth: Int): Int {
+        val columns = System.getenv("COLUMNS")?.toIntOrNull()
+        return (columns ?: defaultWidth).coerceAtLeast(40)
+    }
 
     private fun colorizeLine(line: String, index: Int, total: Int): String {
         val ratio = index.toDouble() / (total - 1).coerceAtLeast(1)

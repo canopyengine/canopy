@@ -6,7 +6,7 @@ import com.badlogic.gdx.math.Vector3
 import io.canopy.engine.core.managers.manager
 import io.canopy.engine.core.nodes.core.Node
 import io.canopy.engine.core.nodes.core.NodeRef
-import io.canopy.engine.core.signals.asSignalVal
+import io.canopy.engine.core.reactive.asSignal
 import io.canopy.engine.graphics.managers.CameraManager
 
 class Camera2D(
@@ -25,7 +25,7 @@ class Camera2D(
 ) {
     val camera = OrthographicCamera()
 
-    val active = active.asSignalVal()
+    val active = active.asSignal()
 
     private var isResizing = false
 

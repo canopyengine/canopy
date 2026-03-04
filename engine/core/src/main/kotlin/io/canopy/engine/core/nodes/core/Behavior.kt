@@ -5,30 +5,59 @@ package io.canopy.engine.core.nodes.core
 // ===============================
 
 /**
- * Represents a custom behavior attached to a [Node].
+ * Base class for behaviors that can be attached to a [Node].
  *
- * Behaviors allow modular logic to run on nodes without subclassing the node itself.
+ * Behaviors allow node logic to be composed modularly without requiring
+ * subclassing of the node itself.
  *
- * See more [here](https://github.com/canopyengine/canopy-docs/blob/main/docs/manuals/core/node-system.md).
+ * Typical responsibilities of a behavior:
+ * - responding to node lifecycle events
+ * - running frame or physics updates
+ * - encapsulating reusable gameplay logic
  *
- * @param N Type of the Node this behavior is attached to.
- * @property node Optional reference to the node. Can be null if detached.
+ * Example:
+ * ```
+ * class RotateBehavior(node: MyNode) : Behavior<MyNode>(node) {
+ *     override fun onUpdate(delta: Float) {
+ *         node?.rotation += 90f * delta
+ *     }
+ * }
+ * ```
+ *
+ * @param N Type of the [Node] this behavior operates on.
+ * @property node Reference to the node the behavior is attached to.
+ *                 May be null if the behavior was created detached.
  */
 abstract class Behavior<N : Node<N>>(protected open val node: N? = null) {
-    /** Secondary constructor for convenience */
+
+    /** Secondary constructor allowing behaviors to be created without a node reference. */
     constructor() : this(null)
 
     // ===============================
     //        LIFECYCLE METHODS
     // ===============================
 
-    /** Called when the node enters the tree */
+    /**
+     * Called when the node enters the scene tree.
+     *
+     * At this point the node has a parent and exists within the tree structure,
+     * but children may not yet be fully initialized.
+     */
     open fun onEnterTree() = Unit
 
-    /** Called after the node and all its children have been initialized */
+    /**
+     * Called when the node and all of its children have completed initialization.
+     *
+     * This is typically where behaviors should perform setup that depends on
+     * the full subtree being available.
+     */
     open fun onReady() = Unit
 
-    /** Called when the node exits the tree */
+    /**
+     * Called when the node exits the scene tree.
+     *
+     * Use this to release resources or unregister listeners.
+     */
     open fun onExitTree() = Unit
 
     // ===============================
@@ -37,39 +66,41 @@ abstract class Behavior<N : Node<N>>(protected open val node: N? = null) {
 
     /**
      * Called every frame.
-     * Use for rendering or non-physics logic.
+     *
+     * Intended for general gameplay logic, animations, and rendering-related updates.
      */
     open fun onUpdate(delta: Float) = Unit
 
     /**
      * Called on each physics tick.
-     * Use for deterministic physics calculations.
+     *
+     * Physics ticks run at a fixed step (defined by the SceneManager).
+     * Use this for deterministic physics calculations.
      */
     open fun onPhysicsUpdate(delta: Float) = Unit
 }
 
 // ===============================
-//     LAMBDA BEHAVIOR HELPER
+//     LAMBDA BEHAVIOR HELPERS
 // ===============================
 
 /**
- * Convenience helper to define behaviors via lambdas instead of subclassing [Behavior].
+ * Convenience DSL for attaching a behavior using lambdas instead of creating
+ * a subclass of [Behavior].
  *
- * Example usage:
+ * Example:
  * ```
- * val myBehavior = behavior<MyNode>(
- *     onEnterTree = { println("Node entered tree!") },
- *     onUpdate = { delta -> println("Updating with delta $delta") }
+ * node.behavior<MyNode>(
+ *     onEnterTree = { println("Node entered the tree!") },
+ *     onUpdate = { delta -> println("Updating: $delta") }
  * )
  * ```
  *
- * @param N Node type
- * @param onEnterTree Lambda called when the node enters the tree
- * @param onReady Lambda called when the node and children are ready
- * @param onExitTree Lambda called when the node exits the tree
- * @param onUpdate Lambda called every frame
- * @param onPhysicsUpdate Lambda called on physics tick
- * @return Lambda that creates a [Behavior] instance for a node
+ * @param onEnterTree Called when the node enters the scene tree
+ * @param onReady Called after the node and its children are fully initialized
+ * @param onExitTree Called when the node exits the scene tree
+ * @param onUpdate Called every frame
+ * @param onPhysicsUpdate Called on physics tick
  */
 fun <N : Node<N>> N.behavior(
     onEnterTree: N.() -> Unit = {},
@@ -82,14 +113,32 @@ fun <N : Node<N>> N.behavior(
 }
 
 /**
- * Allows you to attach a behavior
+ * Attaches a behavior created by a builder function.
+ *
+ * Example:
+ * ```
+ * node.attachBehavior { MyCustomBehavior(it) }
+ * ```
  */
 fun <N : Node<N>> N.attachBehavior(builder: (node: N) -> Behavior<N>) {
     behavior = builder(this)
 }
 
+/**
+ * DSL operator allowing behavior attachment with `+=`.
+ *
+ * Example:
+ * ```
+ * node += { MyBehavior(it) }
+ * ```
+ */
 operator fun <N : Node<N>> N.plusAssign(builder: (node: N) -> Behavior<N>) = attachBehavior(builder)
 
+/**
+ * Factory function that creates a behavior implementation backed by lambdas.
+ *
+ * Internally used by the [behavior] DSL helper.
+ */
 fun <N : Node<N>> createBehavior(
     onEnterTree: N.() -> Unit = {},
     onReady: N.() -> Unit = {},
@@ -98,6 +147,7 @@ fun <N : Node<N>> createBehavior(
     onPhysicsUpdate: N.(delta: Float) -> Unit = {},
 ) = { node: N ->
     object : Behavior<N>(node) {
+
         override fun onEnterTree() {
             onEnterTree(node)
         }

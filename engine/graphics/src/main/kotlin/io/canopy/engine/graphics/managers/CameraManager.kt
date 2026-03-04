@@ -1,7 +1,7 @@
 package io.canopy.engine.graphics.managers
 
 import io.canopy.engine.core.managers.Manager
-import io.canopy.engine.core.signals.asNullableSignalVal
+import io.canopy.engine.core.reactive.asSignal
 import io.canopy.engine.graphics.nodes.camera.Camera2D
 import ktx.log.logger
 
@@ -9,7 +9,7 @@ import ktx.log.logger
  * Manages cameras configured in a scene
  */
 class CameraManager : Manager {
-    val activeCamera = null.asNullableSignalVal<Camera2D>()
+    val activeCamera = null.asSignal<Camera2D>()
 
     private val logger = logger<CameraManager>()
 

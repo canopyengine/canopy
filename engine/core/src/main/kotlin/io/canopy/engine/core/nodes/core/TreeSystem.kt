@@ -4,8 +4,8 @@ import kotlin.reflect.KClass
 import io.canopy.engine.core.managers.SceneManager
 import io.canopy.engine.core.managers.lazyManager
 import io.canopy.engine.core.managers.manager
-import io.canopy.engine.logging.api.LogContext
-import io.canopy.engine.logging.engine.EngineLogs
+import io.canopy.engine.logging.EngineLogs
+import io.canopy.engine.logging.LogContext
 
 /**
  * System that spans the whole node tree and processes [Node]s accordingly

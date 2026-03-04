@@ -5,35 +5,58 @@ import io.canopy.engine.core.nodes.core.Node
 import io.canopy.engine.input.InputEvent
 
 /**
+ * Specialized [Behavior] that can react to input events.
  *
+ * This is typically used by nodes that want to receive input events
+ * dispatched by the input system (keyboard, mouse, controller, etc.).
+ *
+ * Extend this class when creating reusable input logic,
+ * or use [inputBehavior] for lightweight inline definitions.
  */
 abstract class InputBehavior<N : Node<N>>(override val node: N? = null) : Behavior<N>(node) {
+
     // ===============================
     //           INPUT
     // ===============================
 
-    /** Called when an input event occurs on the node */
-    open fun onInput(event: InputEvent, delta: Float = 0F) = Unit
+    /**
+     * Called when an [InputEvent] occurs on the node.
+     *
+     * @param event the input event received (keyboard, mouse, etc.)
+     * @param delta optional delta time since the last frame (if the input
+     *              system propagates it alongside the event)
+     */
+    open fun onInput(event: InputEvent, delta: Float = 0f) = Unit
 }
 
 /**
- * Convenience helper to define behaviors via lambdas instead of subclassing [Behavior].
+ * Convenience helper to define [InputBehavior] via lambdas instead of subclassing.
  *
- * Example usage:
+ * This allows quickly attaching input-driven behavior to a node.
+ *
+ * Example:
  * ```
- * val myBehavior = behavior<MyNode>(
- *     onEnterTree = { println("Node entered tree!") },
- *     onUpdate = { delta -> println("Updating with delta $delta") }
+ * val moveBehavior = inputBehavior<PlayerNode>(
+ *     onReady = { println("Player ready!") },
+ *     onInput = { event, _ ->
+ *         if (event.isPressed("move_left")) {
+ *             position.x -= 10f
+ *         }
+ *     }
  * )
+ *
+ * playerNode.attachBehavior(moveBehavior)
  * ```
  *
- * @param N Node type
- * @param onEnterTree Lambda called when the node enters the tree
- * @param onReady Lambda called when the node and children are ready
- * @param onExitTree Lambda called when the node exits the tree
- * @param onUpdate Lambda called every frame
- * @param onPhysicsUpdate Lambda called on physics tick
- * @return Lambda that creates a [Behavior] instance for a node
+ * @param N Node type the behavior is attached to
+ * @param onEnterTree called when the node enters the scene tree
+ * @param onReady called once the node and its children are initialized
+ * @param onExitTree called when the node exits the scene tree
+ * @param onUpdate called every frame
+ * @param onPhysicsUpdate called on each physics tick
+ * @param onInput called when an input event is dispatched to the node
+ *
+ * @return a factory function that produces an [InputBehavior] instance bound to a node
  */
 fun <N : Node<N>> inputBehavior(
     onEnterTree: N.() -> Unit = {},
@@ -44,6 +67,7 @@ fun <N : Node<N>> inputBehavior(
     onInput: N.(event: InputEvent, delta: Float) -> Unit = { _, _ -> },
 ): (node: N) -> InputBehavior<N> = { node ->
     object : InputBehavior<N>(node) {
+
         override fun onEnterTree() {
             onEnterTree(node)
         }
