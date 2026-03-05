@@ -44,8 +44,8 @@ class ContextTests {
     @Test
     fun `context resolves from nearest scope`() {
         val root = n("root") {
-            context {
-                provide("debug" to true)
+            Context {
+                provide("debug") { true }
                 n("child") {
                     // child node exists under scope
                 }
@@ -57,15 +57,15 @@ class ContextTests {
         // Find the "child" node. Adjust if you have find-by-path utilities.
         val child = root.getNode<EmptyNode>("./child")
 
-        val debug: Boolean = child.context("debug")
+        val debug: Boolean = child.fromContext("debug")
         assertTrue(debug)
     }
 
     @Test
     fun `context resolves from ancestor scope when not provided locally`() {
         val root = n("root") {
-            context {
-                provide("debug" to true)
+            Context {
+                provide("debug") { true }
                 n("a") {
                     n("b") { }
                 }
@@ -76,20 +76,20 @@ class ContextTests {
 
         val b = root.getNode<EmptyNode>("./a/b")
 
-        val debug: Boolean = b.context("debug")
+        val debug: Boolean = b.fromContext("debug")
         assertTrue(debug)
     }
 
     @Test
     fun `nearest provider wins (shadowing overrides)`() {
         val root = n("root") {
-            context {
-                provide("debug" to true)
+            Context {
+                provide("debug") { true }
 
                 n("a") { }
 
-                context {
-                    provide("debug" to false)
+                Context {
+                    provide("debug") { false }
                     n("b") { }
                 }
             }
@@ -100,8 +100,8 @@ class ContextTests {
         val a = root.getNode<EmptyNode>("./a")
         val b = root.getNode<EmptyNode>("./b")
 
-        val aDebug: Boolean = a.context("debug")
-        val bDebug: Boolean = b.context("debug")
+        val aDebug: Boolean = a.fromContext("debug")
+        val bDebug: Boolean = b.fromContext("debug")
 
         assertTrue(aDebug)
         assertFalse(bDebug)
@@ -115,7 +115,7 @@ class ContextTests {
 
         val child = root.getNode<EmptyNode>("./child")
 
-        val missing: String? = child.contextOrNull("nope")
+        val missing: String? = child.fromContextOrNull("nope")
         assertNull(missing)
     }
 
@@ -128,7 +128,7 @@ class ContextTests {
         val child = root.getNode<EmptyNode>("./child")
 
         val ex = assertThrows<IllegalStateException> {
-            child.context<Int>("missing")
+            child.fromContext<Int>("missing")
         }
 
         // Optional: if your error message includes path/name
@@ -138,9 +138,9 @@ class ContextTests {
     @Test
     fun `supports non-string keys (Any keys)`() {
         val root = n("root") {
-            context {
-                provide("debugMode" to true)
-                provide("season" to "winter")
+            Context {
+                provide("debugMode") { true }
+                provide("season") { "winter" }
                 n("child") { }
             }
         }
@@ -149,8 +149,8 @@ class ContextTests {
 
         val child = root.getNode<EmptyNode>("./child")
 
-        val debug: Boolean = child.context("debugMode")
-        val season: String = child.context("season")
+        val debug: Boolean = child.fromContext("debugMode")
+        val season: String = child.fromContext("season")
 
         assertTrue(debug)
         assertEquals("winter", season)
@@ -159,9 +159,9 @@ class ContextTests {
     @Test
     fun `multiple keys of same value type do not collide`() {
         val root = n("root") {
-            context {
-                provide("keyA" to 1)
-                provide("keyB" to 2)
+            Context {
+                provide("keyA") { 1 }
+                provide("keyB") { 2 }
                 n("child") { }
             }
         }
@@ -170,15 +170,15 @@ class ContextTests {
 
         val child = root.getNode<EmptyNode>("./child")
 
-        assertEquals(1, child.context("keyA"))
-        assertEquals(2, child.context("keyB"))
+        assertEquals(1, child.fromContext("keyA"))
+        assertEquals(2, child.fromContext("keyB"))
     }
 
     @Test
     fun `deep nesting still resolves correctly`() {
         val root = n("root") {
-            context {
-                provide("x" to 42)
+            Context {
+                provide("x") { 42 }
 
                 n("a") {
                     n("b") {
@@ -191,17 +191,17 @@ class ContextTests {
         root.buildTree()
 
         val c = root.getNode<EmptyNode>("./a/b/c")
-        assertEquals(42, c.context("x"))
+        assertEquals(42, c.fromContext("x"))
     }
 
     @Test
     fun `nested contexts should feed into each other`() {
         val root = n("root") {
-            context {
-                provide("keyA" to 1)
+            Context {
+                provide("keyA") { 1 }
 
-                context {
-                    provide("keyB" to 2)
+                Context {
+                    provide("keyB") { 2 }
 
                     n("a")
                 }
@@ -211,7 +211,7 @@ class ContextTests {
 
         val c = root.getNode<EmptyNode>("./a")
 
-        assertEquals(1, c.context("keyA"))
+        assertEquals(1, c.fromContext("keyA"))
     }
 
     // --- Tiny adapter -------------------------------------------------------

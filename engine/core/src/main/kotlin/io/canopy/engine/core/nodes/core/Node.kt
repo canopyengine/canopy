@@ -5,11 +5,14 @@ import com.badlogic.gdx.math.Vector2
 import io.canopy.engine.core.managers.SceneManager
 import io.canopy.engine.core.managers.lazyManager
 import io.canopy.engine.core.managers.manager
-import io.canopy.engine.core.reactive.ContextScopeNode
+import io.canopy.engine.core.reactive.Context
 import io.canopy.engine.logging.EngineLogs
 import io.canopy.engine.logging.LogContext
 import ktx.math.plus
 import ktx.math.times
+
+@DslMarker
+annotation class CanopyDsl
 
 /**
  * Base node class for a 2D scene graph.
@@ -30,6 +33,7 @@ import ktx.math.times
  * Generic type parameter:
  * - `N : Node<N>` enables DSL blocks to have the concrete node type as receiver.
  */
+@CanopyDsl
 @Suppress("UNCHECKED_CAST")
 abstract class Node<N : Node<N>> protected constructor(
     /** Node name (expected to be unique among siblings). */
@@ -296,7 +300,7 @@ abstract class Node<N : Node<N>> protected constructor(
         // Walk up skipping ContextScopeNode wrappers (they are implementation details).
         fun Node<*>.visibleParent(): Node<*>? {
             var p = this.parent
-            while (p is ContextScopeNode) p = p.parent
+            while (p is Context) p = p.parent
             return p
         }
 
@@ -307,12 +311,12 @@ abstract class Node<N : Node<N>> protected constructor(
 
             // 2) otherwise, search one level into context scopes
             for (c in this.children.values) {
-                if (c is ContextScopeNode) {
+                if (c is Context) {
                     c.children[name]?.let { return it }
 
                     // 3) also allow nested context scopes (common with nested context blocks)
                     for (nested in c.children.values) {
-                        if (nested is ContextScopeNode) {
+                        if (nested is Context) {
                             nested.children[name]?.let { return it }
                         }
                     }
@@ -449,6 +453,24 @@ abstract class Node<N : Node<N>> protected constructor(
             log.trace("event" to "node.ready") { "nodeReady()" }
         }
 
+        // Children were attached during their init; now recurse.
+        children.values.forEach { it.nodeReady() }
+        behavior?.let { runBehavior("ready") { it.onReady() } }
+    }
+
+    /**
+     * Called when the node enters the tree.
+     *
+     * Order:
+     * - register groups in SceneManager
+     * - behavior.onEnterTree()
+     * - recurse into children
+     */
+    open fun nodeEnterTree() {
+        LogContext.with("nodePath" to path) {
+            log.trace("event" to "node.enter_tree") { "nodeEnterTree()" }
+        }
+
         // Avoid executing DSL/build twice (e.g., if nodeReady is triggered again).
         if (built) return
         built = true
@@ -467,23 +489,6 @@ abstract class Node<N : Node<N>> protected constructor(
             }
         }
 
-        // Children were attached during their init; now recurse.
-        children.values.forEach { it.nodeReady() }
-        behavior?.let { runBehavior("ready") { it.onReady() } }
-    }
-
-    /**
-     * Called when the node enters the tree.
-     *
-     * Order:
-     * - register groups in SceneManager
-     * - behavior.onEnterTree()
-     * - recurse into children
-     */
-    open fun nodeEnterTree() {
-        LogContext.with("nodePath" to path) {
-            log.trace("event" to "node.enter_tree") { "nodeEnterTree()" }
-        }
         groups.forEach { sceneManager.addToGroup(it, this) }
         behavior?.let { runBehavior("enter_tree") { it.onEnterTree() } }
         children.values.forEach { it.nodeEnterTree() }
