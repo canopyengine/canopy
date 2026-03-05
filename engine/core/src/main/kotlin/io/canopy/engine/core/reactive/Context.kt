@@ -47,7 +47,7 @@ class Context(
  * @throws IllegalStateException if the key does not exist in any scope.
  */
 @Suppress("UNCHECKED_CAST")
-fun <T : Any> Node<*>.fromContext(key: String): T {
+fun <T : Any> Node<*>.resolve(key: String): T {
     var cur: Node<*>? = this
     while (cur != null) {
         if (cur is Context && cur.provided.containsKey(key)) {
@@ -59,7 +59,11 @@ fun <T : Any> Node<*>.fromContext(key: String): T {
     error("Missing context key '$key' from node $path")
 }
 
+fun <T : Any> Node<*>.lazyResolve(key: String) = lazy { resolve<T>(key) }
+
 /**
  * Fetches value from [Context]s, or null if no value is found
  */
-fun <T : Any> Node<*>.fromContextOrNull(key: String): T? = runCatching { fromContext<T>(key) }.getOrNull()
+fun <T : Any> Node<*>.resolveOrNull(key: String): T? = runCatching { resolve<T>(key) }.getOrNull()
+
+fun <T : Any> Node<*>.lazyResolveOrNull(key: String) = lazy { resolveOrNull<T>(key) }

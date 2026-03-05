@@ -149,7 +149,9 @@ abstract class CanopyApp<C : CanopyAppConfig> protected constructor(isGraphical:
     override fun render() {
         frame++
         LogContext.with("frame" to frame) {
+            EngineLogs.lifecycle.debug("frame" to frame) { "Rendering frame..." }
             onRender(this)
+            EngineLogs.lifecycle.debug("rendering" to frame) { "Frame rendered." }
             super.render()
         }
     }
@@ -158,6 +160,11 @@ abstract class CanopyApp<C : CanopyAppConfig> protected constructor(isGraphical:
         super.resize(width, height)
         sceneManager.resize(width, height)
         onResize(this, width, height)
+        EngineLogs.lifecycle.debug(
+            "event" to "app.resize",
+            "width" to width,
+            "height" to height
+        ) { "Screen resized." }
     }
 
     override fun dispose() {
