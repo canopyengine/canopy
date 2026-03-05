@@ -57,7 +57,7 @@ class ContextTests {
         // Find the "child" node. Adjust if you have find-by-path utilities.
         val child = root.getNode<EmptyNode>("./child")
 
-        val debug: Boolean = child.fromContext("debug")
+        val debug: Boolean = child.resolve("debug")
         assertTrue(debug)
     }
 
@@ -76,7 +76,7 @@ class ContextTests {
 
         val b = root.getNode<EmptyNode>("./a/b")
 
-        val debug: Boolean = b.fromContext("debug")
+        val debug: Boolean = b.resolve("debug")
         assertTrue(debug)
     }
 
@@ -100,8 +100,8 @@ class ContextTests {
         val a = root.getNode<EmptyNode>("./a")
         val b = root.getNode<EmptyNode>("./b")
 
-        val aDebug: Boolean = a.fromContext("debug")
-        val bDebug: Boolean = b.fromContext("debug")
+        val aDebug: Boolean = a.resolve("debug")
+        val bDebug: Boolean = b.resolve("debug")
 
         assertTrue(aDebug)
         assertFalse(bDebug)
@@ -115,7 +115,7 @@ class ContextTests {
 
         val child = root.getNode<EmptyNode>("./child")
 
-        val missing: String? = child.fromContextOrNull("nope")
+        val missing: String? = child.resolveOrNull("nope")
         assertNull(missing)
     }
 
@@ -128,7 +128,7 @@ class ContextTests {
         val child = root.getNode<EmptyNode>("./child")
 
         val ex = assertThrows<IllegalStateException> {
-            child.fromContext<Int>("missing")
+            child.resolve<Int>("missing")
         }
 
         // Optional: if your error message includes path/name
@@ -149,8 +149,8 @@ class ContextTests {
 
         val child = root.getNode<EmptyNode>("./child")
 
-        val debug: Boolean = child.fromContext("debugMode")
-        val season: String = child.fromContext("season")
+        val debug: Boolean = child.resolve("debugMode")
+        val season: String = child.resolve("season")
 
         assertTrue(debug)
         assertEquals("winter", season)
@@ -170,8 +170,8 @@ class ContextTests {
 
         val child = root.getNode<EmptyNode>("./child")
 
-        assertEquals(1, child.fromContext("keyA"))
-        assertEquals(2, child.fromContext("keyB"))
+        assertEquals(1, child.resolve("keyA"))
+        assertEquals(2, child.resolve("keyB"))
     }
 
     @Test
@@ -191,7 +191,7 @@ class ContextTests {
         root.buildTree()
 
         val c = root.getNode<EmptyNode>("./a/b/c")
-        assertEquals(42, c.fromContext("x"))
+        assertEquals(42, c.resolve("x"))
     }
 
     @Test
@@ -211,7 +211,7 @@ class ContextTests {
 
         val c = root.getNode<EmptyNode>("./a")
 
-        assertEquals(1, c.fromContext("keyA"))
+        assertEquals(1, c.resolve("keyA"))
     }
 
     // --- Tiny adapter -------------------------------------------------------
