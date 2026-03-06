@@ -1,4 +1,4 @@
-package io.canopy.engine.core.nodes.core
+package io.canopy.engine.core.nodes
 
 import kotlin.reflect.KClass
 import io.canopy.engine.core.managers.SceneManager

@@ -1,6 +1,6 @@
 package io.canopy.engine.input.nodes
 
-import io.canopy.engine.core.nodes.core.Node
+import io.canopy.engine.core.nodes.Node
 import io.canopy.engine.input.InputEvent
 
 /**

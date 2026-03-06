@@ -1,6 +1,6 @@
 package io.canopy.engine.core.reactive
 
-import io.canopy.engine.core.nodes.core.Node
+import io.canopy.engine.core.nodes.Node
 
 /**
  * A transparent "scope" node used to attach contextual values to a subtree.
