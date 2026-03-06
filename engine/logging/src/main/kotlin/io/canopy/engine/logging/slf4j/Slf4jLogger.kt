@@ -4,6 +4,7 @@ import io.canopy.engine.logging.LogContext
 import io.canopy.engine.logging.LogLevel
 import io.canopy.engine.logging.core.Logger
 import io.canopy.engine.logging.util.withTemporaryMdcContext
+import net.logstash.logback.argument.StructuredArguments.entries
 import org.slf4j.Logger as Slf4j
 import org.slf4j.MDC
 
@@ -14,6 +15,24 @@ class Slf4jLogger(private val delegate: Slf4j) : Logger {
     override fun isInfoEnabled(): Boolean = delegate.isInfoEnabled
     override fun isWarnEnabled(): Boolean = delegate.isWarnEnabled
     override fun isErrorEnabled(): Boolean = delegate.isErrorEnabled
+
+    /**
+     * Formats structured fields for display in log messages.
+     *
+     * Fields are formatted as key=value pairs without ANSI colors.
+     * Colors are applied by the Logback encoder configuration (Console vs File).
+     * This ensures colors appear in the terminal but not in log files.
+     */
+    private fun formatFieldsForHumans(fields: Array<out Pair<String, Any?>>): String {
+        if (fields.isEmpty()) return ""
+
+        val formatted = fields.joinToString(separator = ", ") { (k, v) ->
+            val valueStr = v?.toString() ?: "null"
+            "$k=$valueStr"
+        }
+
+        return "[$formatted]"
+    }
 
     override fun log(level: LogLevel, t: Throwable?, vararg fields: Pair<String, Any?>, msg: () -> String) {
         if (!isEnabled(level)) return

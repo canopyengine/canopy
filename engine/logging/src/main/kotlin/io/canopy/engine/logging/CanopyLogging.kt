@@ -8,45 +8,48 @@ import java.time.Instant
 import java.time.ZonedDateTime
 import java.time.format.DateTimeFormatter
 import java.util.concurrent.atomic.AtomicReference
-import java.util.function.Supplier
-import ch.qos.logback.classic.Level
 import ch.qos.logback.classic.LoggerContext
-import ch.qos.logback.classic.encoder.PatternLayoutEncoder
-import ch.qos.logback.classic.filter.ThresholdFilter
-import ch.qos.logback.classic.spi.ILoggingEvent
-import ch.qos.logback.core.ConsoleAppender
-import ch.qos.logback.core.CoreConstants
-import ch.qos.logback.core.filter.Filter
-import ch.qos.logback.core.pattern.DynamicConverter
-import ch.qos.logback.core.rolling.RollingFileAppender
-import ch.qos.logback.core.rolling.SizeAndTimeBasedRollingPolicy
-import ch.qos.logback.core.spi.FilterReply
-import ch.qos.logback.core.util.FileSize
-import io.canopy.engine.logging.converters.ContextConverter
-import io.canopy.engine.logging.converters.FieldsConverter
+import ch.qos.logback.classic.joran.JoranConfigurator
+import io.canopy.engine.logging.CanopyLogging.end
+import io.canopy.engine.logging.CanopyLogging.init
 import io.canopy.engine.logging.util.ConsoleBanner
-import org.slf4j.Logger
 import org.slf4j.LoggerFactory
 
+/**
+ * Programmatic logging bootstrap for the Canopy engine.
+ *
+ * Why this exists:
+ * - Initializes per-run log directories
+ * - Sets up system properties (LOG_DIR) for logback.xml
+ * - Reloads Logback configuration dynamically
+ * - Provides startup banner and session tracking
+ *
+ * Configuration:
+ * - Log routing, levels, and appenders are defined in logback.xml
+ * - This class handles directory creation and runtime configuration
+ *
+ * Output layout (per run):
+ * - Console: all logs except DEBUG/INFO from engine (WARN/ERROR always visible)
+ * - canopy.log: all logs in plain text (no colors)
+ * - canopy.json: structured JSON logs (machine readable)
+ *
+ * Important:
+ * - [init] must be called once, as early as possible, before any logging occurs
+ * - If the active SLF4J backend is not Logback, this becomes a no-op
+ */
 object CanopyLogging {
 
+    /**
+     * Logging configuration for a single engine run/session.
+     *
+     * Note: Log levels and rolling policies are now configured in logback.xml.
+     * This Config only controls directory structure and startup behavior.
+     */
     data class Config(
         val baseLogDir: Path = Path.of(".canopy").resolve("logs"),
         val runId: String = defaultRunFolderName(),
         val engineVersion: String = "unknown",
-
-        val consoleLevel: LogLevel = LogLevel.INFO,
         val bannerMode: ConsoleBanner.Mode = ConsoleBanner.Mode.GRADIENT,
-
-        val engineJsonLevel: LogLevel = LogLevel.DEBUG,
-        val engineLogLevel: LogLevel = LogLevel.INFO,
-        val userLogLevel: LogLevel = LogLevel.INFO,
-
-        val maxHistoryDays: Int = 7,
-        val maxFileSize: String = "10MB",
-        val totalSizeCap: String = "200MB",
-
-        val engineLoggerPrefix: String = "canopy",
     )
 
     fun defaultRunFolderName(now: ZonedDateTime = ZonedDateTime.now()): String =
@@ -54,119 +57,56 @@ object CanopyLogging {
 
     private val startedAt = AtomicReference<Instant?>(null)
 
-    fun init(config: Config = Config()) {
-        ConsoleBanner.print(config.engineVersion, config.bannerMode)
-
-        val context = LoggerFactory.getILoggerFactory() as? LoggerContext ?: return
-        context.reset()
-        registerConverters(context)
-
+    /**
+     * Initializes logging for the current run.
+     *
+     * Call this once, before any meaningful logging occurs.
+     *
+     * What it does:
+     * - Creates the run directory under baseLogDir
+     * - Sets LOG_DIR system property (used by logback.xml)
+     * - Reloads Logback configuration from logback.xml
+     * - Prints startup banner
+     * - Sets global MDC context (runId, engineVersion)
+     * - Records session start time
+     */
+    fun init(config: Config) {
+        // Create per-run directory: <baseLogDir>/<runId>/
         val runDir = config.baseLogDir.resolve(config.runId)
         if (!runDir.exists()) runDir.createDirectories()
 
+        // Set system property BEFORE any logging occurs (so logback.xml can use it)
+        System.setProperty("LOG_DIR", runDir.toAbsolutePath().toString())
+        System.err.println("[CanopyLogging] LOG_DIR set to: ${System.getProperty("LOG_DIR")}")
+
+        // Reload Logback configuration to use the updated LOG_DIR
+        val loggerContext = LoggerFactory.getILoggerFactory() as? LoggerContext
+        if (loggerContext != null) {
+            try {
+                loggerContext.reset()
+                val configurator = JoranConfigurator()
+                configurator.context = loggerContext
+                configurator.doConfigure(CanopyLogging::class.java.getResourceAsStream("/logback.xml"))
+                System.err.println("[CanopyLogging] Logback configuration reloaded successfully")
+            } catch (e: Exception) {
+                System.err.println("Failed to reload Logback configuration: ${e.message}")
+                e.printStackTrace()
+            }
+        } else {
+            System.err.println("[CanopyLogging] LoggerContext is not Logback")
+        }
+
+        // Print the startup banner early. This is cosmetic, but helps users confirm startup.
+        ConsoleBanner.print(config.engineVersion, config.bannerMode)
+
+        // Global context goes into MDC so it is available on all log lines.
+        // Scoped context (frame/nodePath, etc.) should be set by callers as needed.
         LogContext.setGlobal(
             "runId" to config.runId,
             "engineVersion" to config.engineVersion
         )
 
-        val consoleAppender = ConsoleAppender<ILoggingEvent>().apply {
-            this.context = context
-            name = "CONSOLE"
-            encoder = buildConsoleEncoder(context)
-            isWithJansi = true
-
-            addFilter(denyEngineFilter(config.engineLoggerPrefix).apply { start() })
-
-            addFilter(
-                ThresholdFilter().apply {
-                    setLevel(config.consoleLevel.name)
-                    start()
-                }
-            )
-
-            addFilter(
-                object : Filter<ILoggingEvent>() {
-                    override fun decide(event: ILoggingEvent): FilterReply {
-                        val name = event.loggerName ?: return FilterReply.NEUTRAL
-                        if (name.startsWith("org.lwjgl.openal") || event.formattedMessage.contains("[ALSOFT]")) {
-                            return FilterReply.DENY
-                        }
-                        return FilterReply.NEUTRAL
-                    }
-                }.apply { start() }
-            )
-
-            start()
-        }
-
-        val engineLogAppender = RollingFileAppender<ILoggingEvent>().apply {
-            this.context = context
-            name = "ENGINE_LOG"
-            file = runDir.resolve("engine.log").toString()
-
-            encoder = buildFileEncoder(context)
-
-            addFilter(engineOnlyFilter(config.engineLoggerPrefix).apply { start() })
-
-            addFilter(
-                ThresholdFilter().apply {
-                    setLevel(config.engineLogLevel.name)
-                    start()
-                }
-            )
-        }
-
-        engineLogAppender.rollingPolicy = SizeAndTimeBasedRollingPolicy<ILoggingEvent>().apply {
-            this.context = context
-            setParent(engineLogAppender)
-            fileNamePattern = runDir.resolve("engine.%d{yyyy-MM-dd}.%i.log.gz").toString()
-            maxHistory = config.maxHistoryDays
-            setMaxFileSize(FileSize.valueOf(config.maxFileSize))
-            setTotalSizeCap(FileSize.valueOf(config.totalSizeCap))
-            start()
-        }
-        engineLogAppender.start()
-
-        val userLogAppender = RollingFileAppender<ILoggingEvent>().apply {
-            this.context = context
-            name = "USER_LOG"
-            file = runDir.resolve("user.log").toString()
-
-            encoder = buildFileEncoder(context)
-
-            addFilter(denyEngineFilter(config.engineLoggerPrefix).apply { start() })
-
-            addFilter(
-                ThresholdFilter().apply {
-                    setLevel(config.userLogLevel.name)
-                    start()
-                }
-            )
-        }
-
-        userLogAppender.rollingPolicy = SizeAndTimeBasedRollingPolicy<ILoggingEvent>().apply {
-            this.context = context
-            setParent(userLogAppender)
-            fileNamePattern = runDir.resolve("user.%d{yyyy-MM-dd}.%i.log.gz").toString()
-            maxHistory = config.maxHistoryDays
-            setMaxFileSize(FileSize.valueOf(config.maxFileSize))
-            setTotalSizeCap(FileSize.valueOf(config.totalSizeCap))
-            start()
-        }
-        userLogAppender.start()
-
-        context.getLogger(Logger.ROOT_LOGGER_NAME).apply {
-            level = Level.TRACE
-            addAppender(consoleAppender)
-            addAppender(userLogAppender)
-        }
-
-        context.getLogger(config.engineLoggerPrefix).apply {
-            isAdditive = true
-            level = Level.TRACE
-            addAppender(engineLogAppender)
-        }
-
+        // Record start time for session duration calculation
         startedAt.set(Instant.now())
 
         Logs.get("canopy.engine.session").info(
@@ -211,65 +151,4 @@ object CanopyLogging {
     fun defaultBaseLogDir(baseDir: Path = Path.of(".canopy")): Path = baseDir.resolve("logs")
 
     fun defaultRunId(): String = DateTimeFormatter.ofPattern("yyyyMMdd-HHmmss").format(ZonedDateTime.now())
-
-    private fun registerConverters(context: LoggerContext) {
-        @Suppress("UNCHECKED_CAST")
-        val supplierRegistry =
-            (
-                context.getObject(CoreConstants.PATTERN_RULE_REGISTRY_FOR_SUPPLIERS)
-                    as? MutableMap<String, Supplier<DynamicConverter<*>>>
-                )
-                ?: mutableMapOf<String, Supplier<DynamicConverter<*>>>().also {
-                    context.putObject(CoreConstants.PATTERN_RULE_REGISTRY_FOR_SUPPLIERS, it)
-                }
-
-        supplierRegistry["ctx"] = Supplier { ContextConverter() }
-        supplierRegistry["fields"] = Supplier { FieldsConverter() }
-
-        @Suppress("UNCHECKED_CAST")
-        val legacyRegistry =
-            (context.getObject(CoreConstants.PATTERN_RULE_REGISTRY) as? MutableMap<String, String>)
-                ?: mutableMapOf<String, String>().also {
-                    context.putObject(CoreConstants.PATTERN_RULE_REGISTRY, it)
-                }
-
-        legacyRegistry["ctx"] = ContextConverter::class.java.canonicalName
-        legacyRegistry["fields"] = FieldsConverter::class.java.canonicalName
-    }
-
-    fun buildConsoleEncoder(context: LoggerContext): PatternLayoutEncoder = PatternLayoutEncoder().apply {
-        this.context = context
-        pattern =
-            "%d{yy.MM.dd.HH:mm:ss.SSS} " +
-            "%highlight(%-5level) " +
-            "%boldCyan(%logger{1}) " +
-            "%white([run=%X{runId}]) " +
-            "%ctx{color=true} " +
-            "%fields{color=true} " +
-            "%msg%ex{short}%n"
-        start()
-    }
-
-    fun buildFileEncoder(context: LoggerContext): PatternLayoutEncoder = PatternLayoutEncoder().apply {
-        this.context = context
-        pattern =
-            "%d{yy.MM.dd.HH:mm:ss.SSS} %-5level %logger{36} " +
-            "[run=%X{runId}] " +
-            "%ctx %fields %msg%ex{short}%n"
-        start()
-    }
-
-    private fun engineOnlyFilter(prefix: String) = object : Filter<ILoggingEvent>() {
-        override fun decide(event: ILoggingEvent): FilterReply {
-            val name = event.loggerName ?: return FilterReply.DENY
-            return if (name.startsWith(prefix)) FilterReply.NEUTRAL else FilterReply.DENY
-        }
-    }
-
-    private fun denyEngineFilter(prefix: String) = object : Filter<ILoggingEvent>() {
-        override fun decide(event: ILoggingEvent): FilterReply {
-            val name = event.loggerName ?: return FilterReply.NEUTRAL
-            return if (name.startsWith(prefix)) FilterReply.DENY else FilterReply.NEUTRAL
-        }
-    }
 }
