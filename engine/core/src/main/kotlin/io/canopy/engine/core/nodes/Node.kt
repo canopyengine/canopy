@@ -1,18 +1,12 @@
-package io.canopy.engine.core.nodes.core
+package io.canopy.engine.core.nodes
 
 import kotlin.reflect.KClass
-import com.badlogic.gdx.math.Vector2
 import io.canopy.engine.core.managers.SceneManager
 import io.canopy.engine.core.managers.lazyManager
 import io.canopy.engine.core.managers.manager
 import io.canopy.engine.core.reactive.Context
 import io.canopy.engine.logging.EngineLogs
 import io.canopy.engine.logging.LogContext
-import ktx.math.plus
-import ktx.math.times
-
-@DslMarker
-annotation class CanopyDsl
 
 /**
  * Base node class for a 2D scene graph.
@@ -42,7 +36,7 @@ abstract class Node<N : Node<N>> protected constructor(
      * Node DSL block used to configure/build the node subtree.
      * Executed once during [nodeReady].
      */
-    private val block: N.() -> Unit,
+    private val block: N.() -> Unit = {},
 ) {
 
     /* ============================================================
@@ -59,35 +53,6 @@ abstract class Node<N : Node<N>> protected constructor(
     var name
         get() = _name
         set(value) = rename(value)
-
-    /* ============================================================
-     * Global transform helpers
-     * ============================================================ */
-
-    /** Position in world space (local position + parent global position). */
-    val globalPosition: Vector2
-        get() = position + (parent?.globalPosition ?: Vector2.Zero)
-
-    /** Scale in world space (local scale + parent global scale). */
-    val globalScale: Vector2
-        get() = scale * (parent?.globalScale ?: Vector2.Zero)
-
-    /** Rotation in world space (local rotation + parent global rotation). */
-    val globalRotation: Float
-        get() = rotation + (parent?.globalRotation ?: 0f)
-
-    /* ============================================================
-     * Local transform
-     * ============================================================ */
-
-    /** Local position in 2D space. */
-    open var position: Vector2 = Vector2.Zero
-
-    /** Local scale in 2D space. */
-    open var scale: Vector2 = Vector2(1f, 1f)
-
-    /** Local rotation in radians. */
-    open var rotation: Float = 0f
 
     /**
      * Local group memberships. Groups are also mirrored into the [SceneManager] registry
@@ -586,45 +551,33 @@ abstract class Node<N : Node<N>> protected constructor(
 
     infix fun child(node: Node<*>) = addChild(node)
 
-    fun at(x: Float, y: Float) = apply { position.set(x, y) }
-    fun at(pos: Vector2) = apply { position.set(pos) }
-
-    fun scaled(x: Float, y: Float) = apply { this.scale.set(x, y) }
-    fun scaled(scale: Vector2) = apply { this.scale.set(scale) }
-
     fun groups(vararg groups: String) = apply { groups.forEach { addGroup(it) } }
 
     fun <T : Node<T>> patch(path: String, handler: T.() -> Unit) = getNode<T>(path).apply(handler)
-}
 
-/* ------------------------------------------------------------------
- * Top-level DSL helpers
- * ------------------------------------------------------------------ */
+    /* ------------------------------------------------------------------
+     * Top-level DSL helpers
+     * ------------------------------------------------------------------ */
 
-/** `parent + child` attaches [child] to [parent] and returns [parent]. */
-operator fun Node<*>.plus(node: Node<*>): Node<*> {
-    addChild(node)
-    return this
-}
-
-/** Unary plus attaches this node to its parent (if present). */
-operator fun Node<*>.unaryPlus(): Node<*> {
-    parent?.addChild(this)
-    return this
-}
-
-/**
- * Sets this node as the active scene root in the global [SceneManager].
- *
- * This triggers SceneManager scene replacement logic (unregister old scene, register new scene).
- */
-fun Node<*>.asSceneRoot(): Node<*> {
-    val sceneManager = manager<SceneManager>()
-    sceneManager.currScene = this
-
-    LogContext.with("nodePath" to this.path) {
-        EngineLogs.subsystem("scene").info("event" to "scene.set_root") { "Set as scene root" }
+    /** `parent + child` attaches [child] to [parent] and returns [parent]. */
+    operator fun Node<*>.plus(node: Node<*>): Node<*> {
+        addChild(node)
+        return this
     }
 
-    return this
+    /**
+     * Sets this node as the active scene root in the global [SceneManager].
+     *
+     * This triggers SceneManager scene replacement logic (unregister old scene, register new scene).
+     */
+    fun asSceneRoot(): Node<*> {
+        val sceneManager = manager<SceneManager>()
+        sceneManager.currScene = this
+
+        LogContext.with("nodePath" to this.path) {
+            EngineLogs.subsystem("scene").info("event" to "scene.set_root") { "Set as scene root" }
+        }
+
+        return this
+    }
 }

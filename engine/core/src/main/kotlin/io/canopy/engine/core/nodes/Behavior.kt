@@ -1,4 +1,4 @@
-package io.canopy.engine.core.nodes.core
+package io.canopy.engine.core.nodes
 
 // ===============================
 //       NODE BEHAVIOR BASE

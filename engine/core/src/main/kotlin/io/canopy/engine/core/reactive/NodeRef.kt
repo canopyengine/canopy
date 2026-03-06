@@ -1,6 +1,7 @@
-package io.canopy.engine.core.nodes.core
+package io.canopy.engine.core.reactive
 
 import java.lang.ref.WeakReference
+import io.canopy.engine.core.nodes.Node
 
 /**
  * A reference to a [Node] that can be resolved later.

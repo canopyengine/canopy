@@ -2,7 +2,7 @@ package io.canopy.engine.core.reactive
 
 import io.canopy.engine.core.managers.ManagersRegistry
 import io.canopy.engine.core.managers.SceneManager
-import io.canopy.engine.core.nodes.core.Node
+import io.canopy.engine.core.nodes.Node
 import org.junit.jupiter.api.Assertions.*
 import org.junit.jupiter.api.BeforeAll
 import org.junit.jupiter.api.Test

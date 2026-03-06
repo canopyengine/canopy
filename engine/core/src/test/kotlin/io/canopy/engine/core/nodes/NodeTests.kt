@@ -6,12 +6,8 @@ import kotlin.time.toDuration
 import com.badlogic.gdx.math.Vector2
 import io.canopy.engine.core.managers.ManagersRegistry
 import io.canopy.engine.core.managers.SceneManager
-import io.canopy.engine.core.nodes.core.Node
-import io.canopy.engine.core.nodes.core.asSceneRoot
-import io.canopy.engine.core.nodes.core.attachBehavior
-import io.canopy.engine.core.nodes.core.behavior
-import io.canopy.engine.core.nodes.core.createBehavior
 import io.canopy.engine.core.nodes.types.empty.EmptyNode
+import io.canopy.engine.core.nodes.types.empty.EmptyNode2D
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
@@ -251,19 +247,19 @@ class NodeTests {
         class CustomScene(name: String = "custom", block: CustomScene.() -> Unit = {}) :
             Node<CustomScene>(name, block) {
             override fun create() {
-                EmptyNode("empty")
+                EmptyNode2D("empty")
             }
         }
 
         val node = CustomScene {
-            patch<EmptyNode>("./empty") {
+            patch<EmptyNode2D>("./empty") {
                 name = "patched"
                 at(100f, 100f)
             }
         }
         node.buildTree()
 
-        val child = node.getNode<EmptyNode>("./patched")
+        val child = node.getNode<EmptyNode2D>("./patched")
 
         assertEquals("patched", child.name)
         assertEquals(Vector2(100f, 100f), child.position)
