@@ -1,0 +1,60 @@
+package io.canopy.engine.core.nodes
+
+import com.badlogic.gdx.math.Vector2
+import ktx.math.plus
+import ktx.math.times
+
+/**
+ * Base 2D Node
+ */
+abstract class Node2D<N : Node2D<N>> protected constructor(name: String, block: N.() -> Unit = {}) :
+    Node<N>(name, block) {
+
+    /* ============================================================
+     * Global transform helpers
+     * ============================================================ */
+
+    /** Position in world space (local position + parent global position). */
+    val globalPosition: Vector2
+        get() {
+            val p = parent as? Node2D ?: return position
+            return position + p.globalPosition
+        }
+
+    /** Scale in world space (local scale + parent global scale). */
+    val globalScale: Vector2
+        get() {
+            val p = parent as? Node2D ?: return scale
+            return scale * p.globalScale
+        }
+
+    /** Rotation in world space (local rotation + parent global rotation). */
+    val globalRotation: Float
+        get() {
+            val p = parent as? Node2D ?: return rotation
+            return rotation + p.globalRotation
+        }
+
+    /* ============================================================
+     * Local transform
+     * ============================================================ */
+
+    /** Local position in 2D space. */
+    open var position: Vector2 = Vector2.Zero
+
+    /** Local scale in 2D space. */
+    open var scale: Vector2 = Vector2(1f, 1f)
+
+    /** Local rotation in radians. */
+    open var rotation: Float = 0f
+
+    /* ============================================================
+     * DSL helpers
+     * ============================================================ */
+
+    fun at(x: Float, y: Float) = apply { position.set(x, y) }
+    fun at(pos: Vector2) = apply { position.set(pos) }
+
+    fun scaled(x: Float, y: Float) = apply { this.scale.set(x, y) }
+    fun scaled(scale: Vector2) = apply { this.scale.set(scale) }
+}

@@ -2,7 +2,7 @@ package io.canopy.engine.input
 
 import com.badlogic.gdx.math.Vector2
 import io.canopy.engine.core.managers.Manager
-import io.canopy.engine.core.nodes.core.TreeSystem
+import io.canopy.engine.core.nodes.TreeSystem
 import io.canopy.engine.utils.UnstableApi
 import ktx.log.logger
 

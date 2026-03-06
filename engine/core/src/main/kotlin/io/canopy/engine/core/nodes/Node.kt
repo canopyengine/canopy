@@ -1,15 +1,12 @@
-package io.canopy.engine.core.nodes.core
+package io.canopy.engine.core.nodes
 
 import kotlin.reflect.KClass
-import com.badlogic.gdx.math.Vector2
 import io.canopy.engine.core.managers.SceneManager
 import io.canopy.engine.core.managers.lazyManager
 import io.canopy.engine.core.managers.manager
-import io.canopy.engine.core.reactive.ContextScopeNode
+import io.canopy.engine.core.reactive.Context
 import io.canopy.engine.logging.EngineLogs
 import io.canopy.engine.logging.LogContext
-import ktx.math.plus
-import ktx.math.times
 
 /**
  * Base node class for a 2D scene graph.
@@ -30,6 +27,7 @@ import ktx.math.times
  * Generic type parameter:
  * - `N : Node<N>` enables DSL blocks to have the concrete node type as receiver.
  */
+@CanopyDsl
 @Suppress("UNCHECKED_CAST")
 abstract class Node<N : Node<N>> protected constructor(
     /** Node name (expected to be unique among siblings). */
@@ -38,7 +36,7 @@ abstract class Node<N : Node<N>> protected constructor(
      * Node DSL block used to configure/build the node subtree.
      * Executed once during [nodeReady].
      */
-    private val block: N.() -> Unit,
+    private val block: N.() -> Unit = {},
 ) {
 
     /* ============================================================
@@ -55,35 +53,6 @@ abstract class Node<N : Node<N>> protected constructor(
     var name
         get() = _name
         set(value) = rename(value)
-
-    /* ============================================================
-     * Global transform helpers
-     * ============================================================ */
-
-    /** Position in world space (local position + parent global position). */
-    val globalPosition: Vector2
-        get() = position + (parent?.globalPosition ?: Vector2.Zero)
-
-    /** Scale in world space (local scale + parent global scale). */
-    val globalScale: Vector2
-        get() = scale * (parent?.globalScale ?: Vector2.Zero)
-
-    /** Rotation in world space (local rotation + parent global rotation). */
-    val globalRotation: Float
-        get() = rotation + (parent?.globalRotation ?: 0f)
-
-    /* ============================================================
-     * Local transform
-     * ============================================================ */
-
-    /** Local position in 2D space. */
-    open var position: Vector2 = Vector2.Zero
-
-    /** Local scale in 2D space. */
-    open var scale: Vector2 = Vector2(1f, 1f)
-
-    /** Local rotation in radians. */
-    open var rotation: Float = 0f
 
     /**
      * Local group memberships. Groups are also mirrored into the [SceneManager] registry
@@ -296,7 +265,7 @@ abstract class Node<N : Node<N>> protected constructor(
         // Walk up skipping ContextScopeNode wrappers (they are implementation details).
         fun Node<*>.visibleParent(): Node<*>? {
             var p = this.parent
-            while (p is ContextScopeNode) p = p.parent
+            while (p is Context) p = p.parent
             return p
         }
 
@@ -307,12 +276,12 @@ abstract class Node<N : Node<N>> protected constructor(
 
             // 2) otherwise, search one level into context scopes
             for (c in this.children.values) {
-                if (c is ContextScopeNode) {
+                if (c is Context) {
                     c.children[name]?.let { return it }
 
                     // 3) also allow nested context scopes (common with nested context blocks)
                     for (nested in c.children.values) {
-                        if (nested is ContextScopeNode) {
+                        if (nested is Context) {
                             nested.children[name]?.let { return it }
                         }
                     }
@@ -449,6 +418,24 @@ abstract class Node<N : Node<N>> protected constructor(
             log.trace("event" to "node.ready") { "nodeReady()" }
         }
 
+        // Children were attached during their init; now recurse.
+        children.values.forEach { it.nodeReady() }
+        behavior?.let { runBehavior("ready") { it.onReady() } }
+    }
+
+    /**
+     * Called when the node enters the tree.
+     *
+     * Order:
+     * - register groups in SceneManager
+     * - behavior.onEnterTree()
+     * - recurse into children
+     */
+    open fun nodeEnterTree() {
+        LogContext.with("nodePath" to path) {
+            log.trace("event" to "node.enter_tree") { "nodeEnterTree()" }
+        }
+
         // Avoid executing DSL/build twice (e.g., if nodeReady is triggered again).
         if (built) return
         built = true
@@ -467,23 +454,6 @@ abstract class Node<N : Node<N>> protected constructor(
             }
         }
 
-        // Children were attached during their init; now recurse.
-        children.values.forEach { it.nodeReady() }
-        behavior?.let { runBehavior("ready") { it.onReady() } }
-    }
-
-    /**
-     * Called when the node enters the tree.
-     *
-     * Order:
-     * - register groups in SceneManager
-     * - behavior.onEnterTree()
-     * - recurse into children
-     */
-    open fun nodeEnterTree() {
-        LogContext.with("nodePath" to path) {
-            log.trace("event" to "node.enter_tree") { "nodeEnterTree()" }
-        }
         groups.forEach { sceneManager.addToGroup(it, this) }
         behavior?.let { runBehavior("enter_tree") { it.onEnterTree() } }
         children.values.forEach { it.nodeEnterTree() }
@@ -581,45 +551,33 @@ abstract class Node<N : Node<N>> protected constructor(
 
     infix fun child(node: Node<*>) = addChild(node)
 
-    fun at(x: Float, y: Float) = apply { position.set(x, y) }
-    fun at(pos: Vector2) = apply { position.set(pos) }
-
-    fun scaled(x: Float, y: Float) = apply { this.scale.set(x, y) }
-    fun scaled(scale: Vector2) = apply { this.scale.set(scale) }
-
     fun groups(vararg groups: String) = apply { groups.forEach { addGroup(it) } }
 
     fun <T : Node<T>> patch(path: String, handler: T.() -> Unit) = getNode<T>(path).apply(handler)
-}
 
-/* ------------------------------------------------------------------
- * Top-level DSL helpers
- * ------------------------------------------------------------------ */
+    /* ------------------------------------------------------------------
+     * Top-level DSL helpers
+     * ------------------------------------------------------------------ */
 
-/** `parent + child` attaches [child] to [parent] and returns [parent]. */
-operator fun Node<*>.plus(node: Node<*>): Node<*> {
-    addChild(node)
-    return this
-}
-
-/** Unary plus attaches this node to its parent (if present). */
-operator fun Node<*>.unaryPlus(): Node<*> {
-    parent?.addChild(this)
-    return this
-}
-
-/**
- * Sets this node as the active scene root in the global [SceneManager].
- *
- * This triggers SceneManager scene replacement logic (unregister old scene, register new scene).
- */
-fun Node<*>.asSceneRoot(): Node<*> {
-    val sceneManager = manager<SceneManager>()
-    sceneManager.currScene = this
-
-    LogContext.with("nodePath" to this.path) {
-        EngineLogs.subsystem("scene").info("event" to "scene.set_root") { "Set as scene root" }
+    /** `parent + child` attaches [child] to [parent] and returns [parent]. */
+    operator fun Node<*>.plus(node: Node<*>): Node<*> {
+        addChild(node)
+        return this
     }
 
-    return this
+    /**
+     * Sets this node as the active scene root in the global [SceneManager].
+     *
+     * This triggers SceneManager scene replacement logic (unregister old scene, register new scene).
+     */
+    fun asSceneRoot(): Node<*> {
+        val sceneManager = manager<SceneManager>()
+        sceneManager.currScene = this
+
+        LogContext.with("nodePath" to this.path) {
+            EngineLogs.subsystem("scene").info("event" to "scene.set_root") { "Set as scene root" }
+        }
+
+        return this
+    }
 }

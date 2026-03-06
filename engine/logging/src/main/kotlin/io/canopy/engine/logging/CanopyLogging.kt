@@ -47,23 +47,14 @@ object CanopyLogging {
      */
     data class Config(
         val baseLogDir: Path = Path.of(".canopy").resolve("logs"),
-        val runId: String = defaultRunFolderName(), // canopy-YYYY-MM-dd-HH-mm
+        val runId: String = defaultRunFolderName(),
         val engineVersion: String = "unknown",
         val bannerMode: ConsoleBanner.Mode = ConsoleBanner.Mode.GRADIENT,
     )
 
-    /**
-     * Default run folder name used on disk.
-     *
-     * Note:
-     * - Avoid `HH:mm` because ':' is not a valid character in Windows filenames.
-     */
     fun defaultRunFolderName(now: ZonedDateTime = ZonedDateTime.now()): String =
         "canopy-" + DateTimeFormatter.ofPattern("yyyy-MM-dd-HH-mm").format(now)
 
-    /**
-     * Tracks when [init] completed so we can compute session duration in [end].
-     */
     private val startedAt = AtomicReference<Instant?>(null)
 
     /**
@@ -118,7 +109,6 @@ object CanopyLogging {
         // Record start time for session duration calculation
         startedAt.set(Instant.now())
 
-        // Emit a session header event into engine logs.
         Logs.get("canopy.engine.session").info(
             "event" to "session.start",
             "schema" to "canopy-log-v1",
@@ -128,18 +118,12 @@ object CanopyLogging {
             "runDir" to runDir.toString()
         ) { "Session start" }
 
-        // Emit a bootstrap event so it's easy to confirm logging configured correctly.
         Logs.get("canopy.bootstrap.logging").info(
             "event" to "logging.init",
             "runDir" to runDir.toString()
         ) { "Canopy logging initialized" }
     }
 
-    /**
-     * Emits the session end event.
-     *
-     * This does not shut down Logback; it only records the end-of-session marker.
-     */
     fun end(reason: String = "normal", t: Throwable? = null) {
         val start = startedAt.get()
         val now = Instant.now()
@@ -164,13 +148,7 @@ object CanopyLogging {
         }
     }
 
-    /**
-     * Default base log directory (<baseDir>/logs).
-     */
     fun defaultBaseLogDir(baseDir: Path = Path.of(".canopy")): Path = baseDir.resolve("logs")
 
-    /**
-     * Alternative run id format used by some callers (kept for compatibility).
-     */
     fun defaultRunId(): String = DateTimeFormatter.ofPattern("yyyyMMdd-HHmmss").format(ZonedDateTime.now())
 }

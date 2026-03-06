@@ -4,69 +4,70 @@ import java.util.concurrent.atomic.AtomicReference
 import io.canopy.engine.logging.util.withTemporaryMdcContext
 
 /**
- * Logging context backed by MDC (Mapped Diagnostic Context).
+ * Logging context backed by MDC semantics.
  *
- * MDC is best used for *context that should automatically appear on many log lines*,
- * typically via the logging pattern or encoder configuration.
+ * Design:
+ * - Global context: long-lived values for the whole run/session
+ *   (e.g. runId, engineVersion, backend).
+ * - Scoped context: temporary values applied around a block
+ *   (e.g. scene, nodePath, frame).
+ * - Event fields: NOT managed here. Those are attached by the logger under the "fields" MDC key.
  *
- * We split context into two categories:
- *
- * - Global context:
- *   Session-wide fields that should exist for the entire engine run
- *   (e.g. runId, engineVersion).
- *
- * - Scoped context:
- *   Short-lived fields applied only while executing a block
- *   (e.g. frame, nodePath, scene).
- *
- * Important:
- * - Do NOT put per-log-call structured fields into MDC.
- *   MDC stores values as strings and is thread-local; pushing arbitrary fields into MDC
- *   makes JSON logs less structured and can create hard-to-debug leakage across calls.
- *
- * Per-log-call fields should be attached by the logger implementation using the backend’s
- * structured logging mechanism (e.g. Logstash StructuredArguments).
+ * Notes:
+ * - Global context is stored outside MDC so it does not depend on thread-local lifecycle.
+ * - Scoped context is applied to MDC only for the duration of a block.
+ * - Values are normalized to strings because MDC is string-based.
  */
 object LogContext {
 
-    /**
-     * Snapshot of global fields. Stored separately (not in MDC) so that:
-     * - they can be applied consistently by the logging backend
-     * - we avoid thread-local lifecycle issues for session-wide values
-     */
-    private val global = AtomicReference<Map<String, Any?>>(emptyMap())
+    private val global = AtomicReference<Map<String, String>>(emptyMap())
 
     /**
-     * Replaces the global context entirely.
-     *
-     * Use this during initialization when establishing session identity.
+     * Replaces the entire global context.
      */
     fun setGlobal(vararg fields: Pair<String, Any?>) {
-        global.set(fields.toMap())
+        global.set(normalize(fields.toMap()))
     }
 
     /**
-     * Adds/overrides entries in the global context.
-     *
-     * Existing keys are overwritten with the new values.
+     * Adds or overrides entries in the global context.
      */
     fun updateGlobal(vararg fields: Pair<String, Any?>) {
-        global.set(global.get() + fields.toMap())
+        global.set(global.get() + normalize(fields.toMap()))
     }
 
     /**
-     * Returns the current global context snapshot.
-     *
-     * This is intended for logger backends/adapters (e.g. SLF4J) to apply global fields
-     * to MDC right before emitting a log line.
+     * Removes selected keys from global context.
      */
-    internal fun globalMdcSnapshot(): Map<String, Any?> = global.get()
+    fun removeGlobal(vararg keys: String) {
+        if (keys.isEmpty()) return
+        global.set(global.get() - keys.toSet())
+    }
 
     /**
-     * Executes [block] with additional scoped MDC fields.
-     *
-     * These fields are applied only for the duration of the block and are always restored,
-     * even if [block] throws.
+     * Clears all global context.
      */
-    fun <T> with(vararg fields: Pair<String, Any?>, block: () -> T): T = withTemporaryMdcContext(fields.toMap(), block)
+    fun clearGlobal() {
+        global.set(emptyMap())
+    }
+
+    /**
+     * Snapshot used by the logger right before emitting a log event.
+     */
+    internal fun globalMdcSnapshot(): Map<String, String> = global.get()
+
+    /**
+     * Applies temporary scoped MDC fields for the duration of [block].
+     *
+     * Scoped fields override existing MDC values while the block runs,
+     * then previous values are restored.
+     */
+    fun <T> with(vararg fields: Pair<String, Any?>, block: () -> T): T =
+        withTemporaryMdcContext(normalize(fields.toMap()), block)
+
+    private fun normalize(fields: Map<String, Any?>): Map<String, String> = buildMap(fields.size) {
+        fields.forEach { (key, value) ->
+            if (value != null) put(key, value.toString())
+        }
+    }
 }
