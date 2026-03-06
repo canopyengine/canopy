@@ -3,10 +3,7 @@ package io.canopy.engine.logging.slf4j
 import io.canopy.engine.logging.LogContext
 import io.canopy.engine.logging.LogLevel
 import io.canopy.engine.logging.core.Logger
-import io.canopy.engine.logging.util.LogColorUtils.ANSI_DIM
-import io.canopy.engine.logging.util.LogColorUtils.ANSI_RESET
-import io.canopy.engine.logging.util.LogColorUtils.colorizeValue
-import io.canopy.engine.logging.util.withTemporaryMdcContext // <-- rename import if you applied the earlier change
+import io.canopy.engine.logging.util.withTemporaryMdcContext
 import net.logstash.logback.argument.StructuredArguments.entries
 import org.slf4j.Logger as Slf4j
 
@@ -35,24 +32,22 @@ class Slf4jLogger(private val delegate: Slf4j) : Logger {
     override fun isWarnEnabled(): Boolean = delegate.isWarnEnabled
     override fun isErrorEnabled(): Boolean = delegate.isErrorEnabled
 
-    // If you want to avoid ANSI in files, set this to false when not console.
-// For now, always true:
-    private fun useAnsiColors(): Boolean = true
-
+    /**
+     * Formats structured fields for display in log messages.
+     *
+     * Fields are formatted as key=value pairs without ANSI colors.
+     * Colors are applied by the Logback encoder configuration (Console vs File).
+     * This ensures colors appear in the terminal but not in log files.
+     */
     private fun formatFieldsForHumans(fields: Array<out Pair<String, Any?>>): String {
         if (fields.isEmpty()) return ""
 
-        val colored = fields.joinToString(separator = ", ") { (k, v) ->
+        val formatted = fields.joinToString(separator = ", ") { (k, v) ->
             val valueStr = v?.toString() ?: "null"
-            val renderedValue = if (useAnsiColors()) colorizeValue(valueStr) else valueStr
-
-            // Optional: dim the key so the value pops
-            val renderedKey = if (useAnsiColors()) "$ANSI_DIM$k$ANSI_RESET" else k
-
-            "$renderedKey=$renderedValue"
+            "$k=$valueStr"
         }
 
-        return "[$colored]"
+        return "[$formatted]"
     }
 
     override fun log(level: LogLevel, t: Throwable?, vararg fields: Pair<String, Any?>, msg: () -> String) {
