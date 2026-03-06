@@ -22,9 +22,10 @@ import ch.qos.logback.core.rolling.RollingFileAppender
 import ch.qos.logback.core.rolling.SizeAndTimeBasedRollingPolicy
 import ch.qos.logback.core.spi.FilterReply
 import ch.qos.logback.core.util.FileSize
+import io.canopy.engine.logging.converters.ConsoleMdcExcludeConverter
 import io.canopy.engine.logging.util.ConsoleBanner
-import io.canopy.engine.logging.util.MdcExcludeConverter
-import net.logstash.logback.encoder.LogstashEncoder
+import io.canopy.engine.logging.util.LogUtils
+import io.canopy.engine.logging.converters.MdcExcludeConverter
 import org.slf4j.Logger
 import org.slf4j.LoggerFactory
 
@@ -104,7 +105,7 @@ object CanopyLogging {
      *   install our appenders programmatically.
      * - If not Logback, we return early and do not touch logging configuration.
      */
-    fun init(config: Config) {
+    fun init(config: Config = Config()) {
         // Print the startup banner early. This is cosmetic, but helps users confirm startup.
         ConsoleBanner.print(config.engineVersion, config.bannerMode)
 
@@ -113,6 +114,7 @@ object CanopyLogging {
 
         // Reset the Logback context so we fully control appenders/levels for this run.
         context.reset()
+        registerConverters(context)
 
         // Create per-run directory: <baseLogDir>/<runId>/
         val runDir = config.baseLogDir.resolve(config.runId)
@@ -137,6 +139,7 @@ object CanopyLogging {
          * - Console receives user logs only
          * - user.log receives user logs only
          * - engine.* files receive engine logs only
+         * - file logs don't have ANSII color coding
          */
 
         // ----------------------------
@@ -178,40 +181,40 @@ object CanopyLogging {
         // ----------------------------
         // Engine structured logs: engine.jsonl (machine readable)
         // ----------------------------
-        val engineJsonAppender = RollingFileAppender<ILoggingEvent>().apply {
-            this.context = context
-            name = "ENGINE_JSONL"
-            file = runDir.resolve("engine.jsonl").toString()
-
-            // LogstashEncoder emits JSON per line (JSONL).
-            encoder = LogstashEncoder().apply {
-                this.context = context
-                start()
-            }
-
-            // Accept engine-origin logs only.
-            addFilter(engineOnlyFilter(config.engineLoggerPrefix).apply { start() })
-
-            // Apply minimum severity threshold for JSON logs.
-            addFilter(
-                ThresholdFilter().apply {
-                    setLevel(config.engineJsonLevel.name)
-                    start()
-                }
-            )
-        }
+//        val engineJsonAppender = RollingFileAppender<ILoggingEvent>().apply {
+//            this.context = context
+//            name = "ENGINE_JSONL"
+//            file = runDir.resolve("engine.jsonl").toString()
+//
+//            // LogstashEncoder emits JSON per line (JSONL).
+//            encoder = LogstashEncoder().apply {
+//                this.context = context
+//                start()
+//            }
+//
+//            // Accept engine-origin logs only.
+//            addFilter(engineOnlyFilter(config.engineLoggerPrefix).apply { start() })
+//
+//            // Apply minimum severity threshold for JSON logs.
+//            addFilter(
+//                ThresholdFilter().apply {
+//                    setLevel(config.engineJsonLevel.name)
+//                    start()
+//                }
+//            )
+//        }
 
         // Roll policy: rotate daily and by size, gzip old files.
-        engineJsonAppender.rollingPolicy = SizeAndTimeBasedRollingPolicy<ILoggingEvent>().apply {
-            this.context = context
-            setParent(engineJsonAppender)
-            fileNamePattern = runDir.resolve("engine.%d{yyyy-MM-dd}.%i.jsonl.gz").toString()
-            maxHistory = config.maxHistoryDays
-            setMaxFileSize(FileSize.valueOf(config.maxFileSize))
-            setTotalSizeCap(FileSize.valueOf(config.totalSizeCap))
-            start()
-        }
-        engineJsonAppender.start()
+//        engineJsonAppender.rollingPolicy = SizeAndTimeBasedRollingPolicy<ILoggingEvent>().apply {
+//            this.context = context
+//            setParent(engineJsonAppender)
+//            fileNamePattern = runDir.resolve("engine.%d{yyyy-MM-dd}.%i.jsonl.gz").toString()
+//            maxHistory = config.maxHistoryDays
+//            setMaxFileSize(FileSize.valueOf(config.maxFileSize))
+//            setTotalSizeCap(FileSize.valueOf(config.totalSizeCap))
+//            start()
+//        }
+//        engineJsonAppender.start()
 
         // ----------------------------
         // Engine readable logs: engine.log (human friendly)
@@ -223,9 +226,7 @@ object CanopyLogging {
 
             encoder = PatternLayoutEncoder().apply {
                 this.context = context
-                pattern =
-                    "%d{HH:mm:ss.SSS} %-5level %logger{36} " +
-                    "[run=%X{runId}] %msg%ex{short}%n"
+                pattern = LogUtils.FILE_LOG_PATTERN
                 start()
             }
 
@@ -262,9 +263,7 @@ object CanopyLogging {
 
             encoder = PatternLayoutEncoder().apply {
                 this.context = context
-                pattern =
-                    "%d{HH:mm:ss.SSS} %-5level %logger{36} " +
-                    "[run=%X{runId}] %msg%ex{short}%n"
+                pattern = LogUtils.FILE_LOG_PATTERN
                 start()
             }
 
@@ -305,7 +304,7 @@ object CanopyLogging {
          *   already deny engine logs via filters (so console/user.log remain clean).
          */
 
-        val root = context.getLogger(Logger.ROOT_LOGGER_NAME).apply {
+        context.getLogger(Logger.ROOT_LOGGER_NAME).apply {
             level = Level.TRACE
             addAppender(consoleAppender)
             addAppender(userLogAppender)
@@ -314,7 +313,7 @@ object CanopyLogging {
         context.getLogger(config.engineLoggerPrefix).apply {
             isAdditive = true
             level = Level.TRACE
-            addAppender(engineJsonAppender)
+            // addAppender(engineJsonAppender)
             addAppender(engineLogAppender)
         }
 
@@ -383,42 +382,12 @@ object CanopyLogging {
      * We register `mdcx` so console output can show MDC keys *except* some noisy ones,
      * while still allowing specific keys to be displayed (e.g. runId).
      */
-    fun buildConsoleEncoder(context: LoggerContext): PatternLayoutEncoder {
-        // 1) New registry (logback 1.5.13+): conversionWord -> Supplier<DynamicConverter>
-        @Suppress("UNCHECKED_CAST")
-        val supplierRegistry =
-            (
-                context.getObject(CoreConstants.PATTERN_RULE_REGISTRY_FOR_SUPPLIERS)
-                    as? MutableMap<String, Supplier<DynamicConverter<*>>>
-                )
-                ?: mutableMapOf<String, Supplier<DynamicConverter<*>>>().also {
-                    context.putObject(CoreConstants.PATTERN_RULE_REGISTRY_FOR_SUPPLIERS, it)
-                }
-
-        supplierRegistry["mdcx"] = Supplier { MdcExcludeConverter() }
-
-        // 2) Legacy registry (older logback): conversionWord -> FQCN (keep if you support < 1.5.13)
-        @Suppress("UNCHECKED_CAST")
-        val legacyRegistry =
-            (context.getObject(CoreConstants.PATTERN_RULE_REGISTRY) as? MutableMap<String, String>)
-                ?: mutableMapOf<String, String>().also {
-                    context.putObject(CoreConstants.PATTERN_RULE_REGISTRY, it)
-                }
-
-        legacyRegistry["mdcx"] = MdcExcludeConverter::class.java.canonicalName
-
-        return PatternLayoutEncoder().apply {
+    fun buildConsoleEncoder(context: LoggerContext): PatternLayoutEncoder =
+        PatternLayoutEncoder().apply {
             this.context = context
-            pattern =
-                "%d{HH:mm:ss.SSS} " +
-                "%highlight(%-5level) " +
-                "%boldCyan(%logger{1}) " +
-                "%white([run=%X{runId}]) " +
-                "%mdcx{runId,engineVersion} " +
-                "%msg%ex{short}%n"
+            pattern = LogUtils.CONSOLE_LOG_PATTERN
             start()
         }
-    }
 
     /**
      * Filter that accepts only loggers that start with [prefix].
@@ -440,5 +409,30 @@ object CanopyLogging {
             val name = event.loggerName ?: return FilterReply.NEUTRAL
             return if (name.startsWith(prefix)) FilterReply.DENY else FilterReply.NEUTRAL
         }
+    }
+
+    private fun registerConverters(context: LoggerContext) {
+        @Suppress("UNCHECKED_CAST")
+        val supplierRegistry =
+            (
+                context.getObject(CoreConstants.PATTERN_RULE_REGISTRY_FOR_SUPPLIERS)
+                    as? MutableMap<String, Supplier<DynamicConverter<*>>>
+                )
+                ?: mutableMapOf<String, Supplier<DynamicConverter<*>>>().also {
+                    context.putObject(CoreConstants.PATTERN_RULE_REGISTRY_FOR_SUPPLIERS, it)
+                }
+
+        supplierRegistry["mdcx"] = Supplier { MdcExcludeConverter() }
+        supplierRegistry["cmdcx"] = Supplier { ConsoleMdcExcludeConverter() }
+
+        @Suppress("UNCHECKED_CAST")
+        val legacyRegistry =
+            (context.getObject(CoreConstants.PATTERN_RULE_REGISTRY) as? MutableMap<String, String>)
+                ?: mutableMapOf<String, String>().also {
+                    context.putObject(CoreConstants.PATTERN_RULE_REGISTRY, it)
+                }
+
+        legacyRegistry["mdcx"] = MdcExcludeConverter::class.java.canonicalName
+        legacyRegistry["cmdcx"] = ConsoleMdcExcludeConverter::class.java.canonicalName
     }
 }
