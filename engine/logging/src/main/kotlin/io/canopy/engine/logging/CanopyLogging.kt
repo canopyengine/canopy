@@ -49,7 +49,15 @@ object CanopyLogging {
         val runId: String = defaultRunFolderName(),
         val engineVersion: String = "unknown",
         val bannerMode: ConsoleBanner.Mode = ConsoleBanner.Mode.GRADIENT,
-    )
+    ) {
+        companion object {
+            val defaultConfig = Config(
+                baseLogDir = Path.of(".canopy/logs"),
+                runId = defaultRunId(),
+                engineVersion = "unknown"
+            )
+        }
+    }
 
     fun defaultRunFolderName(now: ZonedDateTime = ZonedDateTime.now()): String =
         "canopy-" + DateTimeFormatter.ofPattern("yyyy-MM-dd-HH-mm").format(now)
@@ -69,7 +77,7 @@ object CanopyLogging {
      * - Sets global MDC context (runId, engineVersion)
      * - Records session start time
      */
-    fun init(config: Config) {
+    fun init(config: Config = Config.defaultConfig) {
         // Create per-run directory: <baseLogDir>/<runId>/
         val runDir = config.baseLogDir.resolve(config.runId)
         if (!runDir.exists()) runDir.createDirectories()

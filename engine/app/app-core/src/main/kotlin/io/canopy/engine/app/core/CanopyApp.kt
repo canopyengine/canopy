@@ -108,16 +108,7 @@ abstract class CanopyApp<C : CanopyAppConfig> protected constructor(isGraphical:
         val logDir = CanopyLogging.defaultBaseLogDir()
         val engineVersion = CanopyBuildInfo.projectVersion
 
-        CanopyLogging.init(
-            CanopyLogging.Config(
-                baseLogDir = logDir,
-                runId = runId,
-                engineVersion = engineVersion,
-                consoleLevel = LogLevel.INFO,
-                engineLogLevel = LogLevel.INFO,
-                userLogLevel = logLevel
-            )
-        )
+        CanopyLogging.init()
 
         // Provide backend identity via MDC for all logs produced during boot.
         val backendName = this::class.simpleName ?: "unknown"

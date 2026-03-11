@@ -44,4 +44,3 @@ class ClassNameDiscriminator : Discriminator<ILoggingEvent> {
 
     override fun isStarted(): Boolean = started
 }
-

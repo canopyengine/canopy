@@ -44,4 +44,3 @@ tasks.withType<Jar>().configureEach {
         )
     }
 }
-

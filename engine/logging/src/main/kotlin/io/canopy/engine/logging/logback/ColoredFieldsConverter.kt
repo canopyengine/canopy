@@ -57,13 +57,9 @@ class ColoredFieldsConverter : MessageConverter() {
         return "[$colorizedFields] $restOfMessage"
     }
 
-    private fun colorizeValue(value: String): String {
-        return when {
-            value == "null" -> "$ANSI_RED$value$ANSI_RESET"
-            value.toIntOrNull() != null || value.toDoubleOrNull() != null -> "$ANSI_YELLOW$value$ANSI_RESET"
-            else -> "$ANSI_GREEN$value$ANSI_RESET"
-        }
+    private fun colorizeValue(value: String): String = when {
+        value == "null" -> "$ANSI_RED$value$ANSI_RESET"
+        value.toIntOrNull() != null || value.toDoubleOrNull() != null -> "$ANSI_YELLOW$value$ANSI_RESET"
+        else -> "$ANSI_GREEN$value$ANSI_RESET"
     }
 }
-
-
