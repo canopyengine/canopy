@@ -4,7 +4,6 @@ import io.canopy.engine.logging.LogContext
 import io.canopy.engine.logging.LogLevel
 import io.canopy.engine.logging.core.Logger
 import io.canopy.engine.logging.util.withTemporaryMdcContext
-import net.logstash.logback.argument.StructuredArguments.entries
 import org.slf4j.Logger as Slf4j
 import org.slf4j.MDC
 
@@ -23,7 +22,7 @@ class Slf4jLogger(private val delegate: Slf4j) : Logger {
      * Colors are applied by the Logback encoder configuration (Console vs File).
      * This ensures colors appear in the terminal but not in log files.
      */
-    private fun formatFieldsForHumans(fields: Array<out Pair<String, Any?>>): String {
+    private fun formatFields(fields: Array<out Pair<String, Any?>>): String {
         if (fields.isEmpty()) return ""
 
         val formatted = fields.joinToString(separator = ", ") { (k, v) ->
@@ -38,6 +37,8 @@ class Slf4jLogger(private val delegate: Slf4j) : Logger {
         if (!isEnabled(level)) return
 
         val baseMessage = msg()
+        val fieldsPrefix = formatFields(fields)
+        val message = if (fieldsPrefix.isEmpty()) baseMessage else "$fieldsPrefix $baseMessage"
 
         val mergedMdc = LinkedHashMap<String, Any?>()
 
@@ -57,7 +58,7 @@ class Slf4jLogger(private val delegate: Slf4j) : Logger {
         }
 
         withTemporaryMdcContext(mergedMdc) {
-            emit(level, baseMessage, t)
+            emit(level, message, t)
         }
     }
 

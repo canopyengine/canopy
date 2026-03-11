@@ -10,7 +10,6 @@ import java.time.format.DateTimeFormatter
 import java.util.concurrent.atomic.AtomicReference
 import ch.qos.logback.classic.LoggerContext
 import ch.qos.logback.classic.joran.JoranConfigurator
-import io.canopy.engine.logging.CanopyLogging.end
 import io.canopy.engine.logging.CanopyLogging.init
 import io.canopy.engine.logging.util.ConsoleBanner
 import org.slf4j.LoggerFactory
