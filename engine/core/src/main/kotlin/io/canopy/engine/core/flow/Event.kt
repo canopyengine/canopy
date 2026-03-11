@@ -1,4 +1,4 @@
-package io.canopy.engine.core.reactive
+package io.canopy.engine.core.flow
 
 import java.lang.ref.WeakReference
 import java.util.concurrent.CopyOnWriteArrayList
