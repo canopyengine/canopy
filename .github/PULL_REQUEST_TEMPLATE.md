@@ -1,44 +1,32 @@
-**What does this PR do, and why**
-<!-- Briefly describe what this PR does and why. -->
+**Summary**
+Briefly describe what this PR changes and why.
 
-**What changes were made**
-<!-- List all the changes made -->
-
-- Example change 1
-- Example change 2
+**Changes**
+- 
+-
+-
 
 **Related Issues**
-<!-- List all closed issues -->
-
 Closes #
 
 **Type of Change**
-
 - [ ] Bug fix
-- [ ] New feature
-- [ ] Breaking change
+- [ ] Feature
 - [ ] Refactor
-- [ ] Documentation update
-- [ ] Test update
+- [ ] Documentation
+- [ ] Tests
 - [ ] Chore
+- [ ] Breaking change
 
 **How to Test**
-<!-- List all the needed steps to test it -->
+Steps to verify the change:
 
-1. 
-2. 
-3. 
-
-**Screenshots / Recordings**
-<!-- Add screenshots, GIFs, or videos if applicable -->
+1.
+2.
+3.
 
 **Checklist**
-
-- [ ] My code follows the project style guidelines
-- [ ] I have self-reviewed my code
-- [ ] I have added or updated tests where needed
-- [ ] I have updated documentation where needed
-- [ ] This PR is ready for review
-
-**Notes for Reviewers**
-<!-- Anything specific reviewers should pay attention to -->
+- [ ] Code follows project style
+- [ ] Self-reviewed
+- [ ] Tests added/updated (if applicable)
+- [ ] Docs updated (if applicable)
