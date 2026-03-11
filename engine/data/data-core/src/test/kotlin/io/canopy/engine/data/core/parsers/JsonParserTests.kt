@@ -11,7 +11,17 @@ import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Nested
 import org.junit.jupiter.api.Test
 
+/**
+ * Tests for [JsonParser].
+ *
+ * JsonParser defaults (important for these tests):
+ * - ignoreUnknownKeys = true
+ * - classDiscriminator = "type" for polymorphic decoding
+ */
 class JsonParserTests {
+
+    // --- Test fixtures -------------------------------------------------------
+
     @Serializable
     data class SimpleData(val id: Int, val name: String)
 
@@ -26,81 +36,102 @@ class JsonParserTests {
     @SerialName("ImplementationB")
     data class ImplementationB(val valueB: Int) : BaseType
 
+    // --- Simple decoding -----------------------------------------------------
+
     @Nested
-    @DisplayName("Simple tests for JsonParser")
+    @DisplayName("Simple decoding")
     inner class SimpleJsonParserTests {
+
         @Test
         fun `should parse JSON string into data class`() {
+            // Verifies basic decode from a JSON object into a Kotlin @Serializable type.
             val jsonString = """{"id":1,"name":"Test"}"""
-            val parsedData = JsonParser.fromString<SimpleData>(jsonString)
-            assert(parsedData.id == 1)
-            assert(parsedData.name == "Test")
+
+            val parsed = JsonParser.fromString<SimpleData>(jsonString)
+
+            assertEquals(1, parsed.id)
+            assertEquals("Test", parsed.name)
         }
 
         @Test
-        fun `should parse JSON string with unknown keys`() {
+        fun `should ignore unknown keys by default`() {
+            // JsonParser is configured with ignoreUnknownKeys = true.
             val jsonString = """{"id":2,"name":"Unknown","extraField":"ignored"}"""
-            val parsedData = JsonParser.fromString<SimpleData>(jsonString)
-            assert(parsedData.id == 2)
-            assert(parsedData.name == "Unknown")
+
+            val parsed = JsonParser.fromString<SimpleData>(jsonString)
+
+            assertEquals(2, parsed.id)
+            assertEquals("Unknown", parsed.name)
         }
 
         @Test
         fun `should parse list of data classes from JSON string`() {
+            // Verifies decoding generic collections works (reified type).
             val jsonString = """[{"id":3,"name":"Item1"},{"id":4,"name":"Item2"}]"""
-            val parsedData = JsonParser.fromString<List<SimpleData>>(jsonString)
-            assert(parsedData.size == 2)
-            assert(parsedData[0].id == 3 && parsedData[0].name == "Item1")
-            assert(parsedData[1].id == 4 && parsedData[1].name == "Item2")
+
+            val parsed = JsonParser.fromString<List<SimpleData>>(jsonString)
+
+            assertEquals(2, parsed.size)
+
+            assertEquals(3, parsed[0].id)
+            assertEquals("Item1", parsed[0].name)
+
+            assertEquals(4, parsed[1].id)
+            assertEquals("Item2", parsed[1].name)
         }
     }
 
+    // --- Polymorphic decoding ------------------------------------------------
+
     @Nested
-    @DisplayName("Parsing with polymorphic types")
+    @DisplayName("Polymorphic decoding")
     inner class PolymorphicJsonParserTests {
-        val module =
-            SerializersModule {
-                polymorphic(BaseType::class) {
-                    subclass(ImplementationA::class)
-                    subclass(ImplementationB::class)
-                }
+
+        /**
+         * Polymorphic module used for these tests.
+         *
+         * JsonParser uses `classDiscriminator = "type"`,
+         * so the JSON must contain `"type": "<SerialName>"`.
+         */
+        private val module = SerializersModule {
+            polymorphic(BaseType::class) {
+                subclass(ImplementationA::class)
+                subclass(ImplementationB::class)
             }
+        }
 
         @Test
         fun `should parse polymorphic JSON string into correct subclass`() {
-            val jsonStringA =
-                """
+            val jsonString = """
                 {
-                    "type": "ImplementationA",
-                    "valueA": "Hello"
+                  "type": "ImplementationA",
+                  "valueA": "Hello"
                 }
-                """.trimIndent()
-            val parsedA = JsonParser.fromString<BaseType>(jsonStringA, module)
-            assert(parsedA is ImplementationA)
-            assert((parsedA as ImplementationA).valueA == "Hello")
+            """.trimIndent()
+
+            val parsed = JsonParser.fromString<BaseType>(jsonString, module)
+
+            val a = assertIs<ImplementationA>(parsed)
+            assertEquals("Hello", a.valueA)
         }
 
         @Test
         fun `should parse list of polymorphic types from JSON string`() {
-            val jsonString = """[
-                {
-                    "type": "ImplementationA",
-                    "valueA": "First"
-                },
-                {
-                    "type": "ImplementationB",
-                    "valueB": 42
-                }
-            ]"""
-            val parsedList = JsonParser.fromString<List<BaseType>>(jsonString, module)
-            assertEquals(2, parsedList.size)
+            val jsonString = """
+                [
+                  { "type": "ImplementationA", "valueA": "First" },
+                  { "type": "ImplementationB", "valueB": 42 }
+                ]
+            """.trimIndent()
 
-            val itemA = parsedList[0]
-            assertIs<ImplementationA>(itemA)
+            val parsed = JsonParser.fromString<List<BaseType>>(jsonString, module)
+
+            assertEquals(2, parsed.size)
+
+            val itemA = assertIs<ImplementationA>(parsed[0])
             assertEquals("First", itemA.valueA)
 
-            val itemB = parsedList[1]
-            assertIs<ImplementationB>(itemB)
+            val itemB = assertIs<ImplementationB>(parsed[1])
             assertEquals(42, itemB.valueB)
         }
     }

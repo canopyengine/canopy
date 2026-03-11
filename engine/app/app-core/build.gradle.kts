@@ -6,8 +6,9 @@ plugins {
 
 dependencies {
     // Canopy deps
-    implementation(projects.engine.core)
-    implementation(projects.engine.logging)
+    api(projects.engine.core)
+    api(projects.engine.logging)
+    api(projects.engine.data.dataCore)
 
     // Ktx
     api(libs.ktx.app)

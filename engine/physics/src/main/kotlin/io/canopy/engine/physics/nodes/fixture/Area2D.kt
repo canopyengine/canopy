@@ -3,7 +3,7 @@ package io.canopy.engine.physics.nodes.fixture
 import com.badlogic.gdx.physics.box2d.Filter
 import com.badlogic.gdx.physics.box2d.Fixture
 import io.canopy.engine.core.nodes.core.Node
-import io.canopy.engine.core.signals.createSignal
+import io.canopy.engine.core.reactive.event
 import io.canopy.engine.physics.nodes.body.PhysicsBody2D
 import io.canopy.engine.physics.nodes.shape.PhysicsShape2D
 
@@ -22,10 +22,10 @@ class Area2D(
     private var fixture: Fixture? = null
 
     // Signals
-    val bodyEntered = createSignal<Collider2D>()
-    val bodyExited = createSignal<Collider2D>()
-    val areaEntered = createSignal<Area2D>()
-    val areaExited = createSignal<Area2D>()
+    val bodyEntered = event<Collider2D>()
+    val bodyExited = event<Collider2D>()
+    val areaEntered = event<Area2D>()
+    val areaExited = event<Area2D>()
 
     override fun nodeEnterTree() {
         val parentBody = (parent as? PhysicsBody2D)?.body ?: return

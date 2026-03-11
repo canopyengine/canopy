@@ -1,7 +1,9 @@
 package io.canopy.engine.logging.util
 
-import io.canopy.engine.logging.api.LogContext
-import io.canopy.engine.logging.api.Logs
+import io.canopy.engine.logging.LogContext
+import io.canopy.engine.logging.Logs
+
+/* LOG UTILITY METHODS */
 
 fun <T> Logs.withFrame(frame: Long, block: () -> T): T = LogContext.with("frame" to frame, block = block)
 

@@ -27,15 +27,15 @@ rootProject.name = "canopy"
 include(
     ":engine:core",
     ":engine:input",
-    ":engine:graphics",
-    ":engine:physics",
+    //":engine:graphics",
+    //":engine:physics",
     ":engine:logging"
 )
 
 // App modules -
 include(
     ":engine:app:app-core",
-    ":engine:app:app-desktop",
+    //":engine:app:app-desktop",
     ":engine:app:app-headless",
     ":engine:app:app-test"
 )

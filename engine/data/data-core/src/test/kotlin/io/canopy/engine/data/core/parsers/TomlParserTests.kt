@@ -2,12 +2,25 @@ package io.canopy.engine.data.core.parsers
 
 import kotlinx.serialization.Serializable
 import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.DisplayName
+import org.junit.jupiter.api.Nested
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertThrows
 
+/**
+ * Tests for [TomlParser].
+ *
+ * Important constraints:
+ * - TOML has no `null` literal. Strings like `name = null` are invalid TOML.
+ * - TomlParser defaults to `explicitNulls = false`, which means:
+ *   - decoding: missing keys map to defaults / nullables
+ *   - encoding: nullable fields that are null are typically *omitted*, not written as `null`
+ */
 class TomlParserTests {
+
+    // --- Fixtures -----------------------------------------------------------
 
     @Serializable
     data class SimpleConfig(val name: String, val enabled: Boolean = true, val retries: Int = 0)
@@ -24,16 +37,19 @@ class TomlParserTests {
         data class Server(val host: String, val port: Int)
     }
 
+    // --- Strict / default behavior -----------------------------------------
+
     @org.junit.jupiter.api.Nested
-    @DisplayName("Strict TOML parsing tests")
-    inner class StrictTomlParsingTests {
+    @DisplayName("Default TOML parsing behavior")
+    inner class DefaultTomlParsingTests {
 
         @Test
-        fun `parseString - strict - parses valid toml`() {
+        fun `fromString parses valid toml`() {
+            // Verifies basic decoding.
             val toml = """
-            name = "canopy"
-            enabled = true
-            retries = 3
+                name = "canopy"
+                enabled = true
+                retries = 3
             """.trimIndent()
 
             val cfg = TomlParser.fromString<SimpleConfig>(toml)
@@ -44,10 +60,9 @@ class TomlParserTests {
         }
 
         @Test
-        fun `parseString - strict - default values are applied`() {
-            val toml = """
-            name = "canopy"
-            """.trimIndent()
+        fun `fromString applies default values when keys are missing`() {
+            // Missing keys should map to default constructor values.
+            val toml = """name = "canopy""""
 
             val cfg = TomlParser.fromString<SimpleConfig>(toml)
 
@@ -57,25 +72,23 @@ class TomlParserTests {
         }
 
         @Test
-        fun `parseString - strict - rejects null values`() {
-            // TOML spec doesn't support null; strict/compliant mode should reject it.
+        fun `fromString rejects invalid toml null literal`() {
+            // TOML has no null literal; `name = null` should fail parsing/decoding.
             val toml = """
-            name = null
-            enabled = true
-            retries = 1
+                name = null
+                enabled = true
+                retries = 1
             """.trimIndent()
 
-            // Depending on where it fails, ktoml may throw parsing or decoding exceptions.
             assertThrows<Exception> {
                 TomlParser.fromString<SimpleConfig>(toml)
             }
         }
 
         @Test
-        fun `parseString - strict - rejects mixed-type arrays`() {
-            val toml = """
-            values = [1, "two", 3]
-            """.trimIndent()
+        fun `fromString rejects mixed-type arrays`() {
+            // TOML arrays must be homogeneous.
+            val toml = """values = [1, "two", 3]"""
 
             assertThrows<Exception> {
                 TomlParser.fromString<WithArray>(toml)
@@ -83,12 +96,13 @@ class TomlParserTests {
         }
 
         @Test
-        fun `parseString - strict - rejects duplicate keys`() {
+        fun `fromString rejects duplicate keys`() {
+            // Duplicate keys should not be allowed in a single table.
             val toml = """
-            name = "a"
-            name = "b"
-            enabled = true
-            retries = 0
+                name = "a"
+                name = "b"
+                enabled = true
+                retries = 0
             """.trimIndent()
 
             assertThrows<Exception> {
@@ -97,11 +111,12 @@ class TomlParserTests {
         }
 
         @Test
-        fun `parseString - strict - parses nested tables`() {
+        fun `fromString parses nested tables`() {
+            // Verifies decoding TOML tables into nested @Serializable structures.
             val toml = """
-            [server]
-            host = "localhost"
-            port = 8080
+                [server]
+                host = "localhost"
+                port = 8080
             """.trimIndent()
 
             val cfg = TomlParser.fromString<Nested>(toml)
@@ -111,46 +126,57 @@ class TomlParserTests {
         }
 
         @Test
-        fun `toString - strict - encodes and decodes roundtrip`() {
+        fun `toString encodes and decodes roundtrip`() {
+            // Verifies encode -> decode stability.
             val original = SimpleConfig(name = "canopy", enabled = false, retries = 7)
 
             val encoded = TomlParser.toString(original)
             val decoded = TomlParser.fromString<SimpleConfig>(encoded)
 
             assertEquals(original, decoded)
-            // basic sanity: output should include required fields
+
+            // Sanity check: encoded output includes the important fields.
             assertTrue(encoded.contains("""name = "canopy""""))
             assertTrue(encoded.contains("enabled = false"))
             assertTrue(encoded.contains("retries = 7"))
         }
 
         @Test
-        fun `toString - strict - cannot encode data that requires null`() {
+        fun `toString omits null fields when explicitNulls is false`() {
+            // With explicitNulls=false, serializers typically omit null fields rather than writing `null`.
             @Serializable
             data class NullableField(val maybe: String? = null)
 
-            val value = NullableField(null)
+            val original = NullableField(null)
 
-            // In strict/compliant mode, emitting null should fail (TOML has no null).
-            assertEquals("", TomlParser.toString(value))
+            val encoded = TomlParser.toString(original)
+
+            // We should NOT emit `maybe = null` (invalid TOML).
+            assertFalse(encoded.contains("maybe"))
+
+            // Roundtrip should keep null.
+            val decoded = TomlParser.fromString<NullableField>(encoded)
+            assertEquals(original, decoded)
         }
     }
 
+    // --- "Non-strict" customization ----------------------------------------
+    //
+    // NOTE: TOML itself doesn't support null literals. The safest "lenient" behavior you can test is
+    // that missing keys can map to nullable properties / defaults.
+
     @org.junit.jupiter.api.Nested
-    @DisplayName("Non-strict TOML parsing tests")
-    inner class NonStrictTomlParsingTests {
+    @DisplayName("Custom config behavior")
+    inner class CustomTomlParsingTests {
 
         @Test
-        fun `parseString - non-strict - allows null values`() {
+        fun `missing nullable key decodes as null`() {
             val toml = """
-            name = null
-            enabled = true
-            retries = 1
+                enabled = true
+                retries = 1
             """.trimIndent()
 
-            val cfg = TomlParser.fromString<NullableConfig>(toml) {
-                explicitNulls = true // allow nulls in non-strict mode
-            }
+            val cfg = TomlParser.fromString<NullableConfig>(toml)
 
             assertEquals(null, cfg.name)
             assertTrue(cfg.enabled)

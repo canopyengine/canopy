@@ -11,6 +11,13 @@ sealed class InputEvent(open val action: String, open val state: InputState) {
      */
     internal var isHandled = false
 
+    /**
+     * Helper method
+     */
+    fun consume() {
+        isHandled = true
+    }
+
     fun isActionPressed(action: String) = this.action == action && isPressedEvent()
 
     fun isActionJustPressed(action: String) = this.action == action && state == InputState.JustPressed

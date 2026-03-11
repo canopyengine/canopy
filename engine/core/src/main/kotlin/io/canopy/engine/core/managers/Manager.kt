@@ -1,22 +1,34 @@
 package io.canopy.engine.core.managers
 
 /**
- * Manager interface defining setup and teardown methods for system managers.
- * Each manager implementing this interface should provide its own setup and teardown logic.
- * Each manager represents a distinct singleton in the game architecture, responsible for a specific aspect of the game's functionality.
+ * Base interface for engine managers.
+ *
+ * Managers represent global services responsible for a specific subsystem
+ * (e.g. scenes, assets, dependency injection).
+ *
+ * Managers are typically registered through [ManagersRegistry] and follow
+ * a simple lifecycle:
+ *
+ * 1. [setup] is called during application startup.
+ * 2. [teardown] is called when the application shuts down.
+ *
+ * Implementations may override these methods to allocate or release
+ * resources as needed.
  */
 interface Manager {
-    // Logger instance for logging messages related to the Manager
 
     /**
-     * Initializes the manager, setting up necessary resources or configurations.
-     * This method is called when the manager is first created or activated.
+     * Called when the manager is initialized during application startup.
+     *
+     * Use this method to allocate resources, register services,
+     * or perform any initialization logic.
      */
     fun setup() = Unit
 
     /**
-     * Cleans up resources or configurations used by the manager.
-     * This method is called when the manager is no longer needed or is being deactivated.
+     * Called when the manager is being shut down.
+     *
+     * Use this method to release resources or reset internal state.
      */
     fun teardown() = Unit
 }

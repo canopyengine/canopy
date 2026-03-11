@@ -12,7 +12,8 @@ dependencies {
     // Ktx
     api(libs.ktx.assets)
 
-    // JSON
+    // Serialization
+    api(libs.kotlinx.serialization.core)
     api(libs.kotlinx.serialization.json)
 
     // TOML
