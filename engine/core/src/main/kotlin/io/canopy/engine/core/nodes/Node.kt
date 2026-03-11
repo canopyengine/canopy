@@ -353,26 +353,6 @@ abstract class Node<N : Node<N>> protected constructor(
     fun hasChildType(type: KClass<out Node<*>>) = children.values.any { it::class == type }
 
     /* ============================================================
-     * Group management (mirrors into SceneManager)
-     * ============================================================ */
-
-    fun inGroup(group: String) = group in groups
-
-    fun addGroup(group: String) = groups.add(group).also {
-        LogContext.with("nodePath" to path, "group" to group) {
-            log.trace("event" to "node.group.add") { "Add group" }
-        }
-        sceneManager.addToGroup(group, this)
-    }
-
-    fun removeGroup(group: String) = groups.remove(group).also {
-        LogContext.with("nodePath" to path, "group" to group) {
-            log.trace("event" to "node.group.remove") { "Remove group" }
-        }
-        sceneManager.removeFromGroup(group, this)
-    }
-
-    /* ============================================================
      * Tree building
      * ============================================================ */
 
@@ -551,7 +531,7 @@ abstract class Node<N : Node<N>> protected constructor(
 
     infix fun child(node: Node<*>) = addChild(node)
 
-    fun groups(vararg groups: String) = apply { groups.forEach { addGroup(it) } }
+    // fun groups(vararg groups: String) = apply { groups.forEach { addGroup(it) } }
 
     fun <T : Node<T>> patch(path: String, handler: T.() -> Unit) = getNode<T>(path).apply(handler)
 

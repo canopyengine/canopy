@@ -254,7 +254,7 @@ class NodeTests {
         val node = CustomScene {
             patch<EmptyNode2D>("./empty") {
                 name = "patched"
-                at(100f, 100f)
+                position = Vector2(100f, 100f)
             }
         }
         node.buildTree()
