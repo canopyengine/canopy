@@ -1,10 +1,10 @@
 package io.canopy.engine.core.nodes
 
 import kotlin.reflect.KClass
+import io.canopy.engine.core.flow.Context
 import io.canopy.engine.core.managers.SceneManager
 import io.canopy.engine.core.managers.lazyManager
 import io.canopy.engine.core.managers.manager
-import io.canopy.engine.core.reactive.Context
 import io.canopy.engine.logging.EngineLogs
 import io.canopy.engine.logging.LogContext
 

@@ -1,4 +1,4 @@
-package io.canopy.engine.core.reactive
+package io.canopy.engine.core.flow
 
 import kotlin.concurrent.atomics.AtomicInt
 import kotlin.concurrent.atomics.ExperimentalAtomicApi
