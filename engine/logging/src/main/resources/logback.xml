@@ -32,6 +32,42 @@
     <!-- ============================================== -->
     <!-- File Appender (Plain Text Log File - NO COLORS)-->
     <!-- ============================================== -->
+    <appender name="CLIENT_FILE" class="ch.qos.logback.core.rolling.RollingFileAppender">
+        <file>${LOG_DIR}/client.log</file>
+        <immediateFlush>true</immediateFlush>
+
+        <rollingPolicy class="ch.qos.logback.core.rolling.TimeBasedRollingPolicy">
+            <fileNamePattern>${LOG_DIR}/client.%d{yyyy-MM-dd}.%i.log</fileNamePattern>
+            <timeBasedFileNamingAndTriggeringPolicy class="ch.qos.logback.core.rolling.SizeAndTimeBasedFNATP">
+                <maxFileSize>10MB</maxFileSize>
+            </timeBasedFileNamingAndTriggeringPolicy>
+            <maxHistory>30</maxHistory>
+        </rollingPolicy>
+
+        <encoder>
+            <!-- Use standard %msg - no colors -->
+            <pattern>%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{36} - %msg%n</pattern>
+        </encoder>
+    </appender>
+
+    <appender name="ENGINE_FILE" class="ch.qos.logback.core.rolling.RollingFileAppender">
+        <file>${LOG_DIR}/engine.log</file>
+        <immediateFlush>true</immediateFlush>
+
+        <rollingPolicy class="ch.qos.logback.core.rolling.TimeBasedRollingPolicy">
+            <fileNamePattern>${LOG_DIR}/engine.%d{yyyy-MM-dd}.%i.log</fileNamePattern>
+            <timeBasedFileNamingAndTriggeringPolicy class="ch.qos.logback.core.rolling.SizeAndTimeBasedFNATP">
+                <maxFileSize>10MB</maxFileSize>
+            </timeBasedFileNamingAndTriggeringPolicy>
+            <maxHistory>30</maxHistory>
+        </rollingPolicy>
+
+        <encoder>
+            <!-- Use standard %msg - no colors -->
+            <pattern>%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{36} - %msg%n</pattern>
+        </encoder>
+    </appender>
+
     <appender name="FILE" class="ch.qos.logback.core.rolling.RollingFileAppender">
         <file>${LOG_DIR}/canopy.log</file>
         <immediateFlush>true</immediateFlush>
@@ -53,6 +89,44 @@
     <!-- ============================================== -->
     <!-- JSON File Appender (Structured Logs - NO COLORS) jsonl-->
     <!-- ============================================== -->
+    <appender name="CLIENT_FILE_JSONL" class="ch.qos.logback.core.rolling.RollingFileAppender">
+        <file>${LOG_DIR}/client.jsonl</file>
+        <immediateFlush>true</immediateFlush>
+
+        <rollingPolicy class="ch.qos.logback.core.rolling.TimeBasedRollingPolicy">
+            <fileNamePattern>${LOG_DIR}/client.%d{yyyy-MM-dd}.%i.jsonl</fileNamePattern>
+            <timeBasedFileNamingAndTriggeringPolicy class="ch.qos.logback.core.rolling.SizeAndTimeBasedFNATP">
+                <maxFileSize>10MB</maxFileSize>
+            </timeBasedFileNamingAndTriggeringPolicy>
+            <maxHistory>30</maxHistory>
+        </rollingPolicy>
+
+        <encoder class="net.logstash.logback.encoder.LogstashEncoder">
+            <includeMdcKeyName>mdc</includeMdcKeyName>
+            <includeContext>true</includeContext>
+            <includeCallerData>false</includeCallerData>
+        </encoder>
+    </appender>
+
+    <appender name="ENGINE_FILE_JSONL" class="ch.qos.logback.core.rolling.RollingFileAppender">
+        <file>${LOG_DIR}/engine.jsonl</file>
+        <immediateFlush>true</immediateFlush>
+
+        <rollingPolicy class="ch.qos.logback.core.rolling.TimeBasedRollingPolicy">
+            <fileNamePattern>${LOG_DIR}/engine.%d{yyyy-MM-dd}.%i.jsonl</fileNamePattern>
+            <timeBasedFileNamingAndTriggeringPolicy class="ch.qos.logback.core.rolling.SizeAndTimeBasedFNATP">
+                <maxFileSize>10MB</maxFileSize>
+            </timeBasedFileNamingAndTriggeringPolicy>
+            <maxHistory>30</maxHistory>
+        </rollingPolicy>
+
+        <encoder class="net.logstash.logback.encoder.LogstashEncoder">
+            <includeMdcKeyName>mdc</includeMdcKeyName>
+            <includeContext>true</includeContext>
+            <includeCallerData>false</includeCallerData>
+        </encoder>
+    </appender>
+
     <appender name="FILE_JSONL" class="ch.qos.logback.core.rolling.RollingFileAppender">
         <file>${LOG_DIR}/canopy.jsonl</file>
         <immediateFlush>true</immediateFlush>
@@ -141,10 +215,18 @@
     <!-- ============================================== -->
     <logger name="io.canopy.engine" level="DEBUG" additivity="false">
         <appender-ref ref="CONSOLE_ERRORS" />
-        <appender-ref ref="FILE" />
-        <appender-ref ref="FILE_JSONL" />
+        <appender-ref ref="ENGINE_FILE" />
+        <appender-ref ref="ENGINE_FILE_JSONL" />
 <!--        <appender-ref ref="SIFT" />-->
 <!--        <appender-ref ref="SIFT_JSONL" />-->
+    </logger>
+
+    <logger name="io.canopy.client" level="DEBUG" additivity="false">
+        <appender-ref ref="CONSOLE" />
+        <appender-ref ref="CLIENT_FILE" />
+        <appender-ref ref="CLIENT_FILE_JSONL" />
+        <!--        <appender-ref ref="SIFT" />-->
+        <!--        <appender-ref ref="SIFT_JSONL" />-->
     </logger>
 
     <!-- Other canopy logs (Console + Files) -->

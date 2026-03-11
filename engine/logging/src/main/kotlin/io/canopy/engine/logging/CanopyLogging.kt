@@ -49,15 +49,7 @@ object CanopyLogging {
         val runId: String = defaultRunFolderName(),
         val engineVersion: String = "unknown",
         val bannerMode: ConsoleBanner.Mode = ConsoleBanner.Mode.GRADIENT,
-    ) {
-        companion object {
-            val defaultConfig = Config(
-                baseLogDir = Path.of(".canopy/logs"),
-                runId = defaultRunId(),
-                engineVersion = "unknown"
-            )
-        }
-    }
+    )
 
     fun defaultRunFolderName(now: ZonedDateTime = ZonedDateTime.now()): String =
         "canopy-" + DateTimeFormatter.ofPattern("yyyy-MM-dd-HH-mm").format(now)
@@ -77,14 +69,13 @@ object CanopyLogging {
      * - Sets global MDC context (runId, engineVersion)
      * - Records session start time
      */
-    fun init(config: Config = Config.defaultConfig) {
+    fun init(config: Config = Config()) {
         // Create per-run directory: <baseLogDir>/<runId>/
         val runDir = config.baseLogDir.resolve(config.runId)
         if (!runDir.exists()) runDir.createDirectories()
 
         // Set system property BEFORE any logging occurs (so logback.xml can use it)
         System.setProperty("LOG_DIR", runDir.toAbsolutePath().toString())
-        System.err.println("[CanopyLogging] LOG_DIR set to: ${System.getProperty("LOG_DIR")}")
 
         // Reload Logback configuration to use the updated LOG_DIR
         val loggerContext = LoggerFactory.getILoggerFactory() as? LoggerContext
@@ -94,7 +85,6 @@ object CanopyLogging {
                 val configurator = JoranConfigurator()
                 configurator.context = loggerContext
                 configurator.doConfigure(CanopyLogging::class.java.getResourceAsStream("/logback.xml"))
-                System.err.println("[CanopyLogging] Logback configuration reloaded successfully")
             } catch (e: Exception) {
                 System.err.println("Failed to reload Logback configuration: ${e.message}")
                 e.printStackTrace()
@@ -116,7 +106,7 @@ object CanopyLogging {
         // Record start time for session duration calculation
         startedAt.set(Instant.now())
 
-        Logs.get("canopy.engine.session").info(
+        Logs.get("io.canopy.engine.session").info(
             "event" to "session.start",
             "schema" to "canopy-log-v1",
             "startedAt" to startedAt.get().toString(),
@@ -125,7 +115,7 @@ object CanopyLogging {
             "runDir" to runDir.toString()
         ) { "Session start" }
 
-        Logs.get("canopy.bootstrap.logging").info(
+        Logs.get("io.canopy.engine.bootstrap.logging").info(
             "event" to "logging.init",
             "runDir" to runDir.toString()
         ) { "Canopy logging initialized" }
@@ -136,7 +126,7 @@ object CanopyLogging {
         val now = Instant.now()
         val durationMs = start?.let { Duration.between(it, now).toMillis() }
 
-        val sessionLog = Logs.get("canopy.engine.session")
+        val sessionLog = Logs.get("io.canopy.engine.session")
         if (t != null) {
             sessionLog.error(
                 t = t,
