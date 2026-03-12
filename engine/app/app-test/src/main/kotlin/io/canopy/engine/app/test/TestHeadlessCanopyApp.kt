@@ -5,7 +5,6 @@ import com.badlogic.gdx.backends.headless.HeadlessApplication
 import com.badlogic.gdx.backends.headless.HeadlessApplicationConfiguration
 import io.canopy.engine.app.core.CanopyApp
 import io.canopy.engine.app.core.CanopyAppConfig
-import io.canopy.engine.core.managers.ManagersRegistry
 
 /**
  * Headless Canopy application backend intended for tests.
@@ -21,13 +20,6 @@ import io.canopy.engine.core.managers.ManagersRegistry
  * - Global manager state is cleared on construction to avoid cross-test contamination.
  */
 class TestHeadlessCanopyApp internal constructor() : CanopyApp<CanopyAppConfig>() {
-
-    init {
-        // Tests often run in the same JVM. If a previous test registered managers and did not
-        // fully tear down (or the order differed), state can leak across test cases.
-        // Clearing here makes each TestHeadlessCanopyApp start from a clean baseline.
-        ManagersRegistry.teardown()
-    }
 
     // Test backend: no-op lifecycle for deterministic tests.
     // If a specific test needs ticking, it should drive it explicitly.

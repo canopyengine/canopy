@@ -2,7 +2,7 @@ package io.canopy.engine.logging.slf4j
 
 import io.canopy.engine.logging.LogContext
 import io.canopy.engine.logging.LogLevel
-import io.canopy.engine.logging.core.Logger
+import io.canopy.engine.logging.Logger
 import io.canopy.engine.logging.util.withTemporaryMdcContext
 import org.slf4j.Logger as Slf4j
 import org.slf4j.MDC

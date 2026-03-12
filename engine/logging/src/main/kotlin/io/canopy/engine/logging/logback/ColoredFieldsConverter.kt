@@ -13,7 +13,7 @@ import ch.qos.logback.classic.spi.ILoggingEvent
  * - Numeric values: yellow
  * - Null values: red
  *
- * Usage in logback.xml:
+ * Usage in canopy-logback.xml:
  * ```xml
  * <conversionRule conversionWord="coloredMsg"
  *                 converterClass="io.canopy.engine.logging.logback.ColoredFieldsConverter" />

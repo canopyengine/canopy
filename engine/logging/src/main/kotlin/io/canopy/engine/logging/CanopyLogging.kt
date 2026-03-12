@@ -10,39 +10,36 @@ import java.time.format.DateTimeFormatter
 import java.util.concurrent.atomic.AtomicReference
 import ch.qos.logback.classic.LoggerContext
 import ch.qos.logback.classic.joran.JoranConfigurator
-import io.canopy.engine.logging.CanopyLogging.init
 import io.canopy.engine.logging.util.ConsoleBanner
 import org.slf4j.LoggerFactory
 
 /**
  * Programmatic logging bootstrap for the Canopy engine.
  *
- * Why this exists:
- * - Initializes per-run log directories
- * - Sets up system properties (LOG_DIR) for logback.xml
+ * Responsibilities:
+ * - Creates per-run log directories
+ * - Sets LOG_DIR system property used by canopy-logback.xml
  * - Reloads Logback configuration dynamically
- * - Provides startup banner and session tracking
- *
- * Configuration:
- * - Log routing, levels, and appenders are defined in logback.xml
- * - This class handles directory creation and runtime configuration
- *
- * Output layout (per run):
- * - Console: all logs except DEBUG/INFO from engine (WARN/ERROR always visible)
- * - canopy.log: all logs in plain text (no colors)
- * - canopy.json: structured JSON logs (machine readable)
- *
- * Important:
- * - [init] must be called once, as early as possible, before any logging occurs
- * - If the active SLF4J backend is not Logback, this becomes a no-op
+ * - Prints startup banner
+ * - Tracks session lifecycle
  */
 object CanopyLogging {
 
     /**
-     * Logging configuration for a single engine run/session.
+     * Lazily created loggers.
      *
-     * Note: Log levels and rolling policies are now configured in logback.xml.
-     * This Config only controls directory structure and startup behavior.
+     * IMPORTANT:
+     * These must not be initialized eagerly, otherwise SLF4J
+     * may initialize Logback before LOG_DIR is set.
+     */
+    private val sessionLogger
+        get() = engineLogger("session")
+
+    private val bootstrapLogger
+        get() = engineLogger("bootstrap")
+
+    /**
+     * Logging configuration for a single run/session.
      */
     data class Config(
         val baseLogDir: Path = Path.of(".canopy").resolve("logs"),
@@ -51,84 +48,104 @@ object CanopyLogging {
         val bannerMode: ConsoleBanner.Mode = ConsoleBanner.Mode.GRADIENT,
     )
 
+    /**
+     * Default run folder name: YYYYMMDD-HHmmss
+     */
     fun defaultRunFolderName(now: ZonedDateTime = ZonedDateTime.now()): String =
-        "canopy-" + DateTimeFormatter.ofPattern("yyyy-MM-dd-HH-mm").format(now)
+        DateTimeFormatter.ofPattern("yyyyMMdd-HHmmss").format(now)
 
     private val startedAt = AtomicReference<Instant?>(null)
 
     /**
-     * Initializes logging for the current run.
+     * Initialize logging for this run.
      *
-     * Call this once, before any meaningful logging occurs.
-     *
-     * What it does:
-     * - Creates the run directory under baseLogDir
-     * - Sets LOG_DIR system property (used by logback.xml)
-     * - Reloads Logback configuration from logback.xml
-     * - Prints startup banner
-     * - Sets global MDC context (runId, engineVersion)
-     * - Records session start time
+     * Must be called very early in application startup.
      */
     fun init(config: Config = Config()) {
-        // Create per-run directory: <baseLogDir>/<runId>/
         val runDir = config.baseLogDir.resolve(config.runId)
-        if (!runDir.exists()) runDir.createDirectories()
 
-        // Set system property BEFORE any logging occurs (so logback.xml can use it)
+        if (!runDir.exists()) {
+            runDir.createDirectories()
+        }
+
+        /*
+         * Set system property BEFORE Logback config loads.
+         * canopy-logback.xml uses ${LOG_DIR}.
+         */
         System.setProperty("LOG_DIR", runDir.toAbsolutePath().toString())
 
-        // Reload Logback configuration to use the updated LOG_DIR
+        /*
+         * Reload Logback configuration so the new LOG_DIR is used.
+         */
         val loggerContext = LoggerFactory.getILoggerFactory() as? LoggerContext
+
         if (loggerContext != null) {
             try {
                 loggerContext.reset()
+
                 val configurator = JoranConfigurator()
                 configurator.context = loggerContext
-                configurator.doConfigure(CanopyLogging::class.java.getResourceAsStream("/logback.xml"))
+
+                val configUrl =
+                    CanopyLogging::class.java.getResource("/canopy-logback.xml")
+                        ?: throw IllegalStateException("canopy-logback.xml not found on classpath")
+
+                configurator.doConfigure(configUrl)
             } catch (e: Exception) {
-                System.err.println("Failed to reload Logback configuration: ${e.message}")
+                // Do not rely on logging here
+                System.err.println("Failed to reload Logback configuration")
                 e.printStackTrace()
             }
         } else {
             System.err.println("[CanopyLogging] LoggerContext is not Logback")
         }
 
-        // Print the startup banner early. This is cosmetic, but helps users confirm startup.
+        /*
+         * Cosmetic startup banner
+         */
         ConsoleBanner.print(config.engineVersion, config.bannerMode)
 
-        // Global context goes into MDC so it is available on all log lines.
-        // Scoped context (frame/nodePath, etc.) should be set by callers as needed.
+        /*
+         * Global MDC context
+         */
         LogContext.setGlobal(
             "runId" to config.runId,
             "engineVersion" to config.engineVersion
         )
 
-        // Record start time for session duration calculation
-        startedAt.set(Instant.now())
+        /*
+         * Track session start
+         */
+        val now = Instant.now()
+        startedAt.set(now)
 
-        Logs.get("io.canopy.engine.session").info(
+        sessionLogger.info(
             "event" to "session.start",
             "schema" to "canopy-log-v1",
-            "startedAt" to startedAt.get().toString(),
+            "startedAt" to now.toString(),
             "runId" to config.runId,
             "engineVersion" to config.engineVersion,
             "runDir" to runDir.toString()
         ) { "Session start" }
 
-        Logs.get("io.canopy.engine.bootstrap.logging").info(
+        bootstrapLogger.info(
             "event" to "logging.init",
             "runDir" to runDir.toString()
         ) { "Canopy logging initialized" }
     }
 
+    /**
+     * Ends the logging session.
+     */
     fun end(reason: String = "normal", t: Throwable? = null) {
         val start = startedAt.get()
         val now = Instant.now()
-        val durationMs = start?.let { Duration.between(it, now).toMillis() }
 
-        val sessionLog = Logs.get("io.canopy.engine.session")
+        val durationMs =
+            start?.let { Duration.between(it, now).toMillis() }
+
         if (t != null) {
-            sessionLog.error(
+            sessionLogger.error(
                 t = t,
                 "event" to "session.end",
                 "reason" to reason,
@@ -136,7 +153,7 @@ object CanopyLogging {
                 "durationMs" to durationMs
             ) { "Session end" }
         } else {
-            sessionLog.info(
+            sessionLogger.info(
                 "event" to "session.end",
                 "reason" to reason,
                 "endedAt" to now.toString(),
@@ -144,8 +161,4 @@ object CanopyLogging {
             ) { "Session end" }
         }
     }
-
-    fun defaultBaseLogDir(baseDir: Path = Path.of(".canopy")): Path = baseDir.resolve("logs")
-
-    fun defaultRunId(): String = DateTimeFormatter.ofPattern("yyyyMMdd-HHmmss").format(ZonedDateTime.now())
 }

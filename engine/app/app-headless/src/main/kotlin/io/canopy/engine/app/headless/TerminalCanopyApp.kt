@@ -28,6 +28,11 @@ class TerminalCanopyApp internal constructor() : CanopyApp<CanopyAppConfig>(isGr
         title = "Test Headless Canopy Game"
     )
 
+    override fun create() {
+        super.create()
+        log.info { "Starting headless backend" }
+    }
+
     /**
      * Headless backend does not render graphics. The engine loop is still driven
      * by LibGDX, but we intentionally skip the normal render path.
@@ -46,8 +51,6 @@ class TerminalCanopyApp internal constructor() : CanopyApp<CanopyAppConfig>(isGr
      * - The core layer (CanopyApp) handles sync/async launch semantics via latches/handle.
      */
     override fun internalLaunch(config: CanopyAppConfig, vararg args: String) {
-        log.info { "Starting headless backend" }
-
         val headless = HeadlessApplication(this, HeadlessApplicationConfiguration())
 
         // As soon as libGDX is alive, install how to exit this backend.

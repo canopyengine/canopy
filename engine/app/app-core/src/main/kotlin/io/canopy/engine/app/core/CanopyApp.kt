@@ -5,6 +5,7 @@ import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicReference
 import io.canopy.engine.app.core.screen.CanopyScreen
 import io.canopy.engine.app.core.screen.CanopyScreenRegistry
+import io.canopy.engine.core.CanopyBuildInfo
 import io.canopy.engine.core.managers.InjectionManager
 import io.canopy.engine.core.managers.ManagersRegistry
 import io.canopy.engine.core.managers.SceneManager
@@ -96,7 +97,13 @@ abstract class CanopyApp<C : CanopyAppConfig> protected constructor(isGraphical:
      * ============================================================ */
 
     override fun create() {
-        CanopyLogging.init()
+        CanopyLogging.init(
+            CanopyLogging.Config(
+                engineVersion = CanopyBuildInfo.projectVersion
+            )
+        )
+
+        ManagersRegistry.teardown() // clean any previous state
 
         // Provide backend identity via MDC for all logs produced during boot.
         val backendName = this::class.simpleName ?: "unknown"
