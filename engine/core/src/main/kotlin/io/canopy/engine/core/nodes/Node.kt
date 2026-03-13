@@ -1,7 +1,7 @@
 package io.canopy.engine.core.nodes
 
 import kotlin.reflect.KClass
-import io.canopy.engine.core.flow.contexts.Context
+import io.canopy.engine.core.flow.Context
 import io.canopy.engine.core.managers.SceneManager
 import io.canopy.engine.core.managers.lazyManager
 import io.canopy.engine.core.managers.manager
