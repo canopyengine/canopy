@@ -1,5 +1,8 @@
 package io.canopy.engine.core.flow
 
+import io.canopy.engine.core.flow.contexts.Context
+import io.canopy.engine.core.flow.contexts.fromContext
+import io.canopy.engine.core.flow.contexts.fromContextOrNull
 import io.canopy.engine.core.managers.ManagersRegistry
 import io.canopy.engine.core.managers.SceneManager
 import io.canopy.engine.core.nodes.Node
@@ -30,12 +33,6 @@ class ContextTests {
 
     private fun n(name: String, block: EmptyNode.() -> Unit = {}) = EmptyNode(name, block)
 
-    private fun Node<*>.child(name: String, block: EmptyNode.() -> Unit = {}): Node<*> {
-        val c = n(name, block)
-        addChild(c)
-        return c
-    }
-
     private object DebugModeKey // any object key (no ::class)
     private object SeasonKey
 
@@ -57,7 +54,7 @@ class ContextTests {
         // Find the "child" node. Adjust if you have find-by-path utilities.
         val child = root.getNode<EmptyNode>("./child")
 
-        val debug: Boolean = child.resolve("debug")
+        val debug: Boolean = child.fromContext("debug")
         assertTrue(debug)
     }
 
@@ -76,7 +73,7 @@ class ContextTests {
 
         val b = root.getNode<EmptyNode>("./a/b")
 
-        val debug: Boolean = b.resolve("debug")
+        val debug: Boolean = b.fromContext("debug")
         assertTrue(debug)
     }
 
@@ -100,8 +97,8 @@ class ContextTests {
         val a = root.getNode<EmptyNode>("./a")
         val b = root.getNode<EmptyNode>("./b")
 
-        val aDebug: Boolean = a.resolve("debug")
-        val bDebug: Boolean = b.resolve("debug")
+        val aDebug: Boolean = a.fromContext("debug")
+        val bDebug: Boolean = b.fromContext("debug")
 
         assertTrue(aDebug)
         assertFalse(bDebug)
@@ -115,7 +112,7 @@ class ContextTests {
 
         val child = root.getNode<EmptyNode>("./child")
 
-        val missing: String? = child.resolveOrNull("nope")
+        val missing: String? = child.fromContextOrNull("nope")
         assertNull(missing)
     }
 
@@ -127,8 +124,8 @@ class ContextTests {
 
         val child = root.getNode<EmptyNode>("./child")
 
-        val ex = assertThrows<IllegalStateException> {
-            child.resolve<Int>("missing")
+        val ex = assertThrows<NoSuchElementException> {
+            child.fromContext<Int>("missing")
         }
 
         // Optional: if your error message includes path/name
@@ -149,8 +146,8 @@ class ContextTests {
 
         val child = root.getNode<EmptyNode>("./child")
 
-        val debug: Boolean = child.resolve("debugMode")
-        val season: String = child.resolve("season")
+        val debug: Boolean = child.fromContext("debugMode")
+        val season: String = child.fromContext("season")
 
         assertTrue(debug)
         assertEquals("winter", season)
@@ -170,8 +167,8 @@ class ContextTests {
 
         val child = root.getNode<EmptyNode>("./child")
 
-        assertEquals(1, child.resolve("keyA"))
-        assertEquals(2, child.resolve("keyB"))
+        assertEquals(1, child.fromContext("keyA"))
+        assertEquals(2, child.fromContext("keyB"))
     }
 
     @Test
@@ -191,7 +188,7 @@ class ContextTests {
         root.buildTree()
 
         val c = root.getNode<EmptyNode>("./a/b/c")
-        assertEquals(42, c.resolve("x"))
+        assertEquals(42, c.fromContext("x"))
     }
 
     @Test
@@ -211,7 +208,7 @@ class ContextTests {
 
         val c = root.getNode<EmptyNode>("./a")
 
-        assertEquals(1, c.resolve("keyA"))
+        assertEquals(1, c.fromContext("keyA"))
     }
 
     // --- Tiny adapter -------------------------------------------------------

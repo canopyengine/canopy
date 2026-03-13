@@ -1,5 +1,6 @@
-package io.canopy.engine.core.flow
+package io.canopy.engine.core.flow.contexts
 
+import kotlin.jvm.Throws
 import io.canopy.engine.core.nodes.Node
 
 /**
@@ -47,23 +48,23 @@ class Context(
  * @throws IllegalStateException if the key does not exist in any scope.
  */
 @Suppress("UNCHECKED_CAST")
-fun <T : Any> Node<*>.resolve(key: String): T {
+fun <T : Any> Node<*>.fromContextOrNull(key: String): T? {
     var cur: Node<*>? = this
     while (cur != null) {
-        if (cur is Context && cur.provided.containsKey(key)) {
-            val callback = cur.provided[key] ?: error("$key not found in context")
-            return callback() as T // may be null -> will throw if T is non-null; that’s fine
+        if (cur is Context) {
+            val value = cur.provided[key]?.invoke() as? T
+            if (value != null) return value
         }
         cur = cur.parent
     }
-    error("Missing context key '$key' from node $path")
+    return null
 }
 
-fun <T : Any> Node<*>.lazyResolve(key: String) = lazy { resolve<T>(key) }
+fun <T : Any> Node<*>.lazyFromContextOrNull(key: String) = lazy { fromContextOrNull<T>(key) }
 
-/**
- * Fetches value from [Context]s, or null if no value is found
- */
-fun <T : Any> Node<*>.resolveOrNull(key: String): T? = runCatching { resolve<T>(key) }.getOrNull()
+@Throws(NoSuchElementException::class)
+fun <T : Any> Node<*>.fromContext(key: String): T = fromContextOrNull(key)
+    ?: throw NoSuchElementException("$key not found")
 
-fun <T : Any> Node<*>.lazyResolveOrNull(key: String) = lazy { resolveOrNull<T>(key) }
+@Throws(NoSuchElementException::class)
+fun <T : Any> Node<*>.lazyFromContext(key: String) = lazy { fromContext<T>(key) }
