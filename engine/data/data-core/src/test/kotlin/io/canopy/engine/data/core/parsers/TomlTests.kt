@@ -5,12 +5,11 @@ import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.DisplayName
-import org.junit.jupiter.api.Nested
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertThrows
 
 /**
- * Tests for [TomlParser].
+ * Tests for [Toml].
  *
  * Important constraints:
  * - TOML has no `null` literal. Strings like `name = null` are invalid TOML.
@@ -18,7 +17,7 @@ import org.junit.jupiter.api.assertThrows
  *   - decoding: missing keys map to defaults / nullables
  *   - encoding: nullable fields that are null are typically *omitted*, not written as `null`
  */
-class TomlParserTests {
+class TomlTests {
 
     // --- Fixtures -----------------------------------------------------------
 
@@ -52,7 +51,7 @@ class TomlParserTests {
                 retries = 3
             """.trimIndent()
 
-            val cfg = TomlParser.fromString<SimpleConfig>(toml)
+            val cfg = Toml.fromString<SimpleConfig>(toml)
 
             assertEquals("canopy", cfg.name)
             assertTrue(cfg.enabled)
@@ -64,7 +63,7 @@ class TomlParserTests {
             // Missing keys should map to default constructor values.
             val toml = """name = "canopy""""
 
-            val cfg = TomlParser.fromString<SimpleConfig>(toml)
+            val cfg = Toml.fromString<SimpleConfig>(toml)
 
             assertEquals("canopy", cfg.name)
             assertTrue(cfg.enabled) // default
@@ -81,7 +80,7 @@ class TomlParserTests {
             """.trimIndent()
 
             assertThrows<Exception> {
-                TomlParser.fromString<SimpleConfig>(toml)
+                Toml.fromString<SimpleConfig>(toml)
             }
         }
 
@@ -91,7 +90,7 @@ class TomlParserTests {
             val toml = """values = [1, "two", 3]"""
 
             assertThrows<Exception> {
-                TomlParser.fromString<WithArray>(toml)
+                Toml.fromString<WithArray>(toml)
             }
         }
 
@@ -106,7 +105,7 @@ class TomlParserTests {
             """.trimIndent()
 
             assertThrows<Exception> {
-                TomlParser.fromString<SimpleConfig>(toml)
+                Toml.fromString<SimpleConfig>(toml)
             }
         }
 
@@ -119,7 +118,7 @@ class TomlParserTests {
                 port = 8080
             """.trimIndent()
 
-            val cfg = TomlParser.fromString<Nested>(toml)
+            val cfg = Toml.fromString<Nested>(toml)
 
             assertEquals("localhost", cfg.server.host)
             assertEquals(8080, cfg.server.port)
@@ -130,8 +129,8 @@ class TomlParserTests {
             // Verifies encode -> decode stability.
             val original = SimpleConfig(name = "canopy", enabled = false, retries = 7)
 
-            val encoded = TomlParser.toString(original)
-            val decoded = TomlParser.fromString<SimpleConfig>(encoded)
+            val encoded = Toml.toString(original)
+            val decoded = Toml.fromString<SimpleConfig>(encoded)
 
             assertEquals(original, decoded)
 
@@ -149,13 +148,13 @@ class TomlParserTests {
 
             val original = NullableField(null)
 
-            val encoded = TomlParser.toString(original)
+            val encoded = Toml.toString(original)
 
             // We should NOT emit `maybe = null` (invalid TOML).
             assertFalse(encoded.contains("maybe"))
 
             // Roundtrip should keep null.
-            val decoded = TomlParser.fromString<NullableField>(encoded)
+            val decoded = Toml.fromString<NullableField>(encoded)
             assertEquals(original, decoded)
         }
     }
@@ -176,7 +175,7 @@ class TomlParserTests {
                 retries = 1
             """.trimIndent()
 
-            val cfg = TomlParser.fromString<NullableConfig>(toml)
+            val cfg = Toml.fromString<NullableConfig>(toml)
 
             assertEquals(null, cfg.name)
             assertTrue(cfg.enabled)

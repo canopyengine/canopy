@@ -1,7 +1,7 @@
 package io.canopy.engine.data.core.registry
 
 import com.badlogic.gdx.files.FileHandle
-import io.canopy.engine.data.core.parsers.JsonParser
+import io.canopy.engine.data.core.parsers.Json
 
 /**
  * Simple ID-based registry that loads [IdEntry] items from JSON files.
@@ -71,7 +71,7 @@ class IdRegistry<T : IdEntry>(
             .filter { it.extension() == "json" }
             .forEach { file ->
                 // R is reified so JsonParser can decode List<R>.
-                val items: List<R> = JsonParser.fromFile(file)
+                val items: List<R> = Json.fromFile(file)
                 addItemsToRegistry(items)
             }
     }
