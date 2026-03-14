@@ -13,7 +13,7 @@
     <appender name="CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
         <encoder>
             <!-- Use custom converter %coloredMsg for colored fields -->
-            <pattern>%d{HH:mm:ss.SSS} %highlight(%-5level) [%cyan(%logger{36})] %coloredMsg%n</pattern>
+            <pattern>%d{HH:mm:ss.SSS} %highlight(%-5level) [%cyan(%logger{36})] %coloredMsg%n%ex</pattern>
         </encoder>
     </appender>
 
@@ -25,7 +25,7 @@
             <level>WARN</level>
         </filter>
         <encoder>
-            <pattern>%d{HH:mm:ss.SSS} %highlight(%-5level) [%cyan(%logger{36})] %coloredMsg%n</pattern>
+            <pattern>%d{HH:mm:ss.SSS} %highlight(%-5level) [%cyan(%logger{36})] %coloredMsg%n%ex</pattern>
         </encoder>
     </appender>
 
