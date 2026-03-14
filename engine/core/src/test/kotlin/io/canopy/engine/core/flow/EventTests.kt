@@ -1,8 +1,4 @@
-<<<<<<<< HEAD:engine/core/src/test/kotlin/io/canopy/engine/core/reactive/EventTests.kt
-package io.canopy.engine.core.reactive
-========
 package io.canopy.engine.core.flow
->>>>>>>> main:engine/core/src/test/kotlin/io/canopy/engine/core/flow/EventTests.kt
 
 import kotlin.concurrent.atomics.AtomicInt
 import kotlin.concurrent.atomics.ExperimentalAtomicApi
@@ -35,22 +31,13 @@ class EventTests {
         val callback: (Int) -> Unit = { value -> receivedValue = value }
 
         // Register listener
-<<<<<<<< HEAD:engine/core/src/test/kotlin/io/canopy/engine/core/reactive/EventTests.kt
-        signal connect callback
-========
         val connection = signal connect callback
->>>>>>>> main:engine/core/src/test/kotlin/io/canopy/engine/core/flow/EventTests.kt
-
         // Emit a value — listener should receive it
         signal.emit(42)
         assert(receivedValue == 42) { "Listener should have received the emitted value." }
 
         // Disconnect listener
-<<<<<<<< HEAD:engine/core/src/test/kotlin/io/canopy/engine/core/reactive/EventTests.kt
-        signal disconnect callback
-========
         connection.disconnect()
->>>>>>>> main:engine/core/src/test/kotlin/io/canopy/engine/core/flow/EventTests.kt
 
         // Reset and emit again
         receivedValue = null
@@ -71,11 +58,7 @@ class EventTests {
         val secondCallback: (Int) -> Unit = { value -> receivedBySecond = value }
 
         // Register both listeners
-<<<<<<<< HEAD:engine/core/src/test/kotlin/io/canopy/engine/core/reactive/EventTests.kt
-        signal connect firstCallback
-========
         val firstConnection = signal connect firstCallback
->>>>>>>> main:engine/core/src/test/kotlin/io/canopy/engine/core/flow/EventTests.kt
         signal connect secondCallback
 
         // Both listeners should receive the emission
@@ -84,11 +67,7 @@ class EventTests {
         assert(receivedBySecond == 10) { "Second callback should have received 10" }
 
         // Disconnect the first listener
-<<<<<<<< HEAD:engine/core/src/test/kotlin/io/canopy/engine/core/reactive/EventTests.kt
-        signal disconnect firstCallback
-========
         firstConnection.disconnect()
->>>>>>>> main:engine/core/src/test/kotlin/io/canopy/engine/core/flow/EventTests.kt
 
         // Reset state
         receivedByFirst = null
