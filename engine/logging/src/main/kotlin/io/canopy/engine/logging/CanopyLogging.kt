@@ -8,6 +8,7 @@ import java.time.Instant
 import java.time.ZonedDateTime
 import java.time.format.DateTimeFormatter
 import java.util.concurrent.atomic.AtomicReference
+import java.util.function.Supplier
 import ch.qos.logback.classic.Level
 import ch.qos.logback.classic.LoggerContext
 import ch.qos.logback.classic.encoder.PatternLayoutEncoder
@@ -16,10 +17,13 @@ import ch.qos.logback.classic.spi.ILoggingEvent
 import ch.qos.logback.core.ConsoleAppender
 import ch.qos.logback.core.CoreConstants
 import ch.qos.logback.core.filter.Filter
+import ch.qos.logback.core.pattern.DynamicConverter
 import ch.qos.logback.core.rolling.RollingFileAppender
 import ch.qos.logback.core.rolling.SizeAndTimeBasedRollingPolicy
 import ch.qos.logback.core.spi.FilterReply
 import ch.qos.logback.core.util.FileSize
+import io.canopy.engine.logging.CanopyLogging.end
+import io.canopy.engine.logging.CanopyLogging.init
 import io.canopy.engine.logging.util.ConsoleBanner
 import net.logstash.logback.encoder.LogstashEncoder
 import org.slf4j.Logger
@@ -383,13 +387,17 @@ object CanopyLogging {
     fun buildConsoleEncoder(context: LoggerContext): PatternLayoutEncoder {
         // Register conversion word -> converter class
         @Suppress("UNCHECKED_CAST")
-        val registry = (context.getObject(CoreConstants.PATTERN_RULE_REGISTRY) as? MutableMap<String, String>)
-            ?: mutableMapOf<String, String>().also {
-                context.putObject(CoreConstants.PATTERN_RULE_REGISTRY, it)
-            }
+        val supplierRegistry =
+            (
+                context.getObject(CoreConstants.PATTERN_RULE_REGISTRY_FOR_SUPPLIERS)
+                    as? MutableMap<String, Supplier<DynamicConverter<*>>>
+                )
+                ?: mutableMapOf<String, Supplier<DynamicConverter<*>>>().also {
+                    context.putObject(CoreConstants.PATTERN_RULE_REGISTRY_FOR_SUPPLIERS, it)
+                }
 
         // Custom pattern converter (exclude certain MDC keys)
-        registry["mdcx"] = "io.canopy.engine.logging.bootstrap.MdcExcludeConverter" // FQCN
+        // registry["mdcx"] = "io.canopy.engine.logging.bootstrap.MdcExcludeConverter" // FQCN
 
         return PatternLayoutEncoder().apply {
             this.context = context

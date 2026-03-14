@@ -5,7 +5,7 @@ import com.badlogic.gdx.backends.headless.HeadlessApplication
 import com.badlogic.gdx.backends.headless.HeadlessApplicationConfiguration
 import io.canopy.engine.app.core.CanopyApp
 import io.canopy.engine.app.core.CanopyAppConfig
-import io.canopy.engine.logging.logger
+import io.canopy.engine.logging.EngineLogs
 
 /**
  * Headless (no window) Canopy application backend.
@@ -22,7 +22,7 @@ import io.canopy.engine.logging.logger
  */
 class TerminalCanopyApp internal constructor() : CanopyApp<CanopyAppConfig>(isGraphical = false) {
 
-    private val log = logger<TerminalCanopyApp>()
+    private val log = EngineLogs.app
 
     override fun defaultConfig(): CanopyAppConfig = CanopyAppConfig(
         title = "Test Headless Canopy Game"
