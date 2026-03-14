@@ -1,7 +1,5 @@
 package io.canopy.engine.logging
 
-import io.canopy.engine.logging.core.Logger
-
 /**
  * Centralized access point for engine loggers.
  *
@@ -19,10 +17,10 @@ import io.canopy.engine.logging.core.Logger
  *
  * Example usage:
  *
- * ```
+ *
  * EngineLogs.physics.debug { "Stepping physics simulation" }
  * EngineLogs.render.info { "Renderer initialized" }
- * ```
+ *
  */
 object EngineLogs {
 
@@ -31,7 +29,7 @@ object EngineLogs {
      *
      * @param name subsystem identifier (e.g. "physics", "render", "scene")
      */
-    fun subsystem(name: String): Logger = Logs.get("canopy.engine.$name")
+    fun subsystem(name: String): Logger = CanopyLogs.get("io.canopy.engine.$name")
 
     /* ------------------------------------------------------------
      * Core engine subsystems
@@ -56,3 +54,5 @@ object EngineLogs {
 
     val app: Logger = subsystem("app")
 }
+
+fun engineLogger(subsystem: String) = EngineLogs.subsystem(subsystem)

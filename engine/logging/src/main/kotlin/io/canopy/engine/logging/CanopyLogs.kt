@@ -1,6 +1,6 @@
 package io.canopy.engine.logging
 
-import io.canopy.engine.logging.core.Logger
+import io.canopy.engine.logging.CanopyLogs.setProvider
 import io.canopy.engine.logging.slf4j.Slf4jLogger
 import org.slf4j.LoggerFactory
 
@@ -22,7 +22,7 @@ import org.slf4j.LoggerFactory
  * log.info { "Initialization complete" }
  * ```
  */
-object Logs {
+object CanopyLogs {
 
     /**
      * Active logger provider.
@@ -70,6 +70,6 @@ object Logs {
  * the [Logs] object explicitly.
  */
 
-inline fun <reified T : Any> logger(): Logger = Logs.of<T>()
+inline fun <reified T : Any> logger(): Logger = CanopyLogs.of<T>()
 
-fun logger(name: String): Logger = Logs.get(name)
+fun logger(name: String): Logger = CanopyLogs.get(name)

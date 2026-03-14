@@ -32,7 +32,6 @@ class EventTests {
 
         // Register listener
         val connection = signal connect callback
-
         // Emit a value — listener should receive it
         signal.emit(42)
         assert(receivedValue == 42) { "Listener should have received the emitted value." }

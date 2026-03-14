@@ -1,6 +1,4 @@
-package io.canopy.engine.logging.core
-
-import io.canopy.engine.logging.LogLevel
+package io.canopy.engine.logging
 
 /**
  * Core logging abstraction used by the engine.

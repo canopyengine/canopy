@@ -13,7 +13,6 @@ import io.canopy.engine.data.core.assets.AssetsManager
 import io.canopy.engine.logging.CanopyLogging
 import io.canopy.engine.logging.EngineLogs
 import io.canopy.engine.logging.LogContext
-import io.canopy.engine.logging.LogLevel
 import ktx.app.KtxGame
 import ktx.async.KtxAsync
 
@@ -53,11 +52,6 @@ abstract class CanopyApp<C : CanopyAppConfig> protected constructor(isGraphical:
     protected var onRender: (CanopyApp<C>) -> Unit = {}
     protected var onResize: (CanopyApp<C>, width: Int, height: Int) -> Unit = { _, _, _ -> }
     protected var onDispose: (CanopyApp<C>) -> Unit = {}
-
-    /**
-     * User log verbosity written to `user.log`.
-     */
-    protected var logLevel: LogLevel = LogLevel.DEBUG
 
     /* ============================================================
      * Async launch / app handle plumbing
@@ -103,21 +97,13 @@ abstract class CanopyApp<C : CanopyAppConfig> protected constructor(isGraphical:
      * ============================================================ */
 
     override fun create() {
-        // 1) Logging first (captures the rest of startup)
-        val runId = CanopyLogging.defaultRunId()
-        val logDir = CanopyLogging.defaultBaseLogDir()
-        val engineVersion = CanopyBuildInfo.projectVersion
-
         CanopyLogging.init(
             CanopyLogging.Config(
-                baseLogDir = logDir,
-                runId = runId,
-                engineVersion = engineVersion,
-                consoleLevel = LogLevel.INFO,
-                engineLogLevel = LogLevel.INFO,
-                userLogLevel = logLevel
+                engineVersion = CanopyBuildInfo.projectVersion
             )
         )
+
+        ManagersRegistry.teardown() // clean any previous state
 
         // Provide backend identity via MDC for all logs produced during boot.
         val backendName = this::class.simpleName ?: "unknown"

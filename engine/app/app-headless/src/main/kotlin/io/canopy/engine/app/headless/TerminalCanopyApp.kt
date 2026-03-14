@@ -28,6 +28,11 @@ class TerminalCanopyApp internal constructor() : CanopyApp<CanopyAppConfig>(isGr
         title = "Test Headless Canopy Game"
     )
 
+    override fun create() {
+        super.create()
+        log.info { "Starting headless backend" }
+    }
+
     /**
      * Headless backend does not render graphics. The engine loop is still driven
      * by LibGDX, but we intentionally skip the normal render path.
