@@ -23,7 +23,7 @@ import kotlinx.serialization.modules.SerializersModule
  * tomlkt parses TOML according to the TOML specification. This parser does not attempt
  * to accept non-standard TOML extensions by default.
  */
-object TomlParser {
+object Toml {
 
     /* ============================================================
      * Decoding

@@ -3,7 +3,7 @@ package io.canopy.engine.data.saving
 import kotlin.reflect.KClass
 import com.badlogic.gdx.files.FileHandle
 import io.canopy.engine.core.managers.Manager
-import io.canopy.engine.data.core.parsers.JsonParser
+import io.canopy.engine.data.core.parsers.Json
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.JsonObject
 
@@ -92,14 +92,14 @@ class SaveManager(vararg destinations: Pair<String, (slot: Int) -> FileHandle>) 
         val fileLocation = destinationsMap[destination]?.invoke(slot) ?: return
         if (!fileLocation.exists()) return
 
-        val jsonData = JsonParser.rawParseFile(fileLocation)
+        val jsonData = Json.rawParseFile(fileLocation)
         val registry = dataRegistry[destination] ?: return
 
         registry.keys.forEach { module ->
             val jsonElement = jsonData[module.id] ?: return@forEach
 
             val typedModule = module as SaveModule<Any>
-            val decodedData = JsonParser.decodeJsonElement(typedModule.serializer, jsonElement)
+            val decodedData = Json.decodeJsonElement(typedModule.serializer, jsonElement)
 
             registry[typedModule] = decodedData
             typedModule.onLoad(decodedData)
@@ -148,12 +148,12 @@ class SaveManager(vararg destinations: Pair<String, (slot: Int) -> FileHandle>) 
                 val data = typedModule.onSave()
                 put(
                     typedModule.id,
-                    JsonParser.encodeJsonElement(typedModule.serializer, data)
+                    Json.encodeJsonElement(typedModule.serializer, data)
                 )
             }
         }
 
-        JsonParser.toFile(JsonObject(jsonMap), fileLocation)
+        Json.toFile(JsonObject(jsonMap), fileLocation)
     }
 
     /** Saves all destinations for the given slot (e.g. profile + world + settings). */

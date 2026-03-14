@@ -40,21 +40,15 @@ abstract class Node2D<N : Node2D<N>> protected constructor(name: String, block: 
      * ============================================================ */
 
     /** Local position in 2D space. */
-    open var position: Vector2 = Vector2.Zero
+    var position: Vector2 = Vector2.Zero
 
     /** Local scale in 2D space. */
-    open var scale: Vector2 = Vector2(1f, 1f)
+    var scale: Vector2 = Vector2(1f, 1f)
 
     /** Local rotation in radians. */
-    open var rotation: Float = 0f
+    var rotation: Float = 0f
 
     /* ============================================================
      * DSL helpers
      * ============================================================ */
-
-    fun at(x: Float, y: Float) = apply { position.set(x, y) }
-    fun at(pos: Vector2) = apply { position.set(pos) }
-
-    fun scaled(x: Float, y: Float) = apply { this.scale.set(x, y) }
-    fun scaled(scale: Vector2) = apply { this.scale.set(scale) }
 }

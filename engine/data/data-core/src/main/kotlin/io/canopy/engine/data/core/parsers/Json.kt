@@ -22,7 +22,7 @@ import kotlinx.serialization.serializer
  * Note:
  * The [config] lambda is applied last, so callers can override any default.
  */
-object JsonParser {
+object Json {
 
     /* ============================================================
      * Decoding
@@ -111,13 +111,13 @@ object JsonParser {
      * Useful when you already parsed JSON and want to decode only a subtree.
      */
     inline fun <reified T> decodeJsonElement(serializer: KSerializer<T> = serializer(), element: JsonElement): T =
-        Json.decodeFromJsonElement(serializer, element)
+        kotlinx.serialization.json.Json.decodeFromJsonElement(serializer, element)
 
     /**
      * Encodes [data] into a [JsonElement] using the provided [serializer].
      */
     inline fun <reified T> encodeJsonElement(serializer: KSerializer<T> = serializer(), data: T): JsonElement =
-        Json.encodeToJsonElement(serializer, data)
+        kotlinx.serialization.json.Json.encodeToJsonElement(serializer, data)
 
     fun buildJson(module: SerializersModule? = null, config: JsonBuilder.() -> Unit = {}) = Json {
         if (module != null) serializersModule = module

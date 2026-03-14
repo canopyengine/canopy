@@ -12,13 +12,13 @@ import org.junit.jupiter.api.Nested
 import org.junit.jupiter.api.Test
 
 /**
- * Tests for [JsonParser].
+ * Tests for [Json].
  *
  * JsonParser defaults (important for these tests):
  * - ignoreUnknownKeys = true
  * - classDiscriminator = "type" for polymorphic decoding
  */
-class JsonParserTests {
+class JsonTests {
 
     // --- Test fixtures -------------------------------------------------------
 
@@ -47,7 +47,7 @@ class JsonParserTests {
             // Verifies basic decode from a JSON object into a Kotlin @Serializable type.
             val jsonString = """{"id":1,"name":"Test"}"""
 
-            val parsed = JsonParser.fromString<SimpleData>(jsonString)
+            val parsed = Json.fromString<SimpleData>(jsonString)
 
             assertEquals(1, parsed.id)
             assertEquals("Test", parsed.name)
@@ -58,7 +58,7 @@ class JsonParserTests {
             // JsonParser is configured with ignoreUnknownKeys = true.
             val jsonString = """{"id":2,"name":"Unknown","extraField":"ignored"}"""
 
-            val parsed = JsonParser.fromString<SimpleData>(jsonString)
+            val parsed = Json.fromString<SimpleData>(jsonString)
 
             assertEquals(2, parsed.id)
             assertEquals("Unknown", parsed.name)
@@ -69,7 +69,7 @@ class JsonParserTests {
             // Verifies decoding generic collections works (reified type).
             val jsonString = """[{"id":3,"name":"Item1"},{"id":4,"name":"Item2"}]"""
 
-            val parsed = JsonParser.fromString<List<SimpleData>>(jsonString)
+            val parsed = Json.fromString<List<SimpleData>>(jsonString)
 
             assertEquals(2, parsed.size)
 
@@ -109,7 +109,7 @@ class JsonParserTests {
                 }
             """.trimIndent()
 
-            val parsed = JsonParser.fromString<BaseType>(jsonString, module)
+            val parsed = Json.fromString<BaseType>(jsonString, module)
 
             val a = assertIs<ImplementationA>(parsed)
             assertEquals("Hello", a.valueA)
@@ -124,7 +124,7 @@ class JsonParserTests {
                 ]
             """.trimIndent()
 
-            val parsed = JsonParser.fromString<List<BaseType>>(jsonString, module)
+            val parsed = Json.fromString<List<BaseType>>(jsonString, module)
 
             assertEquals(2, parsed.size)
 
