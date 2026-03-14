@@ -23,7 +23,6 @@ import ch.qos.logback.core.rolling.SizeAndTimeBasedRollingPolicy
 import ch.qos.logback.core.spi.FilterReply
 import ch.qos.logback.core.util.FileSize
 import io.canopy.engine.logging.util.ConsoleBanner
-import io.canopy.engine.logging.util.MdcExcludeConverter
 import net.logstash.logback.encoder.LogstashEncoder
 import org.slf4j.Logger
 import org.slf4j.LoggerFactory
@@ -384,7 +383,7 @@ object CanopyLogging {
      * while still allowing specific keys to be displayed (e.g. runId).
      */
     fun buildConsoleEncoder(context: LoggerContext): PatternLayoutEncoder {
-        // 1) New registry (logback 1.5.13+): conversionWord -> Supplier<DynamicConverter>
+        // Register conversion word -> converter class
         @Suppress("UNCHECKED_CAST")
         val supplierRegistry =
             (
@@ -395,17 +394,8 @@ object CanopyLogging {
                     context.putObject(CoreConstants.PATTERN_RULE_REGISTRY_FOR_SUPPLIERS, it)
                 }
 
-        supplierRegistry["mdcx"] = Supplier { MdcExcludeConverter() }
-
-        // 2) Legacy registry (older logback): conversionWord -> FQCN (keep if you support < 1.5.13)
-        @Suppress("UNCHECKED_CAST")
-        val legacyRegistry =
-            (context.getObject(CoreConstants.PATTERN_RULE_REGISTRY) as? MutableMap<String, String>)
-                ?: mutableMapOf<String, String>().also {
-                    context.putObject(CoreConstants.PATTERN_RULE_REGISTRY, it)
-                }
-
-        legacyRegistry["mdcx"] = MdcExcludeConverter::class.java.canonicalName
+        // Custom pattern converter (exclude certain MDC keys)
+        registry["mdcx"] = "io.canopy.engine.logging.bootstrap.MdcExcludeConverter" // FQCN
 
         return PatternLayoutEncoder().apply {
             this.context = context

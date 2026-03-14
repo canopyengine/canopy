@@ -1,4 +1,8 @@
+<<<<<<<< HEAD:engine/core/src/test/kotlin/io/canopy/engine/core/reactive/EventTests.kt
 package io.canopy.engine.core.reactive
+========
+package io.canopy.engine.core.flow
+>>>>>>>> main:engine/core/src/test/kotlin/io/canopy/engine/core/flow/EventTests.kt
 
 import kotlin.concurrent.atomics.AtomicInt
 import kotlin.concurrent.atomics.ExperimentalAtomicApi
