@@ -45,8 +45,8 @@
         </rollingPolicy>
 
         <encoder>
-            <!-- Use standard %msg - no colors -->
-            <pattern>%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{36} %msg%n</pattern>
+            <!-- Use standard %msg - no colors; include %ex for stack traces -->
+            <pattern>%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{36} %msg%n%ex</pattern>
         </encoder>
     </appender>
 
@@ -63,8 +63,8 @@
         </rollingPolicy>
 
         <encoder>
-            <!-- Use standard %msg - no colors -->
-            <pattern>%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{36} %msg%n</pattern>
+            <!-- Use standard %msg - no colors; include %ex for stack traces -->
+            <pattern>%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{36} %msg%n%ex</pattern>
         </encoder>
     </appender>
 
