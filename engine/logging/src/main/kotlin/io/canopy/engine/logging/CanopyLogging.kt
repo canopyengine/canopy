@@ -22,6 +22,8 @@ import ch.qos.logback.core.rolling.RollingFileAppender
 import ch.qos.logback.core.rolling.SizeAndTimeBasedRollingPolicy
 import ch.qos.logback.core.spi.FilterReply
 import ch.qos.logback.core.util.FileSize
+import io.canopy.engine.logging.CanopyLogging.end
+import io.canopy.engine.logging.CanopyLogging.init
 import io.canopy.engine.logging.util.ConsoleBanner
 import net.logstash.logback.encoder.LogstashEncoder
 import org.slf4j.Logger
@@ -395,7 +397,7 @@ object CanopyLogging {
                 }
 
         // Custom pattern converter (exclude certain MDC keys)
-        registry["mdcx"] = "io.canopy.engine.logging.bootstrap.MdcExcludeConverter" // FQCN
+        // registry["mdcx"] = "io.canopy.engine.logging.bootstrap.MdcExcludeConverter" // FQCN
 
         return PatternLayoutEncoder().apply {
             this.context = context
