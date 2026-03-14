@@ -51,6 +51,8 @@ class TerminalCanopyApp internal constructor() : CanopyApp<CanopyAppConfig>(isGr
      * - The core layer (CanopyApp) handles sync/async launch semantics via latches/handle.
      */
     override fun internalLaunch(config: CanopyAppConfig, vararg args: String) {
+        log.info { "Starting headless backend" }
+
         val headless = HeadlessApplication(this, HeadlessApplicationConfiguration())
 
         // As soon as libGDX is alive, install how to exit this backend.

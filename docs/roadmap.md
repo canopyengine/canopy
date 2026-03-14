@@ -1,48 +1,118 @@
-
 <p style="display: flex; align-items: center; gap: 10px;">
   <a href="../README.md">
     <img src="assets/canopy-icon.png" width="50" alt="Canopy Engine logo">
   </a>
-    <span style="text-align: center; font-size: 1.5em; font-weight: bold;">Roadmap</span>
+  <span style="font-size: 1.5em; font-weight: bold;">Roadmap</span>
 </p>
 
-### In this page, you can find the **roadmap** for the development of **Canopy**.
+This page outlines the **development roadmap** for the Canopy Engine.
+
+The roadmap describes upcoming milestones and the goals of each stage of development.
 
 ---
 
-## Next Milestones
+# Next Milestone
 
-### **Maiden Release - First Flight** (We're here!)
+## 🌱 Maiden Release — *First Flight*
 
-This will be the first public release of **Canopy**. Its goal is to provide a **headless version** of the engine, 
-capable of running the core features in the **terminal**. This will allow us to test the core architecture and features 
-of the engine, and to gather important feedback. 
+The **Maiden Release** will be the first public version of Canopy.
 
-Features to be implemented in this release include:
-- **Scene and node management**: the ability to create and manage scenes, and to define them in a declarative way using a node system.
-- **Signal system**: the ability to send and receive signals between different parts of the engine, allowing for a decoupled architecture.
-- **Metrics system**: the ability to track and log important metrics about the engine's performance and usage, which will be crucial for optimizing the engine and identifying bottlenecks.
+Its goal is to deliver a **headless runtime** that runs entirely in the **terminal**, allowing the core engine architecture to be tested and validated before introducing graphical backends.
 
-- **Text rendering**: the ability to render text in the terminal. Text styles will be supported, allowing for different fonts, sizes, and colors.
-- **Keyboard input**: the ability to detect and respond to keyboard input.
-- **Audio playback**: the ability to play audio files in the terminal.
-
-There are two main goals for this release:
-1. **Test the core architecture and log important metrics**: this release will allow us to test the core architecture of 
-the engine, and to gather important feedback about its design and implementation. The metrics system will be crucial for 
-identifying bottlenecks and optimizing the engine in future releases.
-2. **Release a ready-to-use version of the engine**: this release will provide a ready-to-use version of the engine, 
-which can be used to create simple games and demos. This will allow us to gather feedback from developers and to identify 
-areas for improvement in future releases.
-
-
-#### **Tech demo**: A simple text-driven adventure game, showcasing the core features of the engine.
-#### **Estimated release date**: **TBA**.
-#### **[Release details](releases/0.1.0.md)**
+This stage focuses on stabilizing the **core architecture** and gathering feedback from early users.
 
 ---
 
+## Goals
+
+### Validate the Engine Architecture
+
+This release will test the fundamental design of the engine, including:
+
+- node-based scene architecture
+- reactive state systems
+- runtime processing systems
+
+Early feedback will help refine the architecture before additional features are introduced.
+
 ---
 
-Canopy 2026
+### Provide a Usable Prototype
 
+The engine should already be usable for building **simple terminal-based games or simulations**.
+
+This helps validate the developer experience and identify usability issues.
+
+---
+
+# Planned Features
+
+### Core Engine
+
+- Scene and node management
+- Declarative node DSL
+- Behavior system
+- Tree system execution
+
+---
+
+### Runtime Systems
+
+- Signal system for decoupled communication
+- Metrics system for performance tracking
+
+---
+
+### Terminal Runtime
+
+- Text rendering in the terminal
+- Styled text support (colors, formatting)
+- Keyboard input handling
+- Audio playback
+
+---
+
+# Tech Demo
+
+The planned demo for this version is a text-based **Ecosystem Simulation**
+
+The demo will demonstrate:
+
+- scene composition
+- signals and event-driven logic
+- terminal rendering
+- gameplay interaction
+
+---
+
+# Release Information
+
+| Item | Value |
+|-----|------|
+| Version | **0.1.0** |
+| Codename | *First Flight* |
+| Status | In development |
+| Estimated Release | **TBA** |
+
+More details can be found in the release notes:
+
+➡ **[Release Details](releases/0.1.0.md)**
+
+---
+
+# Future Direction
+
+After the Maiden Release, development will focus on:
+
+- graphical rendering backends
+- improved tooling
+- expanded runtime systems
+- additional engine modules
+
+These goals will evolve as the architecture stabilizes and community feedback is collected.
+
+---
+
+<p align="center">
+  Canopy Roadmap • 2026
+</p>

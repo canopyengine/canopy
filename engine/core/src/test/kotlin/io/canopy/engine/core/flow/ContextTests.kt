@@ -1,4 +1,4 @@
-package io.canopy.engine.core.reactive
+package io.canopy.engine.core.flow
 
 import io.canopy.engine.core.managers.ManagersRegistry
 import io.canopy.engine.core.managers.SceneManager

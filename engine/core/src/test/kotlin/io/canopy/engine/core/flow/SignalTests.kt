@@ -1,13 +1,15 @@
-package io.canopy.engine.core.reactive
+package io.canopy.engine.core.flow
 
 import kotlin.test.Test
+import io.canopy.engine.core.flow.events.asSignal
+import io.canopy.engine.core.flow.events.signal
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.yield
 import org.junit.jupiter.api.Assertions.assertEquals
 
 /**
- * Tests for [Signal], a mutable value that notifies observers when it changes.
+ * Tests for [io.canopy.engine.core.flow.events.Signal], a mutable value that notifies observers when it changes.
  *
  * Signal supports two observation mechanisms:
  * - callback/event style via `connect` (weak listeners)
@@ -28,7 +30,7 @@ class SignalTests {
         signal connect callback
 
         // Mutate the signal
-        signal.value = 42
+        signal.value += 42
 
         // Listener should receive the new value
         assert(receivedValue == 42) { "Listener should have received the emitted value." }
@@ -107,9 +109,9 @@ class SignalTests {
         }
 
         // Update values
-        signal.value = 42
+        signal.update { 42 }
         signal.value = 100
-        signal.value = 100 // duplicate -> should not be collected (distinctUntilChanged)
+        signal.update { 100 } // duplicate -> should not be collected (distinctUntilChanged)
 
         // Give collector a chance to run
         yield()
@@ -120,13 +122,13 @@ class SignalTests {
 
     @Test
     fun `asSignal should wrap a value and allow updates`() {
-        val signalVal = 10.asSignal()
+        val signal = 10.asSignal()
 
         // Initial value should be preserved
-        assertEquals(10, signalVal.value) { "Wrapped value should match the initial value." }
+        assertEquals(10, signal.value) { "Wrapped value should match the initial value." }
 
         // Updating the signal should update its stored value
-        signalVal.value = 20
-        assertEquals(20, signalVal.value) { "Wrapped value should update when assigned." }
+        signal.update { 20 }
+        assertEquals(20, signal.value) { "Wrapped value should update when assigned." }
     }
 }

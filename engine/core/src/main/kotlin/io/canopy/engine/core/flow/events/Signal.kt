@@ -1,4 +1,4 @@
-package io.canopy.engine.core.reactive
+package io.canopy.engine.core.flow.events
 
 import kotlin.properties.Delegates
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -73,6 +73,13 @@ class Signal<T>(initial: T) {
 
     /** Removes all listeners registered via [connect]. */
     fun clear() = valueChanged.clear()
+
+    /**
+     * Allows value updates based on previous value
+     */
+    fun update(handler: (T) -> T) {
+        value = handler(value)
+    }
 }
 
 /* ------------------------------------------------------------------
