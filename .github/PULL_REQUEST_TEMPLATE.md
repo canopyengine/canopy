@@ -3,11 +3,9 @@ Briefly describe what this PR changes and why.
 
 **Changes**
 - 
--
--
 
 **Related Issues**
-Closes #
+- 
 
 **Type of Change**
 - [ ] Bug fix
@@ -18,12 +16,9 @@ Closes #
 - [ ] Chore
 - [ ] Breaking change
 
-**How to Test**
+**How to Test**(if applicable)
 Steps to verify the change:
 
-1.
-2.
-3.
 
 **Checklist**
 - [ ] Code follows project style

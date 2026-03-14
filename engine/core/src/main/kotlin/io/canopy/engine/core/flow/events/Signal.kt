@@ -1,4 +1,4 @@
-package io.canopy.engine.core.flow
+package io.canopy.engine.core.flow.events
 
 import kotlin.properties.Delegates
 import kotlinx.coroutines.flow.MutableSharedFlow
