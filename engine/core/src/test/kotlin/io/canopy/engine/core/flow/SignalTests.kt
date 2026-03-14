@@ -1,13 +1,15 @@
 package io.canopy.engine.core.flow
 
 import kotlin.test.Test
+import io.canopy.engine.core.flow.events.asSignal
+import io.canopy.engine.core.flow.events.signal
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.yield
 import org.junit.jupiter.api.Assertions.assertEquals
 
 /**
- * Tests for [Signal], a mutable value that notifies observers when it changes.
+ * Tests for [io.canopy.engine.core.flow.events.Signal], a mutable value that notifies observers when it changes.
  *
  * Signal supports two observation mechanisms:
  * - callback/event style via `connect` (weak listeners)

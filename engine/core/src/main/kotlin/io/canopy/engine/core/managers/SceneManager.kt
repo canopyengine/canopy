@@ -2,8 +2,8 @@ package io.canopy.engine.core.managers
 
 import kotlin.reflect.KClass
 import com.badlogic.gdx.math.Vector2
-import io.canopy.engine.core.flow.asSignal
-import io.canopy.engine.core.flow.event
+import io.canopy.engine.core.flow.events.asSignal
+import io.canopy.engine.core.flow.events.event
 import io.canopy.engine.core.nodes.Node
 import io.canopy.engine.core.nodes.TreeSystem
 import io.canopy.engine.logging.EngineLogs
