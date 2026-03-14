@@ -63,8 +63,8 @@
         </rollingPolicy>
 
         <encoder>
-            <!-- Use standard %msg - no colors -->
-            <pattern>%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{36} %msg%n</pattern>
+            <!-- Use standard %msg - no colors, and include exceptions -->
+            <pattern>%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{36} %msg%ex%n</pattern>
         </encoder>
     </appender>
 
