@@ -3,6 +3,7 @@ package io.canopy.engine.core.flow
 import kotlin.concurrent.atomics.AtomicInt
 import kotlin.concurrent.atomics.ExperimentalAtomicApi
 import kotlin.test.Test
+import io.canopy.engine.core.flow.events.event
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.joinAll
 import kotlinx.coroutines.launch
@@ -30,14 +31,13 @@ class EventTests {
         val callback: (Int) -> Unit = { value -> receivedValue = value }
 
         // Register listener
-        signal connect callback
-
+        val connection = signal connect callback
         // Emit a value — listener should receive it
         signal.emit(42)
         assert(receivedValue == 42) { "Listener should have received the emitted value." }
 
         // Disconnect listener
-        signal disconnect callback
+        connection.disconnect()
 
         // Reset and emit again
         receivedValue = null
@@ -58,7 +58,7 @@ class EventTests {
         val secondCallback: (Int) -> Unit = { value -> receivedBySecond = value }
 
         // Register both listeners
-        signal connect firstCallback
+        val firstConnection = signal connect firstCallback
         signal connect secondCallback
 
         // Both listeners should receive the emission
@@ -67,7 +67,7 @@ class EventTests {
         assert(receivedBySecond == 10) { "Second callback should have received 10" }
 
         // Disconnect the first listener
-        signal disconnect firstCallback
+        firstConnection.disconnect()
 
         // Reset state
         receivedByFirst = null
