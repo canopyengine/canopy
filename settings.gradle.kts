@@ -22,33 +22,28 @@ plugins {
 }
 
 rootProject.name = "canopy"
+enableFeaturePreview("TYPESAFE_PROJECT_ACCESSORS")
+
+/* ===================================== */
+/*      Canopy Modules Dependencies      */
+/* ===================================== */
 
 // Root modules
-include(
-    ":engine:core",
-    ":engine:input",
-    //":engine:graphics",
-    //":engine:physics",
-    ":engine:logging"
-)
+include(":engine:core")
+include(":engine:input")
+// include(":engine:graphics")
+// include(":engine:physics")
+include(":engine:logging")
 
-// App modules -
-include(
-    ":engine:app:app-core",
-    //":engine:app:app-desktop",
-    ":engine:app:app-headless",
-    ":engine:app:app-test"
-)
+// App modules
+include(":engine:app:app-core")
+// include(":engine:app:app-desktop")
+include(":engine:app:app-terminal")
+include(":engine:app:app-test")
 
-// Data modules -
-include(
-    ":engine:data:data-core",
-    ":engine:data:data-saving",
-)
+// Data modules
+include(":engine:data:data-core")
+include(":engine:data:data-saving")
 
-// Misc modules -
-include(
-    ":engine:utils"
-)
-
-enableFeaturePreview("TYPESAFE_PROJECT_ACCESSORS")
+// Misc modules
+include(":engine:utils")

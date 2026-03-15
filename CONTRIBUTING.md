@@ -9,6 +9,7 @@ contributing to Canopy, especially via bug reports, feature proposals and pull r
 
 Before contributing to the engine, it's recommend you read the [engine details](https://github.com/canopyengine/canopy-docs/tree/main/markdown/engine-details) documents.
 
+You can check the full guidelines in the [Contribution Guidelines](https://github.com/canopyengine/canopy-docs/blob/main/markdown/contributing/contributing.md)
 
 ## Table of contents
 
@@ -21,7 +22,7 @@ Before contributing to the engine, it's recommend you read the [engine details](
 Report bugs [here](https://github.com/canopyengine/canopy/issues/new?assignees=&labels=&template=bug_report.md).
 Please follow the instructions in the template when you do.
 
-> [!IMPORTANT]
+> [!CAUTION]
 > Make sure that the bug you are experiencing is reproducible in the latest Canopy releases.
 
 If you run into a bug which wasn't present in an earlier Canopy version (what we call a _regression_), please mention it 
