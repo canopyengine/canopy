@@ -24,7 +24,6 @@ plugins {
 rootProject.name = "canopy"
 enableFeaturePreview("TYPESAFE_PROJECT_ACCESSORS")
 
-
 /* ===================================== */
 /*      Canopy Modules Dependencies      */
 /* ===================================== */
