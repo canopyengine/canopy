@@ -49,14 +49,19 @@ subprojects {
     apply(plugin = "maven-publish")
 
     extensions.configure<JavaPluginExtension> {
-        sourceCompatibility = JavaVersion.VERSION_17
-        targetCompatibility = JavaVersion.VERSION_17
+
+        toolchain {
+            languageVersion = JavaLanguageVersion.of(21)
+        }
+
+        sourceCompatibility = JavaVersion.VERSION_21
+        targetCompatibility = JavaVersion.VERSION_21
         withSourcesJar()
         // withJavadocJar()
     }
 
     tasks.withType<KotlinCompile>().configureEach {
-        compilerOptions.jvmTarget.set(JvmTarget.JVM_17)
+        compilerOptions.jvmTarget.set(JvmTarget.JVM_21)
     }
 
     dependencies {
@@ -72,11 +77,6 @@ subprojects {
         "testImplementation"(libs.junit.jupiter)
         "testImplementation"(libs.assertj.core)
         "testImplementation"(libs.mockk)
-
-        // natives classifier for tests
-        val gdxPlatform = libs.gdx.platform.get().module
-        val gdxVer = libs.versions.gdx.get()
-        "testRuntimeOnly"("$gdxPlatform:$gdxVer:natives-desktop")
     }
 
     // ---- Publishing to ~/.m2 ----
