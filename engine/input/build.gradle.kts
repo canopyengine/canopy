@@ -9,7 +9,5 @@ dependencies {
     implementation(projects.engine.data.dataCore)
     implementation(projects.engine.data.dataSaving)
     implementation(projects.engine.utils)
-
-    // JSON
-    implementation(libs.kotlinx.serialization.json)
+    implementation(projects.engine.logging)
 }

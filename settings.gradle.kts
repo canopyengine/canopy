@@ -36,7 +36,7 @@ include(
 include(
     ":engine:app:app-core",
     //":engine:app:app-desktop",
-    ":engine:app:app-headless",
+    ":engine:app:app-terminal",
     ":engine:app:app-test"
 )
 
