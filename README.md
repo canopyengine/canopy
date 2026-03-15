@@ -28,7 +28,7 @@
 Canopy is a: 
 * node-based
 * declarative 
-* 2D game engine built in[Kotlin](https://kotlinlang.org/)
+* 2D game engine built in [Kotlin](https://kotlinlang.org/)
 
 It's designed to be **Kotlin-native**, built with declarative APIs, node composition, and reactive patterns in mind to
 create games in a clean, expressive, and maintainable way.
@@ -85,12 +85,12 @@ EmptyNode("level"){
 
 You can see important information about the engine here:
 
-| Section                                                               | Description            |
-|-----------------------------------------------------------------------| ---------------------- |
-| [Introduction](docs/articles/introduction.md)                         | Overview of the engine |
+| Section                                                              | Description            |
+|----------------------------------------------------------------------|------------------------|
+| [Introduction](docs/articles/introduction.md)                        | Overview of the engine |
 | [Official Documentation](https://github.com/canopyengine/canopy-docs) | Complete engine manual |
-| [Release Notes](docs/releases/releases.md)                            | Changelogs             |
-| [Roadmap](docs/roadmap.md)                                            | Planned development    |
+| [Release Notes](docs/releases/releases.md)                           | Changelogs             |
+| [Roadmap](docs/roadmap.md)                                           | Planned development    |
 
 
 # License
