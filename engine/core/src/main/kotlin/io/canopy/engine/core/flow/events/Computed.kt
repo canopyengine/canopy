@@ -30,38 +30,24 @@ import io.canopy.engine.logging.EngineLogs
  * A [Computed] stays active as long as it is reachable. To stop it reacting, drop all
  * references to it; its dependency subscriptions become eligible for GC along with it.
  *
- * @param block The derivation function. Should be pure — avoid side-effects here; use
- *              [effect] for side-effects instead.
+ * @param block The derivation function. Should be pure — avoid side effects here; use
+ *              [effect] for side effects instead.
  */
 class Computed<T>(private val block: () -> T) {
 
     private val log = EngineLogs.subsystem("computed")
 
-    private var signal: Signal<T>
-
+    private val signal by lazy { Signal(runBlock()) }
     private var dependencies: Set<Signal<*>> = emptySet()
     private val disconnectHandlers: MutableMap<Signal<*>, EventDisconnectHandler> = mutableMapOf()
 
     @Volatile private var recomputing = false
 
-    init {
-        val initial = runBlock()
-        signal = Signal(initial)
-    }
-
     // -------------------------------------------------------------------------
     // Public read surface
     // -------------------------------------------------------------------------
 
-    /**
-     * Current derived value.
-     *
-     * Reading this property also registers the underlying signal as a dependency in any
-     * enclosing [computed] or [effect] block, identical to calling [invoke].
-     */
-    val value: T get() = signal()
-
-    /** Flow of derived values (replay = 1, distinctUntilChanged). */
+    /** Flow of derived values (flowreplay = 1, distinctUntilChanged). */
     val flow get() = signal.flow
 
     /** Subscribes a listener to derived-value changes (weak reference). */
@@ -74,7 +60,7 @@ class Computed<T>(private val block: () -> T) {
      * Reads the current derived value, registering this computed as a dependency in
      * the enclosing [computed] or [effect] block (if any). Equivalent to [value].
      */
-    operator fun invoke(): T = value
+    operator fun invoke(): T = signal()
 
     // -------------------------------------------------------------------------
     // Internal recomputation

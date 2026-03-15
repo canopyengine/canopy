@@ -13,7 +13,7 @@ import org.junit.jupiter.api.Assertions.assertEquals
  * Tests for [io.canopy.engine.core.flow.events.Computed].
  *
  * Signals are written via `signal.update { }` and read via `signal()`.
- * Computed values are read via `computed.value` or `computed()`.
+ * Computed values are read via `computed()` or `computed()`.
  */
 class ComputedTests {
 
@@ -22,7 +22,7 @@ class ComputedTests {
         val hp = signal(100)
         val isDead = computed { hp() <= 0 }
 
-        assertEquals(false, isDead.value)
+        assertEquals(false, isDead())
     }
 
     @Test
@@ -32,7 +32,7 @@ class ComputedTests {
 
         hp.update { 0 }
 
-        assertEquals(true, isDead.value)
+        assertEquals(true, isDead())
     }
 
     @Test
@@ -72,13 +72,13 @@ class ComputedTests {
         val y = signal(2)
         val sum = computed { x() + y() }
 
-        assertEquals(3, sum.value)
+        assertEquals(3, sum())
 
         x.update { 10 }
-        assertEquals(12, sum.value)
+        assertEquals(12, sum())
 
         y.update { 20 }
-        assertEquals(30, sum.value)
+        assertEquals(30, sum())
     }
 
     @Test
@@ -88,11 +88,11 @@ class ComputedTests {
         val y = signal(20)
         val result = computed { if (useX()) x() else y() }
 
-        assertEquals(10, result.value)
+        assertEquals(10, result())
 
         // Switch to y branch — x should no longer be a dependency
         useX.update { false }
-        assertEquals(20, result.value)
+        assertEquals(20, result())
 
         var callCount = 0
         val callback: (Int) -> Unit = { callCount++ }
@@ -103,7 +103,7 @@ class ComputedTests {
 
         y.update { 50 } // SHOULD trigger
         assertEquals(1, callCount)
-        assertEquals(50, result.value)
+        assertEquals(50, result())
     }
 
     @Test
@@ -112,11 +112,11 @@ class ComputedTests {
         val doubled = computed { hp() * 2 }
         val label = computed { "hp=${doubled()}" }
 
-        assertEquals("hp=200", label.value)
+        assertEquals("hp=200", label())
 
         hp.update { 50 }
 
-        assertEquals("hp=100", label.value)
+        assertEquals("hp=100", label())
     }
 
     @Test
@@ -148,7 +148,7 @@ class ComputedTests {
         // base is read via untrack — changes to base should NOT recompute
         val result = computed { untrack { base() } * multiplier() }
 
-        assertEquals(20, result.value)
+        assertEquals(20, result())
 
         var callCount = 0
         val callback: (Int) -> Unit = { callCount++ }
@@ -156,11 +156,11 @@ class ComputedTests {
 
         base.update { 99 } // should NOT trigger recompute
         assertEquals(0, callCount, "base is untracked — should not trigger recompute")
-        assertEquals(20, result.value)
+        assertEquals(20, result())
 
         multiplier.update { 3 } // SHOULD trigger; reads the current base value (99)
         assertEquals(1, callCount)
-        assertEquals(99 * 3, result.value)
+        assertEquals(99 * 3, result())
     }
 
     @Test
