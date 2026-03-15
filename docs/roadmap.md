@@ -7,7 +7,7 @@
 
 This page outlines the **development roadmap** for the Canopy Engine.
 
-The roadmap describes upcoming milestones and the goals of each stage of development.
+The roadmap describes upcoming milestones and the goals planned for each stage of development.
 
 ---
 
@@ -15,9 +15,10 @@ The roadmap describes upcoming milestones and the goals of each stage of develop
 
 ## 🌱 Maiden Release — *First Flight*
 
-The **Maiden Release** will be the first public version of Canopy.
+The **Maiden Release** will be the first publicly available version of Canopy.
 
-Its goal is to deliver a **headless runtime** that runs entirely in the **terminal**, allowing the core engine architecture to be tested and validated before introducing graphical backends.
+Its goal is to deliver a **headless runtime** that runs entirely in the **terminal**, allowing the core engine architecture 
+to be tested and validated before introducing graphical capabilities.
 
 This stage focuses on stabilizing the **core architecture** and gathering feedback from early users.
 
@@ -96,7 +97,7 @@ The demo will demonstrate:
 
 More details can be found in the release notes:
 
-➡ **[Release Details](releases/0.1.0.md)**
+➡ **[Release Notes](releases/0.1.0.md)**
 
 ---
 

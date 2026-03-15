@@ -1,8 +1,10 @@
 ---
-name: Bug report
-about: Report a bug in Canopy
-title: "[Bug]: "
+name: Report a Bug
+about: Report a bug with the engine
+title: "bug: "
 labels: bug
+projects: canopy/canopy-tasks
+type: bug
 ---
 
 **Description**

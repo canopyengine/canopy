@@ -16,121 +16,82 @@
   <img src="https://img.shields.io/badge/license-MIT-green.svg">
 </p>
 
----
+## 🌲 Node-based declarative game engine built in Kotlin 🌲
 
-# 🌲 What is Canopy?
-
-**Canopy** is a modern 2D engine designed for developers who want:
-
-- a **clear architecture**
-- **modular gameplay systems**
-- **Kotlin-first development**
-- a **composable runtime model**
-
-Instead of large monolithic objects, Canopy encourages building games from **small composable pieces**.
+[//]: # ([![Crates.io]&#40;https://img.shields.io/crates/v/bevy.svg&#41;]&#40;https://crates.io/crates/bevy&#41;)
+[//]: # ([![Downloads]&#40;https://img.shields.io/crates/d/bevy.svg&#41;]&#40;https://crates.io/crates/bevy&#41;)
+[//]: # ([![Docs]&#40;https://docs.rs/bevy/badge.svg&#41;]&#40;https://docs.rs/bevy/latest/bevy/&#41;)
+[//]: # ([![CI]&#40;https://github.com/bevyengine/bevy/workflows/CI/badge.svg&#41;]&#40;https://github.com/canopyengine/canopy/actions&#41;)
 
 ---
 
-# Core Architecture
+Canopy is a: 
+* node-based
+* declarative 
+* 2D game engine built in[Kotlin](https://kotlinlang.org/)
 
-Canopy is structured around a few simple ideas:
+It's designed to be **Kotlin-native**, built with declarative APIs, node composition, and reactive patterns in mind to
+create games in a clean, expressive, and maintainable way.
 
-```text
-Application
-   ↓
-Scene Manager
-   ↓
-Scene Root
-   ↓
-Node Tree
-   ↓
-Behaviors
-   ↓
-Tree Systems
-````
+**Canopy** focuses on delivering a **simple yet powerful** experience, giving developers the flexibility to build complex
+systems without sacrificing clarity or control.
 
-Additional runtime systems provide:
-
-```
-Signals
-Events
-Contexts
-Managers
-Data Pipelines
-```
-
-This architecture allows game logic to remain **modular and scalable**.
+[Oficial docs](http://github.com/canopyengine/canopy-docs)
 
 ---
 
-# Example Scene
+## Design Goals
 
-Scenes are built using a Kotlin DSL.
+* Capable: Offer a complete set of 2D tools.
+* Simple: Easy for beginners, flexible for experienced users.
+* Modular: Use only what you need, replace what you don't.
+* Fast: Your game should feel quick and snappy.
+* Productive: Dev experience should be quick, and not bound by long compilation times.
 
-```kotlin
-EmptyNode("root") {
+---
 
-    Player {
+## ⚠️ Work in progress ⚠️
+
+**Canopy** is still a **work in progress**, and the **current version** is still unusable as is. Following the next weeks,
+the goal will be to release a **Headless Version** capable of running the core features in the **terminal**.
+See more details [here](https://github.com/canopyengine/canopy-docs/blob/main/docs/roadmap.md).
+
+---
+
+#### **Minimum Supported Kotlin Version**: **2.3.10**
+
+> **Canopy** development aims to follow **Kotlin**'s improvements, so the minimum
+supported version will usually be the latest **stable** version.
+
+
+## Example Scene
+
+Build your game with composition in mind, through our Kotlin DSL
+
+````kotlin
+EmptyNode("level"){
+    
+    Player("player"){
         behavior(PlayerController())
-        behavior(Move())
     }
-
-    Enemy()
-
-    UI()
-
+    
+    Enemy("enemy")
+    
+    UI("ui")
 }.asSceneRoot()
-```
-
-Nodes define **structure**, while behaviors attach **gameplay logic**.
-
----
+````
 
 # Documentation
 
-This repository hosts the **official documentation** for the engine.
+You can see important information about the engine here:
 
-| Section                                       | Description            |
-| --------------------------------------------- | ---------------------- |
-| [Introduction](docs/articles/introduction.md) | Overview of the engine |
-| [Full Documentation](markdown/index.md)       | Complete engine manual |
-| [Release Notes](docs/releases/releases.md)    | Changelogs             |
-| [Roadmap](docs/roadmap.md)                    | Planned development    |
+| Section                                                               | Description            |
+|-----------------------------------------------------------------------| ---------------------- |
+| [Introduction](docs/articles/introduction.md)                         | Overview of the engine |
+| [Official Documentation](https://github.com/canopyengine/canopy-docs) | Complete engine manual |
+| [Release Notes](docs/releases/releases.md)                            | Changelogs             |
+| [Roadmap](docs/roadmap.md)                                            | Planned development    |
 
----
-
-# Current Status
-
-⚠️ **Canopy is currently in early development.**
-
-The architecture is evolving and both the engine and documentation may introduce breaking changes.
-
-You can follow development progress in the [roadmap](docs/roadmap.md).
-
----
-
-# Minimum Kotlin Version
-
-```
-Kotlin 2.3.10
-```
-
-Canopy generally tracks the **latest stable Kotlin release**.
-
----
-
-# Project Goals
-
-The engine aims to provide:
-
-* a **clean runtime architecture**
-* **modular gameplay composition**
-* a **modern reactive state system**
-* a **flexible content pipeline**
-
-Canopy prioritizes **clarity and maintainability** over complexity.
-
----
 
 # License
 

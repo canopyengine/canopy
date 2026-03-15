@@ -158,4 +158,6 @@ ChatGPT, as without it, such a humongous task would have been impossible :) )
 
 ---
 
-Canopy 2026
+<p align="center">
+  Canopy Engine • 2026
+</p>

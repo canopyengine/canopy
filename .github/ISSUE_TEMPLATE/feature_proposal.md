@@ -1,8 +1,9 @@
 ---
 name: Feature proposal
 about: Propose a new feature or improvement
-title: "[Proposal]: "
-labels: enhancement, proposal
+title: "proposal: "
+labels: proposal
+projects: canopy/canopy-tasks
 ---
 
 **Summary**
@@ -13,9 +14,6 @@ What problem does this solve? Why is it useful?
 
 **Proposed Solution**
 Describe how you think this could work.
-
-**Alternatives**
-Any alternative approaches or solutions considered.
 
 **Additional Context**
 Links, examples, or related discussions.
