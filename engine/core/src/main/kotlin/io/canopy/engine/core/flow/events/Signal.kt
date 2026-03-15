@@ -65,6 +65,18 @@ class Signal<T>(initial: T) {
         _flow.tryEmit(initial)
     }
 
+    /**
+     * Reads the current value and registers this signal as a dependency in the
+     * active [TrackingContext] frame (if any).
+     *
+     * Use `signal()` inside a [computed] or [effect] block to opt into reactive
+     * dependency tracking. Use [value] directly for a plain read with no tracking.
+     */
+    operator fun invoke(): T {
+        TrackingContext.register(this)
+        return value
+    }
+
     /** Subscribes a listener to value changes (weak reference). */
     infix fun connect(listener: (T) -> Unit) = valueChanged connect listener
 
