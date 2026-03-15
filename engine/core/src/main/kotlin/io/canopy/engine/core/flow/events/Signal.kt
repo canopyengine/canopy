@@ -1,8 +1,6 @@
 package io.canopy.engine.core.flow.events
 
 import kotlinx.coroutines.flow.MutableSharedFlow
-import kotlinx.coroutines.flow.asSharedFlow
-import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.runBlocking
 
 /**
@@ -29,7 +27,7 @@ import kotlinx.coroutines.runBlocking
  * In addition to reactive tracking via `signal()`, two explicit observation APIs are provided:
  *
  * 1) Callback/event style via [connect] — lightweight, synchronous, weak-referenced.
- * 2) Flow style via [flow] — Kotlin SharedFlow with replay = 1 and [distinctUntilChanged].
+ * 2) Flow style via [flow] — Kotlin MutableSharedFlow with replay = 1.
  *
  * ## Emission semantics
  * - Updates only emit when `old != new`.
@@ -43,19 +41,17 @@ class Signal<T>(initial: T) {
 
     private val valueChanged = event<T>()
 
-    private val _flow = MutableSharedFlow<T>(replay = 1)
-
     /**
-     * Kotlin Flow of value changes (replay = 1, distinctUntilChanged).
+     * Kotlin Flow of value changes (replay = 1).
      *
      * New collectors immediately receive the current value.
      */
-    val flow = _flow.asSharedFlow().distinctUntilChanged()
+    val flow = MutableSharedFlow<T>(replay = 1)
 
-    private var _value: T = initial
+    private var value: T = initial
 
     init {
-        _flow.tryEmit(initial)
+        flow.tryEmit(initial)
     }
 
     /**
@@ -67,7 +63,7 @@ class Signal<T>(initial: T) {
      */
     operator fun invoke(): T {
         TrackingContext.register(this)
-        return _value
+        return value
     }
 
     /**
@@ -81,12 +77,12 @@ class Signal<T>(initial: T) {
      * ```
      */
     fun update(handler: (T) -> T) {
-        val new = handler(_value)
-        val old = _value
+        val new = handler(value)
+        val old = value
         if (old != new) {
-            _value = new
+            value = new
             valueChanged.emit(new)
-            runBlocking { _flow.emit(new) }
+            runBlocking { flow.emit(new) }
         }
     }
 

@@ -37,7 +37,7 @@ class Computed<T>(private val block: () -> T) {
 
     private val log = EngineLogs.subsystem("computed")
 
-    private lateinit var _signal: Signal<T>
+    private var signal: Signal<T>
 
     private var dependencies: Set<Signal<*>> = emptySet()
     private val disconnectHandlers: MutableMap<Signal<*>, EventDisconnectHandler> = mutableMapOf()
@@ -46,7 +46,7 @@ class Computed<T>(private val block: () -> T) {
 
     init {
         val initial = runBlock()
-        _signal = Signal(initial)
+        signal = Signal(initial)
     }
 
     // -------------------------------------------------------------------------
@@ -59,16 +59,16 @@ class Computed<T>(private val block: () -> T) {
      * Reading this property also registers the underlying signal as a dependency in any
      * enclosing [computed] or [effect] block, identical to calling [invoke].
      */
-    val value: T get() = _signal()
+    val value: T get() = signal()
 
     /** Flow of derived values (replay = 1, distinctUntilChanged). */
-    val flow get() = _signal.flow
+    val flow get() = signal.flow
 
     /** Subscribes a listener to derived-value changes (weak reference). */
-    infix fun connect(listener: (T) -> Unit) = _signal connect listener
+    infix fun connect(listener: (T) -> Unit) = signal connect listener
 
     /** Unsubscribes a previously registered listener. */
-    infix fun disconnect(listener: (T) -> Unit) = _signal disconnect listener
+    infix fun disconnect(listener: (T) -> Unit) = signal disconnect listener
 
     /**
      * Reads the current derived value, registering this computed as a dependency in
@@ -89,7 +89,7 @@ class Computed<T>(private val block: () -> T) {
         }
         recomputing = true
         try {
-            _signal.update { runBlock() }
+            signal.update { runBlock() }
         } finally {
             recomputing = false
         }
