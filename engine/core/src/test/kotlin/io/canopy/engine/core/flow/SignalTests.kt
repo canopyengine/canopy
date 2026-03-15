@@ -2,8 +2,6 @@ package io.canopy.engine.core.flow
 
 import kotlin.test.Test
 import io.canopy.engine.core.flow.events.asSignal
-import io.canopy.engine.core.flow.events.computed
-import io.canopy.engine.core.flow.events.effect
 import io.canopy.engine.core.flow.events.signal
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
@@ -11,13 +9,9 @@ import kotlinx.coroutines.yield
 import org.junit.jupiter.api.Assertions.assertEquals
 
 /**
- * Tests for [io.canopy.engine.core.flow.events.Signal], a mutable value that notifies observers when it changes.
+ * Tests for [io.canopy.engine.core.flow.events.Signal].
  *
- * Signal supports two observation mechanisms:
- * - callback/event style via `connect` (weak listeners)
- * - Kotlin Flow via `flow` (replay = 1, distinctUntilChanged)
- *
- * These tests document the expected contracts.
+ * Signal is read via `signal()` (invoke) and written via `signal.update { }`.
  */
 class SignalTests {
 
@@ -28,13 +22,10 @@ class SignalTests {
         var receivedValue: Int? = null
         val callback: (Int) -> Unit = { value -> receivedValue = value }
 
-        // Register listener
         signal connect callback
 
-        // Mutate the signal
-        signal.value += 42
+        signal.update { it + 42 }
 
-        // Listener should receive the new value
         assert(receivedValue == 42) { "Listener should have received the emitted value." }
     }
 
@@ -47,12 +38,11 @@ class SignalTests {
 
         signal connect callback
 
-        // First change should notify
-        signal.value = 42
+        signal.update { 42 }
 
-        // Reassigning the same value should NOT notify
-        signal.value = 42
-        signal.value = 42
+        // Updating to the same value should NOT notify
+        signal.update { 42 }
+        signal.update { 42 }
 
         assert(callCount == 1) { "Listener should have been called only once." }
     }
@@ -66,12 +56,10 @@ class SignalTests {
 
         signal connect callback
 
-        // Listener should be called once
-        signal.value = 42
+        signal.update { 42 }
 
-        // After disconnect, listener should no longer be invoked
         signal disconnect callback
-        signal.value = 100
+        signal.update { 100 }
 
         assert(callCount == 1) { "Listener should have been called only once before disconnection." }
     }
@@ -85,14 +73,11 @@ class SignalTests {
 
         signal connect callback
 
-        // First update triggers listener
-        signal.value = 42
+        signal.update { 42 }
 
-        // Clear removes all listeners
         signal.clear()
 
-        // Further updates should not trigger the callback
-        signal.value = 100
+        signal.update { 100 }
 
         assert(callCount == 1) { "Listener should have been called only once before clear." }
     }
@@ -103,19 +88,14 @@ class SignalTests {
 
         val collectedValues = mutableListOf<Int>()
 
-        // Collect from the flow:
-        // - replay = 1 means we should immediately receive the current value (0)
-        // - distinctUntilChanged means duplicates should not be emitted
         val job = launch {
             signal.flow.collect { collectedValues.add(it) }
         }
 
-        // Update values
         signal.update { 42 }
-        signal.value = 100
+        signal.update { 100 }
         signal.update { 100 } // duplicate -> should not be collected (distinctUntilChanged)
 
-        // Give collector a chance to run
         yield()
         job.cancel()
 
@@ -126,39 +106,18 @@ class SignalTests {
     fun `asSignal should wrap a value and allow updates`() {
         val signal = 10.asSignal()
 
-        // Initial value should be preserved
-        assertEquals(10, signal.value) { "Wrapped value should match the initial value." }
+        assertEquals(10, signal()) { "Wrapped value should match the initial value." }
 
-        // Updating the signal should update its stored value
         signal.update { 20 }
-        assertEquals(20, signal.value) { "Wrapped value should update when assigned." }
+        assertEquals(20, signal()) { "Wrapped value should update when assigned." }
     }
 
     @Test
-    fun `signal value getter registers dependency in computed`() {
-        val hp = signal(100)
-        // Reading via .value (not just invoke()) should also track
-        val isDead = computed { hp.value <= 0 }
+    fun `update receives current value as argument`() {
+        val signal = signal(10)
 
-        assertEquals(false, isDead.value)
+        signal.update { it + 5 }
 
-        hp.value = 0
-
-        assertEquals(true, isDead.value)
-    }
-
-    @Test
-    fun `signal value getter registers dependency in effect`() {
-        val score = signal(0)
-
-        var lastSeen = -1
-        val e = effect { lastSeen = score.value }
-
-        assertEquals(0, lastSeen)
-
-        score.value = 42
-
-        assertEquals(42, lastSeen)
-        e.dispose()
+        assertEquals(15, signal())
     }
 }

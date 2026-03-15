@@ -12,48 +12,39 @@ import io.canopy.engine.logging.EngineLogs
  *
  * ## Dependency tracking
  *
- * Dependencies are discovered automatically. Any [Signal] read via `signal()` (the
- * `invoke` operator) inside [block] registers itself as a dependency for that run.
- * Dynamic dependencies are supported: if the block conditionally reads signals, only
- * the signals accessed in the most recent run are subscribed.
+ * Dependencies are discovered automatically. Any [Signal] (or [Computed]) invoked via
+ * `signal()` / `computed()` inside [block] registers itself as a dependency for that
+ * run. Dynamic dependencies are supported: only the signals accessed in the most recent
+ * run are subscribed.
  *
  * ## Observation
  *
- * [Computed] exposes the same read surface as [Signal]:
- * - [value] — current derived value
- * - [flow] — Kotlin Flow (replay=1, distinctUntilChanged via the internal Signal)
+ * [Computed] exposes a read surface that mirrors [Signal]:
+ * - [value] — current derived value (also tracks as a dependency when read)
+ * - `computed()` — invoke operator, equivalent to [value]
+ * - [flow] — Kotlin Flow (replay=1, distinctUntilChanged)
  * - [connect] / [disconnect] — weak-reference callback listeners
- * - `computed()` — invoke operator, registers this computed's internal signal as a
- *   dependency in an outer [computed] or [effect] block
  *
  * ## Lifecycle
  *
  * A [Computed] stays active as long as it is reachable. To stop it reacting, drop all
- * references to it; its dependency subscriptions will be eligible for GC along with it.
+ * references to it; its dependency subscriptions become eligible for GC along with it.
  *
- * @param block The derivation function. Must be pure — avoid side effects here; use
- *              [effect] for side effects instead.
+ * @param block The derivation function. Should be pure — avoid side-effects here; use
+ *              [effect] for side-effects instead.
  */
 class Computed<T>(private val block: () -> T) {
 
     private val log = EngineLogs.subsystem("computed")
 
-    // Internal mutable signal that stores the current derived value and provides
-    // all observation APIs (flow, connect, disconnect) for free.
-    private var _signal: Signal<T>
+    private lateinit var _signal: Signal<T>
 
-    // The set of signals the last run depended on.
     private var dependencies: Set<Signal<*>> = emptySet()
-
-    // Parallel list of disconnect handles, one per dependency, in insertion order.
-    // Stored so we can disconnect removed dependencies after each recompute.
     private val disconnectHandlers: MutableMap<Signal<*>, EventDisconnectHandler> = mutableMapOf()
 
     @Volatile private var recomputing = false
 
     init {
-        // Run the block once to compute the initial value and capture dependencies.
-        // We can't use _signal.value = ... here because _signal isn't initialised yet.
         val initial = runBlock()
         _signal = Signal(initial)
     }
@@ -62,8 +53,13 @@ class Computed<T>(private val block: () -> T) {
     // Public read surface
     // -------------------------------------------------------------------------
 
-    /** Current derived value. */
-    val value: T get() = _signal.value
+    /**
+     * Current derived value.
+     *
+     * Reading this property also registers the underlying signal as a dependency in any
+     * enclosing [computed] or [effect] block, identical to calling [invoke].
+     */
+    val value: T get() = _signal()
 
     /** Flow of derived values (replay = 1, distinctUntilChanged). */
     val flow get() = _signal.flow
@@ -75,11 +71,8 @@ class Computed<T>(private val block: () -> T) {
     infix fun disconnect(listener: (T) -> Unit) = _signal disconnect listener
 
     /**
-     * Reads the current derived value, registering this computed as a dependency
-     * in the enclosing [computed] or [effect] block (if any).
-     *
-     * Equivalent to reading [value]. The internal signal's getter handles dependency
-     * registration automatically.
+     * Reads the current derived value, registering this computed as a dependency in
+     * the enclosing [computed] or [effect] block (if any). Equivalent to [value].
      */
     operator fun invoke(): T = value
 
@@ -87,13 +80,6 @@ class Computed<T>(private val block: () -> T) {
     // Internal recomputation
     // -------------------------------------------------------------------------
 
-    /**
-     * Re-runs [block] under dependency tracking, then updates [_signal] with the
-     * new value. The internal [Signal] only fires listeners when the value changes,
-     * so downstream observers are not notified when the derived value is unchanged.
-     *
-     * Protected against circular dependency chains via [recomputing] guard.
-     */
     private fun recompute() {
         if (recomputing) {
             log.warn(
@@ -103,17 +89,12 @@ class Computed<T>(private val block: () -> T) {
         }
         recomputing = true
         try {
-            _signal.value = runBlock()
+            _signal.update { runBlock() }
         } finally {
             recomputing = false
         }
     }
 
-    /**
-     * Runs [block] inside a [TrackingContext] frame, captures the accessed signals
-     * as the new dependency set, diffs against the previous set, and updates
-     * subscriptions accordingly.
-     */
     private fun runBlock(): T {
         val frame = TrackingContext.push()
         return try {
@@ -132,9 +113,6 @@ class Computed<T>(private val block: () -> T) {
             disconnectHandlers.remove(dep)?.disconnect()
         }
         for (dep in added) {
-            // The lambda captures `this` (the Computed) strongly — intentional.
-            // The Computed owns the handler, so the lambda stays alive as long as
-            // the Computed is alive, preventing premature GC of the weak listener.
             val handler = dep connect { _ -> recompute() }
             disconnectHandlers[dep] = handler
         }
@@ -149,9 +127,9 @@ class Computed<T>(private val block: () -> T) {
 /**
  * Creates a [Computed] whose value is derived by [block].
  *
- * Any [Signal] (or [Computed]) read via `signal()` / `computed()` inside [block]
- * becomes a reactive dependency — the computed value is updated automatically
- * whenever a dependency changes.
+ * Any [Signal] (or [Computed]) invoked via `signal()` / `computed()` inside [block]
+ * becomes a reactive dependency — the computed value updates automatically whenever a
+ * dependency changes.
  *
  * Example:
  * ```kotlin

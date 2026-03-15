@@ -10,18 +10,10 @@ import org.junit.jupiter.api.Assertions.assertEquals
 import kotlin.test.Test
 
 /**
- * Tests for [io.canopy.engine.core.flow.events.Computed], a read-only reactive value derived
- * from one or more [io.canopy.engine.core.flow.events.Signal]s.
+ * Tests for [io.canopy.engine.core.flow.events.Computed].
  *
- * Contracts verified:
- * - Initial value reflects dependencies at construction time
- * - Value updates when a dependency changes
- * - No re-emission when the derived value is unchanged
- * - Multiple dependencies are all tracked
- * - Dynamic (conditional) dependencies are correctly managed
- * - Nested computed chains propagate changes
- * - Flow API works as expected (replay = 1, distinctUntilChanged)
- * - Circular dependency guard does not throw or recurse infinitely
+ * Signals are written via `signal.update { }` and read via `signal()`.
+ * Computed values are read via `computed.value` or `computed()`.
  */
 class ComputedTests {
 
@@ -38,7 +30,7 @@ class ComputedTests {
         val hp = signal(100)
         val isDead = computed { hp() <= 0 }
 
-        hp.value = 0
+        hp.update { 0 }
 
         assertEquals(true, isDead.value)
     }
@@ -52,7 +44,7 @@ class ComputedTests {
         val callback: (Boolean) -> Unit = { received = it }
         isDead connect callback
 
-        hp.value = 0
+        hp.update { 0 }
 
         assertEquals(true, received)
     }
@@ -67,9 +59,9 @@ class ComputedTests {
         isDead connect callback
 
         // hp changes but isDead stays false
-        hp.value = 90
-        hp.value = 80
-        hp.value = 1
+        hp.update { 90 }
+        hp.update { 80 }
+        hp.update { 1 }
 
         assertEquals(0, callCount, "Listener should not fire when derived value stays the same")
     }
@@ -82,10 +74,10 @@ class ComputedTests {
 
         assertEquals(3, sum.value)
 
-        x.value = 10
+        x.update { 10 }
         assertEquals(12, sum.value)
 
-        y.value = 20
+        y.update { 20 }
         assertEquals(30, sum.value)
     }
 
@@ -99,18 +91,17 @@ class ComputedTests {
         assertEquals(10, result.value)
 
         // Switch to y branch — x should no longer be a dependency
-        useX.value = false
+        useX.update { false }
         assertEquals(20, result.value)
 
-        // Changing x should not trigger recomputation now
         var callCount = 0
         val callback: (Int) -> Unit = { callCount++ }
         result connect callback
 
-        x.value = 99  // should NOT trigger
+        x.update { 99 }  // should NOT trigger
         assertEquals(0, callCount, "x should no longer be a dependency after branch switch")
 
-        y.value = 50  // SHOULD trigger
+        y.update { 50 }  // SHOULD trigger
         assertEquals(1, callCount)
         assertEquals(50, result.value)
     }
@@ -123,7 +114,7 @@ class ComputedTests {
 
         assertEquals("hp=200", label.value)
 
-        hp.value = 50
+        hp.update { 50 }
 
         assertEquals("hp=100", label.value)
     }
@@ -138,12 +129,11 @@ class ComputedTests {
             isDead.flow.collect { collected.add(it) }
         }
 
-        // replay = 1 means collector sees initial value immediately
         yield()
 
-        hp.value = 0   // isDead becomes true
-        hp.value = 50  // isDead becomes false
-        hp.value = 0   // isDead becomes true again
+        hp.update { 0 }   // isDead becomes true
+        hp.update { 50 }  // isDead becomes false
+        hp.update { 0 }   // isDead becomes true again
 
         yield()
         job.cancel()
@@ -164,13 +154,12 @@ class ComputedTests {
         val callback: (Int) -> Unit = { callCount++ }
         result connect callback
 
-        base.value = 99   // should NOT trigger recompute
+        base.update { 99 }   // should NOT trigger recompute
         assertEquals(0, callCount, "base is untracked — should not trigger recompute")
         assertEquals(20, result.value)
 
-        multiplier.value = 3  // SHOULD trigger
+        multiplier.update { 3 }  // SHOULD trigger; reads the current base value (99)
         assertEquals(1, callCount)
-        // result uses the current base (99) because untrack still reads the current value
         assertEquals(99 * 3, result.value)
     }
 
@@ -178,18 +167,14 @@ class ComputedTests {
     fun `computed circular dependency guard does not throw or recurse`() {
         val a = signal(0)
 
-        // Create a computed that writes back to a signal it depends on.
-        // The guard should break the cycle after the first re-entry.
         var recomputeCount = 0
         computed {
             recomputeCount++
-            a()  // depend on a
+            a()
         }
 
-        // Trigger a change — recompute should run once and not loop
-        a.value = 1
+        a.update { 1 }
 
-        // If the guard is working, recomputeCount is bounded (≤ 2: initial + one update)
         assert(recomputeCount <= 2) { "Recompute count should be bounded, was $recomputeCount" }
     }
 }

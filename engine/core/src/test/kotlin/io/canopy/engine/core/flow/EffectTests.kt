@@ -45,8 +45,8 @@ class EffectTests {
             runCount++
         }
 
-        hp.value = 50
-        hp.value = 0
+        hp.update { 50 }
+        hp.update { 0 }
 
         assertEquals(3, runCount, "Effect should have run once initially plus once per change")
         e.dispose()
@@ -64,8 +64,8 @@ class EffectTests {
 
         e.dispose()
 
-        hp.value = 0
-        hp.value = 50
+        hp.update { 0 }
+        hp.update { 50 }
 
         assertEquals(1, runCount, "Effect should not run after dispose")
     }
@@ -91,10 +91,10 @@ class EffectTests {
 
         assertEquals(3, lastSum)
 
-        x.value = 10
+        x.update { 10 }
         assertEquals(12, lastSum)
 
-        y.value = 20
+        y.update { 20 }
         assertEquals(30, lastSum)
 
         e.dispose()
@@ -112,7 +112,7 @@ class EffectTests {
         assertEquals(10, lastValue)
 
         // Switch branch — x should no longer be a dependency
-        useX.value = false
+        useX.update { false }
         assertEquals(20, lastValue)
 
         var runAfterSwitch = 0
@@ -123,11 +123,11 @@ class EffectTests {
 
         // Changing x should NOT re-run e now
         val prevValue = lastValue
-        x.value = 99
+        x.update { 99 }
         assertEquals(prevValue, lastValue, "x should not trigger effect after branch switch")
 
         // Changing y SHOULD re-run e
-        y.value = 55
+        y.update { 55 }
         assertEquals(55, lastValue)
 
         e.dispose()
@@ -151,11 +151,11 @@ class EffectTests {
         assertEquals(100, lastSideData)
 
         // Changing untracked signal should NOT re-run the effect
-        sideData.value = 999
+        sideData.update { 999 }
         assertEquals(1, runCount, "sideData is untracked — should not re-run effect")
 
         // Changing tracked signal SHOULD re-run, and it will read the latest sideData
-        trigger.value = 1
+        trigger.update { 1 }
         assertEquals(2, runCount)
         assertEquals(999, lastSideData)
 
@@ -172,15 +172,15 @@ class EffectTests {
         val eA = effect { counter(); countA++ }
         val eB = effect { counter(); countB++ }
 
-        counter.value = 1
-        counter.value = 2
+        counter.update { 1 }
+        counter.update { 2 }
 
         assertEquals(3, countA)
         assertEquals(3, countB)
 
         // Disposing one should not affect the other
         eA.dispose()
-        counter.value = 3
+        counter.update { 3 }
 
         assertEquals(3, countA, "eA should not run after dispose")
         assertEquals(4, countB, "eB should still run")
