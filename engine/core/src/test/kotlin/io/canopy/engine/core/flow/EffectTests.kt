@@ -2,6 +2,7 @@ package io.canopy.engine.core.flow
 
 import io.canopy.engine.core.flow.events.effect
 import io.canopy.engine.core.flow.events.signal
+import io.canopy.engine.core.flow.events.untrack
 import org.junit.jupiter.api.Assertions.assertEquals
 import kotlin.test.Test
 
@@ -131,6 +132,34 @@ class EffectTests {
 
         e.dispose()
         watcher.dispose()
+    }
+
+    @Test
+    fun `untrack prevents signal from re-running effect`() {
+        val trigger = signal(0)
+        val sideData = signal(100)
+
+        var runCount = 0
+        var lastSideData = 0
+        val e = effect {
+            trigger()                          // tracked
+            lastSideData = untrack { sideData() }  // untracked
+            runCount++
+        }
+
+        assertEquals(1, runCount)
+        assertEquals(100, lastSideData)
+
+        // Changing untracked signal should NOT re-run the effect
+        sideData.value = 999
+        assertEquals(1, runCount, "sideData is untracked — should not re-run effect")
+
+        // Changing tracked signal SHOULD re-run, and it will read the latest sideData
+        trigger.value = 1
+        assertEquals(2, runCount)
+        assertEquals(999, lastSideData)
+
+        e.dispose()
     }
 
     @Test

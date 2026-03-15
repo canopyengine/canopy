@@ -2,6 +2,7 @@ package io.canopy.engine.core.flow
 
 import io.canopy.engine.core.flow.events.computed
 import io.canopy.engine.core.flow.events.signal
+import io.canopy.engine.core.flow.events.untrack
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.yield
@@ -148,6 +149,29 @@ class ComputedTests {
         job.cancel()
 
         assertEquals(listOf(false, true, false, true), collected)
+    }
+
+    @Test
+    fun `untrack prevents signal from becoming a dependency`() {
+        val base = signal(10)
+        val multiplier = signal(2)
+        // base is read via untrack — changes to base should NOT recompute
+        val result = computed { untrack { base() } * multiplier() }
+
+        assertEquals(20, result.value)
+
+        var callCount = 0
+        val callback: (Int) -> Unit = { callCount++ }
+        result connect callback
+
+        base.value = 99   // should NOT trigger recompute
+        assertEquals(0, callCount, "base is untracked — should not trigger recompute")
+        assertEquals(20, result.value)
+
+        multiplier.value = 3  // SHOULD trigger
+        assertEquals(1, callCount)
+        // result uses the current base (99) because untrack still reads the current value
+        assertEquals(99 * 3, result.value)
     }
 
     @Test

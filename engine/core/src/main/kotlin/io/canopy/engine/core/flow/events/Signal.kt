@@ -1,6 +1,5 @@
 package io.canopy.engine.core.flow.events
 
-import kotlin.properties.Delegates
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.distinctUntilChanged
@@ -19,7 +18,12 @@ import kotlinx.coroutines.runBlocking
  *    - Kotlin Flow stream with replay = 1 (new collectors receive the latest value).
  *    - [distinctUntilChanged] avoids emitting duplicates.
  *
- * Emission semantics:
+ * ## Reading values
+ *
+ * Both [value] and [invoke] register the signal as a dependency inside a [computed]
+ * or [effect] block. Use [untrack] to read without registering.
+ *
+ * ## Emission semantics
  * - Updates only emit when `old != new`.
  * - The event listeners are notified immediately.
  * - The flow emission uses `runBlocking { emit(...) }` which means setting [value]
@@ -46,19 +50,34 @@ class Signal<T>(initial: T) {
      */
     val flow = _flow.asSharedFlow().distinctUntilChanged()
 
+    /** Backing field. */
+    private var _value: T = initial
+
     /**
      * Current signal value.
      *
-     * Assigning a different value triggers:
+     * **Getting** registers this signal as a dependency in the active [TrackingContext]
+     * frame (if any), then returns the current value.
+     *
+     * **Setting** a different value triggers:
      * - [valueChanged.emit]
      * - flow emission (blocking via runBlocking)
+     *
+     * Use [untrack] to read without registering a dependency.
      */
-    var value: T by Delegates.observable(initial) { _, old, new ->
-        if (old != new) {
-            valueChanged.emit(new)
-            runBlocking { _flow.emit(new) }
+    var value: T
+        get() {
+            TrackingContext.register(this)
+            return _value
         }
-    }
+        set(new) {
+            val old = _value
+            if (old != new) {
+                _value = new
+                valueChanged.emit(new)
+                runBlocking { _flow.emit(new) }
+            }
+        }
 
     init {
         // Make sure the initial value is available to flow collectors immediately.
@@ -66,16 +85,16 @@ class Signal<T>(initial: T) {
     }
 
     /**
-     * Reads the current value and registers this signal as a dependency in the
-     * active [TrackingContext] frame (if any).
+     * Reads and returns the current value, also registering this signal as a dependency
+     * in the active [TrackingContext] frame (if any).
      *
-     * Use `signal()` inside a [computed] or [effect] block to opt into reactive
-     * dependency tracking. Use [value] directly for a plain read with no tracking.
+     * Equivalent to reading [value]. Provided as a concise shorthand inside reactive
+     * blocks:
+     * ```kotlin
+     * val isDead = computed { hp() <= 0 }
+     * ```
      */
-    operator fun invoke(): T {
-        TrackingContext.register(this)
-        return value
-    }
+    operator fun invoke(): T = value
 
     /** Subscribes a listener to value changes (weak reference). */
     infix fun connect(listener: (T) -> Unit) = valueChanged connect listener
@@ -86,11 +105,9 @@ class Signal<T>(initial: T) {
     /** Removes all listeners registered via [connect]. */
     fun clear() = valueChanged.clear()
 
-    /**
-     * Allows value updates based on previous value
-     */
+    /** Updates the value based on the previous value. */
     fun update(handler: (T) -> T) {
-        value = handler(value)
+        value = handler(_value)
     }
 }
 

@@ -75,16 +75,13 @@ class Computed<T>(private val block: () -> T) {
     infix fun disconnect(listener: (T) -> Unit) = _signal disconnect listener
 
     /**
-     * Reads the current derived value and registers this computed as a dependency
+     * Reads the current derived value, registering this computed as a dependency
      * in the enclosing [computed] or [effect] block (if any).
      *
-     * Use `computed()` (not `.value`) when you want computed chains to react to
-     * each other automatically.
+     * Equivalent to reading [value]. The internal signal's getter handles dependency
+     * registration automatically.
      */
-    operator fun invoke(): T {
-        TrackingContext.register(_signal)
-        return _signal.value
-    }
+    operator fun invoke(): T = value
 
     // -------------------------------------------------------------------------
     // Internal recomputation

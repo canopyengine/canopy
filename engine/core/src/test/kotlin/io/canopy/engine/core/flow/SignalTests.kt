@@ -2,6 +2,8 @@ package io.canopy.engine.core.flow
 
 import kotlin.test.Test
 import io.canopy.engine.core.flow.events.asSignal
+import io.canopy.engine.core.flow.events.computed
+import io.canopy.engine.core.flow.events.effect
 import io.canopy.engine.core.flow.events.signal
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
@@ -130,5 +132,33 @@ class SignalTests {
         // Updating the signal should update its stored value
         signal.update { 20 }
         assertEquals(20, signal.value) { "Wrapped value should update when assigned." }
+    }
+
+    @Test
+    fun `signal value getter registers dependency in computed`() {
+        val hp = signal(100)
+        // Reading via .value (not just invoke()) should also track
+        val isDead = computed { hp.value <= 0 }
+
+        assertEquals(false, isDead.value)
+
+        hp.value = 0
+
+        assertEquals(true, isDead.value)
+    }
+
+    @Test
+    fun `signal value getter registers dependency in effect`() {
+        val score = signal(0)
+
+        var lastSeen = -1
+        val e = effect { lastSeen = score.value }
+
+        assertEquals(0, lastSeen)
+
+        score.value = 42
+
+        assertEquals(42, lastSeen)
+        e.dispose()
     }
 }
