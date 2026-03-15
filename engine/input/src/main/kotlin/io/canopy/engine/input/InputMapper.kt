@@ -2,7 +2,8 @@ package io.canopy.engine.input
 
 import com.badlogic.gdx.Input
 import io.canopy.engine.data.saving.registerSaveModule
-import ktx.log.logger
+import io.canopy.engine.logging.logger
+import kotlinx.serialization.builtins.serializer
 
 /**
  * Maintains runtime mappings between **input actions** and **physical input binds**.
