@@ -1,0 +1,42 @@
+package io.canopy.backends.desktop.physics.nodes.body
+
+import com.badlogic.gdx.math.Vector2
+import com.badlogic.gdx.physics.box2d.BodyDef
+import com.badlogic.gdx.physics.box2d.World
+import io.canopy.engine.core.managers.inject
+import io.canopy.engine.core.nodes.Node2D
+import ktx.box2d.body
+import ktx.log.logger
+import ktx.math.minus
+
+abstract class PhysicsBody2D<T : PhysicsBody2D<T>>(
+    name: String,
+    // Specific props
+    val bodyType: BodyDef.BodyType,
+    // DSL
+    block: T.() -> Unit = {},
+) : Node2D<T>(
+    name,
+    block
+) {
+    private val logger = logger<PhysicsBody2D<T>>()
+
+    // ==========================
+    //          Physics
+    // ==========================
+    private val world = inject<World>()
+    val body =
+        world.body(bodyType) {
+            this.position.set(globalPosition)
+            angle = rotation
+        }
+
+    // Override position and rotation to force body movement and rotate methods
+    override var position
+        get() = if (body == null) super.position else (body.position - (parent?.globalPosition ?: Vector2.Zero))
+        set(_) = throw IllegalAccessException("Manual position override not allowed on physics nodes")
+
+    override var rotation: Float
+        get() = if (body == null) super.rotation else (body.angle - (parent?.globalRotation ?: 0f))
+        set(_) = throw IllegalAccessException("Manual rotation override not allowed on physics nodes")
+}

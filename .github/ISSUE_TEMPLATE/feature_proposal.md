@@ -1,8 +1,8 @@
 ---
 name: Feature proposal
 about: Propose a new feature or improvement
-title: "proposal: "
-labels: proposal
+title: "Proposal: "
+labels: feature-proposal
 projects: canopy/canopy-tasks
 ---
 

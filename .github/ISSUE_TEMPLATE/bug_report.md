@@ -1,7 +1,7 @@
 ---
 name: Report a Bug
 about: Report a bug with the engine
-title: "bug: "
+title: "Bug: "
 labels: bug
 projects: canopy/canopy-tasks
 type: bug
