@@ -22,28 +22,21 @@ plugins {
 }
 
 rootProject.name = "canopy"
+
 enableFeaturePreview("TYPESAFE_PROJECT_ACCESSORS")
 
-/* ===================================== */
-/*      Canopy Modules Dependencies      */
-/* ===================================== */
+// Platforms
+include(
+    ":platforms:headless",
+    ":platforms:terminal",
+   // ":platforms:desktop"
+)
 
-// Root modules
-include(":engine:core")
-include(":engine:input")
-// include(":engine:graphics")
-// include(":engine:physics")
-include(":engine:logging")
+// Engine
+include(":engine")
 
-// App modules
-include(":engine:app:app-core")
-// include(":engine:app:app-desktop")
-include(":engine:app:app-terminal")
-include(":engine:app:app-test")
-
-// Data modules
-include(":engine:data:data-core")
-include(":engine:data:data-saving")
-
-// Misc modules
-include(":engine:utils")
+// Tooling
+include(
+    ":tooling:devtools",
+    ":tooling:utils"
+)

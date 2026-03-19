@@ -1,125 +1,90 @@
-
+import org.gradle.api.JavaVersion
+import org.gradle.api.plugins.BasePlugin
+import org.gradle.api.plugins.BasePluginExtension
+import org.gradle.api.plugins.JavaPluginExtension
+import org.gradle.api.publish.PublishingExtension
+import org.gradle.api.publish.maven.MavenPublication
+import org.gradle.jvm.toolchain.JavaLanguageVersion
 import org.gradle.plugins.ide.eclipse.model.EclipseModel
 import org.gradle.plugins.ide.idea.model.IdeaModel
-import org.jetbrains.kotlin.gradle.dsl.JvmTarget
-import org.jetbrains.kotlin.gradle.tasks.KotlinCompile
-import org.jlleitschuh.gradle.ktlint.KtlintExtension
-import org.jlleitschuh.gradle.ktlint.reporter.ReporterType
 
 val canopyVersion: String by project
 
 plugins {
-    alias(libs.plugins.kotlin.jvm) apply true
+    base
+    alias(libs.plugins.kotlin.jvm) apply false
     alias(libs.plugins.kotlin.serialization) apply false
     alias(libs.plugins.ktlint) apply false
 }
 
+group = "io.github.canopy"
 version = canopyVersion
 
 allprojects {
     apply(plugin = "eclipse")
     apply(plugin = "idea")
 
-    group = "io.github.canopyengine"
+    group = "io.github.canopy"
     version = canopyVersion
 
     extensions.configure<IdeaModel> {
         module {
-            outputDir = file("build/classes/kotlin/main")
-            testOutputDir = file("build/classes/kotlin/test")
+            outputDir = file("build/classes/java/main")
+            testOutputDir = file("build/classes/java/test")
         }
     }
 }
 
-
-
 subprojects {
-    // Grouping projects should not behave like real modules
-    val ignoredPaths = listOf(
-        ":engine",
-        ":engine:app",
-        ":engine:data"
-    )
-
-    if (path in ignoredPaths) return@subprojects
-
-    // Apply plugins HERE so Kotlin DSL dependency accessors exist in this script block
-    apply(plugin = "java-library")
-    apply(plugin = "org.jetbrains.kotlin.jvm")
-    apply(plugin = "maven-publish")
-
-    extensions.configure<JavaPluginExtension> {
-
-        toolchain {
-            languageVersion = JavaLanguageVersion.of(21)
+    plugins.withType<BasePlugin> {
+        extensions.configure<BasePluginExtension>("base") {
+            archivesName.set(project.path.removePrefix(":").replace(":", "-"))
         }
-
-        sourceCompatibility = JavaVersion.VERSION_21
-        targetCompatibility = JavaVersion.VERSION_21
-        withSourcesJar()
-        // withJavadocJar()
     }
 
-    tasks.withType<KotlinCompile>().configureEach {
-        compilerOptions.jvmTarget.set(JvmTarget.JVM_21)
+    plugins.withId("java") {
+        extensions.configure<JavaPluginExtension>("java") {
+            toolchain.languageVersion.set(JavaLanguageVersion.of(21))
+            sourceCompatibility = JavaVersion.VERSION_21
+            targetCompatibility = JavaVersion.VERSION_21
+            withSourcesJar()
+        }
     }
 
-    dependencies {
-        val libs = rootProject.libs
-
-        // Kotlin
-        "api"(libs.kotlin.stdlib)
-        "implementation"(libs.kotlin.reflect)
-        "api"(libs.coroutines.core)
-
-        // Testing
-        "testImplementation"(libs.kotlin.test.junit5)
-        "testImplementation"(libs.junit.jupiter)
-        "testImplementation"(libs.assertj.core)
-        "testImplementation"(libs.mockk)
+    plugins.withId("java-library") {
+        extensions.configure<JavaPluginExtension>("java") {
+            toolchain.languageVersion.set(JavaLanguageVersion.of(21))
+            sourceCompatibility = JavaVersion.VERSION_21
+            targetCompatibility = JavaVersion.VERSION_21
+            withSourcesJar()
+        }
     }
 
-    // ---- Publishing to ~/.m2 ----
-    extensions.configure<PublishingExtension> {
-        publications {
-            create<MavenPublication>("mavenJava") {
-                from(components["java"])
-                artifactId = project.name
-                pom {
-                    name.set(project.name)
-                    description.set("Canopy module: ${project.path}")
+    plugins.withId("maven-publish") {
+        extensions.configure<PublishingExtension>("publishing") {
+            publications {
+                create("mavenJava", MavenPublication::class.java) {
+                    val javaComponent = components.findByName("java")
+                    if (javaComponent != null) {
+                        from(javaComponent)
+                    }
+
+                    artifactId = project.path.removePrefix(":").replace(":", "-")
+
+                    pom {
+                        name.set(project.name)
+                        description.set("Canopy module: ${project.path}")
+                    }
                 }
             }
-        }
-        repositories {
-            mavenLocal()
+
+            repositories {
+                mavenLocal()
+            }
         }
     }
 
-    plugins.withId("org.jlleitschuh.gradle.ktlint") {
-        extensions.configure<KtlintExtension> {
-            verbose.set(true)
-            outputToConsole.set(true)
-            ignoreFailures.set(false)
-
-            reporters {
-                reporter(ReporterType.PLAIN)
-                reporter(ReporterType.CHECKSTYLE)
-            }
-
-            filter {
-                exclude("**/build/generated/**")
-                exclude("**/generated/**")
-                include("**/src/**/*.kt")
-            }
-        }
-
-        tasks.named("build") {
-            dependsOn("ktlintFormat")
-        }
-    }
-
-    tasks.withType<Test>().configureEach {
+    tasks.withType(Test::class.java).configureEach {
         useJUnitPlatform()
     }
 }
@@ -128,7 +93,7 @@ extensions.configure<EclipseModel> {
     project.name = "canopy-parent"
 }
 
-tasks.named<Delete>("clean") {
+tasks.named("clean", Delete::class.java) {
     delete(
         rootDir.walkTopDown()
             .filter { it.isDirectory && it.name == ".canopy" }

@@ -1,13 +1,7 @@
+# Canopy Engine
+
 <p align="center">
   <img src="docs/assets/canopy-logo-no-bg.png" width="420" alt="Canopy Engine logo">
-</p>
-
-<p align="center">
-  <b>Canopy</b> is a modular <b>2D game engine written in Kotlin</b>.
-</p>
-
-<p align="center">
-  Built around <b>node-based architecture</b>, <b>composable behaviors</b>, and <b>reactive state systems</b>.
 </p>
 
 <p align="center">
@@ -16,91 +10,190 @@
   <img src="https://img.shields.io/badge/license-MIT-green.svg">
 </p>
 
-## 🌲 Node-based declarative game engine built in Kotlin 🌲
+---
 
-[//]: # ([![Crates.io]&#40;https://img.shields.io/crates/v/bevy.svg&#41;]&#40;https://crates.io/crates/bevy&#41;)
-[//]: # ([![Downloads]&#40;https://img.shields.io/crates/d/bevy.svg&#41;]&#40;https://crates.io/crates/bevy&#41;)
-[//]: # ([![Docs]&#40;https://docs.rs/bevy/badge.svg&#41;]&#40;https://docs.rs/bevy/latest/bevy/&#41;)
-[//]: # ([![CI]&#40;https://github.com/bevyengine/bevy/workflows/CI/badge.svg&#41;]&#40;https://github.com/canopyengine/canopy/actions&#41;)
+## ✨ What is Canopy?
+
+**Canopy is a declarative 2D game engine built for Kotlin developers.**
+
+It rethinks how games are structured by combining:
+
+* 🌲 **Declarative structure** → declare how your game is structured via node-based DSL
+* ⚡ **Reactive state** → changes propagate automatically
+* 🧩 **Composable behaviors** → logic is modular and reusable
+
+Instead of manually orchestrating update loops and state syncing, you **describe your game**, and Canopy handles the flow.
 
 ---
 
-Canopy is a: 
-* node-based
-* declarative 
-* 2D game engine built in [Kotlin](https://kotlinlang.org/)
+## 🧠 The Core Idea
 
-It's designed to be **Kotlin-native**, built with declarative APIs, node composition, and reactive patterns in mind to
-create games in a clean, expressive, and maintainable way.
+Traditional engines revolve around:
 
-**Canopy** focuses on delivering a **simple yet powerful** experience, giving developers the flexibility to build complex
-systems without sacrificing clarity or control.
+> “What runs every frame?”
 
-[Oficial docs](http://github.com/canopyengine/canopy-docs)
+Canopy flips that into:
+
+> **“What is the structure of my world, and how does it react to change?”**
 
 ---
 
-## Design Goals
+## 🚀 Example
 
-* Capable: Offer a complete set of 2D tools.
-* Simple: Easy for beginners, flexible for experienced users.
-* Modular: Use only what you need, replace what you don't.
-* Fast: Your game should feel quick and snappy.
-* Productive: Dev experience should be quick, and not bound by long compilation times.
+Build your game using a clean Kotlin DSL:
+
+```kotlin
+EmptyNode("level") {
+
+    Player("player") {
+        behavior(PlayerController())
+    }
+
+    Enemy("enemy")
+
+    UI("ui")
+
+}.asSceneRoot()
+```
+
+No manual update loops.
+No tangled systems.
+
+👉 Just structure + behavior.
 
 ---
 
-## ⚠️ Work in progress ⚠️
+## 🔥 Why Canopy?
 
-**Canopy** is still a **work in progress**, and the **current version** is still unusable as is. Following the next weeks,
-the goal will be to release a **Headless Version** capable of running the core features in the **terminal**.
-See more details [here](https://github.com/canopyengine/canopy-docs/blob/main/docs/roadmap.md).
+### 1. Declarative, not imperative
 
----
+You describe *what exists*, not *how to update it*. You do it via our ``node-based`` system
 
-#### **Minimum Supported Kotlin Version**: **2.3.10**
-
-> **Canopy** development aims to follow **Kotlin**'s improvements, so the minimum
-supported version will usually be the latest **stable** version.
-
-
-## Example Scene
-
-Build your game with composition in mind, through our Kotlin DSL
+**Example**
 
 ````kotlin
 EmptyNode("level"){
     
-    Player("player"){
-        behavior(PlayerController())
+    Player()
+    
+    Enemy{
+        at(200f, 100f)
+        behavior(EnemyController())
+        
+        Weapon("gun")
     }
     
-    Enemy("enemy")
-    
-    UI("ui")
-}.asSceneRoot()
+    UI()
+}
 ````
 
-# Documentation
+---
 
-You can see important information about the engine here:
+### 2. Reactive by default
 
-| Section                                                              | Description            |
-|----------------------------------------------------------------------|------------------------|
-| [Introduction](docs/articles/introduction.md)                        | Overview of the engine |
-| [Official Documentation](https://github.com/canopyengine/canopy-docs) | Complete engine manual |
-| [Release Notes](docs/releases/releases.md)                           | Changelogs             |
-| [Roadmap](docs/roadmap.md)                                           | Planned development    |
+State changes automatically propagate through your game.
 
+No manual wiring. No hidden dependencies.
 
-# License
+````kotlin
+val onKilled = event()
+// Stateful events
+val health = signal(100)
+// Derived signals
+val healthPercentage = computed{ "${health() / 100}%" }
 
-Canopy is licensed under the **MIT License**.
+// Derived callbacks
+effect{
+    log.info{ "Life: ${healthPercentage()}" }
+    if(health() <= 0)
+        onKilled.emit()
+}
+````
 
-See the [LICENSE](LICENSE) file for details.
+---
 
+### 3. Structured, but flexible
+
+* Organized like a tree
+* Extensible like a framework
+* Not locked into rigid engine patterns
+
+---
+
+### 4. Kotlin-first design
+
+Built from the ground up for Kotlin:
+
+* Modern language features
+* DSL-driven APIs
+* No Java-first compromises
+
+---
+
+## 🧭 Design Goals
+
+Canopy is built with a few strong principles:
+
+* **Clarity over cleverness**
+  → Code should be readable and predictable
+
+* **Composition over inheritance**
+  → Build systems by combining behaviors
+
+* **Reactivity over manual syncing**
+  → State drives behavior automatically
+
+* **Structure over chaos**
+  → Your game should scale without becoming messy
+
+* **Freedom without fragmentation**
+  → Flexible, but still coherent
+
+---
+
+## ⚠️ Current Status
+
+Canopy is **work in progress** and not yet production-ready.
+
+### Current focus:
+
+* 🧪 Headless runtime (terminal-based execution)
+* ⚡ Reactive system foundations
+* 🌲 Core node architecture
+
+This allows:
+
+* fast iteration
+* simulation-driven development
+* debugging without rendering overhead
+
+👉 See the roadmap:
+[Roadmap](https://github.com/canopyengine/canopy-docs/blob/main/docs/roadmap.md)
+
+---
+
+## 📚 Documentation
+
+👉 [Canopy Docs](https://github.com/canopyengine/canopy-docs)
+
+---
+
+## 📦 Minimum Requirements
+
+* **Kotlin 2.3.10+**
+
+Canopy tracks modern Kotlin releases closely.
+
+---
+
+## 📜 License
+
+MIT License — see [LICENSE-MIT](/LICENSE-MIT)
+
+APACHE License - see [LICENSE-APACHE](/LICENSE-APACHE)
 ---
 
 <p align="center">
   Canopy Engine • 2026
 </p>
+
