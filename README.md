@@ -1,7 +1,7 @@
 # Canopy Engine
 
 <p align="center">
-  <img src="docs/assets/canopy-logo-no-bg.png" width="420" alt="Canopy Engine logo">
+  <img src="logo.png" width="420" alt="Canopy Engine logo">
 </p>
 
 <p align="center">
@@ -168,7 +168,7 @@ This allows:
 * debugging without rendering overhead
 
 👉 See the roadmap:
-[Roadmap](https://github.com/canopyengine/canopy-docs/blob/main/docs/roadmap.md)
+[Roadmap](https://github.com/canopyengine/canopy-docs/blob/main/markdown/misc/roadmap.md)
 
 ---
 
