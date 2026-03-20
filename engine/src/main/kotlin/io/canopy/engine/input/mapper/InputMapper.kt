@@ -1,7 +1,6 @@
 package io.canopy.engine.input.mapper
 
 import io.canopy.engine.input.binds.InputBind
-import io.canopy.engine.input.binds.InputBindType
 import io.canopy.engine.input.binds.InputData
 import io.canopy.engine.input.binds.asData
 import io.canopy.engine.logging.logger
@@ -12,7 +11,8 @@ class InputMapper {
 
     private val mappings: MutableMap<String, MutableList<InputBind>> = mutableMapOf()
 
-    val actions get() = mappings.mapValues { it.value.toList() }
+    val actions: Map<String, List<InputBind>>
+        get() = mappings.mapValues { it.value.toList() }
 
     init {
         clearMappings()
@@ -39,16 +39,18 @@ class InputMapper {
         mappings.clear()
     }
 
-    fun mapAction(action: String, newBinds: List<InputBind>, replace: Boolean = true) {
-        logger.info {
-            "Mapping action [$action] to: ${newBinds.joinToString { it.describe() }}"
+    fun mapActions(vararg newMappings: Pair<String, List<InputBind>>, replace: Boolean = true) {
+        newMappings.forEach { (action, newBinds) ->
+            logger.info {
+                "Mapping action [$action] to: ${newBinds.joinToString { it.describe() }}"
+            }
+
+            val binds = mappings.getOrPut(action) { mutableListOf() }
+
+            if (replace) binds.clear()
+
+            binds += newBinds
         }
-
-        val binds = mappings.getOrPut(action) { mutableListOf() }
-
-        if (replace) binds.clear()
-
-        binds += newBinds
     }
 
     fun unmapAction(action: String) {
@@ -56,7 +58,7 @@ class InputMapper {
     }
 
     private fun InputBind.describe(): String = when (type) {
-        InputBindType.Keyboard -> "keyboard($code)"
-        InputBindType.Mouse -> "mouse($code)"
+        InputBind.Type.Keyboard -> "keyboard(${name.lowercase()})"
+        InputBind.Type.Mouse -> "mouse(${name.lowercase()})"
     }
 }

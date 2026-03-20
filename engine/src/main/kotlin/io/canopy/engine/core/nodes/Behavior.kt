@@ -112,8 +112,9 @@ fun <N : Node<N>> N.behavior(
     onExitTree: N.() -> Unit = {},
     onUpdate: N.(delta: Float) -> Unit = {},
     onPhysicsUpdate: N.(delta: Float) -> Unit = {},
+    onInput: N.(event: InputEvent) -> Unit = {},
 ) {
-    behavior = createBehavior(onEnterTree, onReady, onExitTree, onUpdate, onPhysicsUpdate)()
+    behavior = createBehavior(onEnterTree, onReady, onExitTree, onUpdate, onPhysicsUpdate, onInput)()
 }
 
 /**
@@ -149,6 +150,7 @@ fun <N : Node<N>> createBehavior(
     onExitTree: N.() -> Unit = {},
     onUpdate: N.(delta: Float) -> Unit = {},
     onPhysicsUpdate: N.(delta: Float) -> Unit = {},
+    onInput: N.(InputEvent) -> Unit = {},
 ) = { node: N ->
     object : Behavior<N>(node) {
 
@@ -170,6 +172,10 @@ fun <N : Node<N>> createBehavior(
 
         override fun onPhysicsUpdate(delta: Float) {
             onPhysicsUpdate(node, delta)
+        }
+
+        override fun onInput(event: InputEvent) {
+            onInput(node, event)
         }
     }
 }
