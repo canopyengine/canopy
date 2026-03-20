@@ -1,0 +1,60 @@
+version: 2
+
+updates:
+  - package-ecosystem: "gradle"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "06:00"
+      timezone: "Europe/Lisbon"
+    open-pull-requests-limit: 5
+    labels:
+      - "dependencies"
+    commit-message:
+      prefix: "Build"
+      include: "scope"
+    groups:
+      kotlin:
+        patterns:
+          - "org.jetbrains.kotlin*"
+          - "org.jetbrains.kotlinx*"
+      libgdx:
+        patterns:
+          - "com.badlogicgames.gdx*"
+          - "io.github.libktx*"
+      testing:
+        patterns:
+          - "org.junit*"
+          - "org.assertj*"
+          - "io.mockk*"
+          - "org.mockito*"
+      logging:
+        patterns:
+          - "org.slf4j*"
+          - "ch.qos.logback*"
+          - "net.logstash.logback*"
+      tooling:
+        patterns:
+          - "org.jlleitschuh.gradle.ktlint*"
+          - "org.gradle.toolchains*"
+          - "com.github.ajalt.mordant*"
+    ignore:
+      - dependency-name: "*"
+        update-types:
+          - "version-update:semver-major"
+
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "06:30"
+      timezone: "Europe/Lisbon"
+    open-pull-requests-limit: 3
+    labels:
+      - "dependencies"
+      - "ci"
+    commit-message:
+      prefix: "ci"
+      include: "scope"
