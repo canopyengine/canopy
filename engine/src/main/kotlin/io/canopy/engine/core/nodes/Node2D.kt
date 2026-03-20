@@ -1,7 +1,6 @@
 package io.canopy.engine.core.nodes
 
 import io.canopy.engine.math.Vector2
-import ktx.math.times
 
 /**
  * Base 2D Node
