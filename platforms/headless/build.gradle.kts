@@ -16,15 +16,7 @@ dependencies {
     // Canopy deps
     implementation(projects.engine)
     implementation(projects.tooling.utils)
-
-    // Gdx
-    implementation(libs.gdx.backend.headless)
-    val gdxPlatform = libs.gdx.platform.get().module
-    val gdxVer = libs.versions.gdx.get()
-    api("$gdxPlatform:$gdxVer:natives-desktop")
-
-    // Ktx
-    implementation(libs.ktx.app)
+    implementation(projects.adapters.libgdx)
 
     // Logging
     runtimeOnly(libs.logback.classic)

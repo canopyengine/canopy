@@ -17,6 +17,7 @@ dependencies {
     implementation(projects.engine)
     implementation(projects.tooling.utils)
     implementation(projects.platforms.headless)
+    implementation(projects.adapters.libgdx)
 
     // Mordant
     implementation(libs.mordant.core)

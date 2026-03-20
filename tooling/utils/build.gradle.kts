@@ -5,9 +5,4 @@ plugins {
     `maven-publish`
 }
 
-dependencies {
-    // Gdx
-    api(libs.gdx.core)
-    // Ktx
-    api(libs.ktx.math)
-}
+dependencies {}

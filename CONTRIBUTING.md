@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="docs/assets/canopy-logo-no-bg.png" width="420" alt="Canopy Engine logo">
+  <img src="logo.png" width="420" alt="Canopy Engine logo">
 </p>
 
 # Contributors guidelines

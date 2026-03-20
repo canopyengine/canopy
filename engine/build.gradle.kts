@@ -19,12 +19,7 @@ dependencies {
 
     // Kotlin
     api(libs.coroutines.core)
-
-    // Gdx
-    api(libs.gdx.core)
-
-    // Ktx
-    api(libs.ktx.assets)
+    api(libs.kotlin.reflect)
 
     // Serialization
     api(libs.kotlinx.serialization.core)

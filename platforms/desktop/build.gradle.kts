@@ -9,7 +9,7 @@ plugins {
 dependencies {
     // Canopy deps
     implementation(projects.engine)
-    implementation(projects.tooling.logging)
+    implementation(projects.adapters.libgdx)
 
     // Gdx & Ktx
 

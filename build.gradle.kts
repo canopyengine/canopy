@@ -17,14 +17,14 @@ plugins {
     alias(libs.plugins.ktlint) apply false
 }
 
-group = "io.github.canopy"
+group = "io.canopy"
 version = canopyVersion
 
 allprojects {
     apply(plugin = "eclipse")
     apply(plugin = "idea")
 
-    group = "io.github.canopy"
+    group = "io.canopy"
     version = canopyVersion
 
     extensions.configure<IdeaModel> {
