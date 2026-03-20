@@ -1,7 +1,7 @@
 package io.canopy.engine.data.core.registry
 
 /**
- * Represents an entry that can be stored in an [IdRegistry].
+ * Represents an entry that can be stored in an [io.canopy.engine.data.registry.IdRegistry].
  *
  * Each entry is identified by a **namespaced ID** composed of:
  *
@@ -20,7 +20,7 @@ package io.canopy.engine.data.core.registry
  *
  * This pattern prevents ID collisions between different modules or libraries.
  *
- * @see IdRegistry
+ * @see io.canopy.engine.data.registry.IdRegistry
  */
 interface IdEntry {
 

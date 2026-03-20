@@ -1,123 +1,77 @@
 package io.canopy.engine.core.managers
 
 import kotlin.reflect.KClass
+import kotlin.reflect.full.superclasses
 import io.canopy.engine.logging.EngineLogs
 import io.canopy.engine.logging.LogContext
 
-/**
- * Global registry responsible for storing and managing engine [Manager] instances.
- *
- * The registry provides:
- * - Registration / lookup of managers by type
- * - A standard lifecycle: [setup] and [teardown]
- * - A small DSL via operator overloads (`+manager`, `-ManagerClass`)
- *
- * Typical boot flow:
- * 1) Register managers (usually during app startup)
- * 2) Call [setup] to initialize them
- * 3) Call [teardown] on shutdown to release resources
- *
- * Notes:
- * - This is a global singleton registry.
- * - Registration order matters if managers depend on each other (setup runs in insertion order).
- * - This implementation is not synchronized; it assumes boot happens on one thread.
- */
 object ManagersRegistry {
 
-    /** Engine subsystem logger (consistent + routable). */
     private val log = EngineLogs.managers
 
-    /**
-     * Registered managers keyed by their concrete KClass.
-     *
-     * Using a mutable map means insertion order is preserved (LinkedHashMap behavior),
-     * so setup/teardown run deterministically in registration order.
-     */
-    private val managers = mutableMapOf<KClass<out Manager>, Manager>()
+    private val managers = linkedMapOf<KClass<out Manager>, Manager>()
+    private val resolvedCache = mutableMapOf<KClass<out Manager>, Manager>()
 
-    /* ============================================================
-     * Registration API
-     * ============================================================ */
-
-    /**
-     * Registers a manager instance.
-     *
-     * @throws IllegalArgumentException if the manager type is already registered
-     */
     fun <T : Manager> register(manager: T) {
-        val key = manager::class
+        val concreteKey = manager::class
 
-        require(managers[key] == null) {
-            // Keep require message cheap (no heavy formatting).
-            "Manager ${key.simpleName} is already registered"
+        require(concreteKey !in managers) {
+            "Manager ${concreteKey.simpleName} is already registered"
         }
 
-        managers[key] = manager
+        val conflictingTypes = findConflictingAssignableTypes(manager)
 
-        log.debug("event" to "managers.register", "manager" to key.simpleName) {
-            "Registered manager"
+        require(conflictingTypes.isEmpty()) {
+            val conflicts = conflictingTypes.joinToString { it.simpleName ?: "<anonymous>" }
+            "Manager ${concreteKey.simpleName} conflicts with an existing registration for: $conflicts"
         }
+
+        managers[concreteKey] = manager
+        invalidateCache()
+
+        log.debug(
+            "event" to "managers.register",
+            "manager" to concreteKey.simpleName
+        ) { "Registered manager" }
     }
 
-    /**
-     * DSL helper:
-     * `+AssetsManager()`
-     */
     inline operator fun <reified T : Manager> T.unaryPlus() = register(this)
 
-    /**
-     * Unregisters a manager type (does not call teardown).
-     *
-     * Use this when you need to remove a manager from the registry,
-     * typically in tests or dynamic setups.
-     */
     fun <T : Manager> unregister(klass: KClass<T>) {
-        log.debug("event" to "managers.unregister", "manager" to klass.simpleName) {
-            "Unregistered manager"
-        }
-        managers.remove(klass)
+        val removed = resolveRegistrationKey(klass)?.let { managers.remove(it) }
+        if (removed != null) invalidateCache()
+
+        log.debug(
+            "event" to "managers.unregister",
+            "manager" to klass.simpleName,
+            "removed" to (removed != null)
+        ) { "Unregistered manager" }
     }
 
-    /**
-     * DSL helper:
-     * `-AssetsManager::class`
-     */
     inline operator fun <reified T : Manager> KClass<T>.unaryMinus() = unregister(this)
 
-    /* ============================================================
-     * Lookup / inspection API
-     * ============================================================ */
+    fun <T : Manager> has(clazz: KClass<T>): Boolean =
+        clazz.isSubclassOfManager() && resolveManagerOrNull(clazz) != null
 
-    /** Returns true if a manager of the given type is registered. */
-    fun <T : Manager> has(clazz: KClass<T>) = clazz in managers
+    operator fun contains(clazz: KClass<out Manager>): Boolean = has(clazz)
 
-    /** Kotlin-friendly containment check: `if (FooManager::class in ManagersRegistry) ...` */
-    operator fun contains(clazz: KClass<*>) = clazz in managers
-
-    /**
-     * Retrieves the manager instance for [clazz].
-     *
-     * @throws IllegalStateException if the manager is not registered
-     */
     @Suppress("UNCHECKED_CAST")
-    fun <T : Manager> getManager(clazz: KClass<T>): T = managers[clazz] as? T
-        ?: throw IllegalStateException(
-            """
+    fun <T : Manager> getManager(clazz: KClass<T>): T {
+        resolvedCache[clazz]?.let { return it as T }
+
+        val resolved = resolveManagerOrNull(clazz)
+            ?: throw IllegalStateException(
+                """
                 [MANAGERS REGISTRY]
                 No ${clazz.simpleName} registered!
                 To fix this: register it into the Managers Registry!
-            """.trimIndent()
-        )
+                """.trimIndent()
+            )
 
-    /* ============================================================
-     * Lifecycle API
-     * ============================================================ */
+        resolvedCache[clazz] = resolved
+        return resolved as T
+    }
 
-    /**
-     * Initializes all registered managers by calling [Manager.setup].
-     *
-     * Each manager setup runs with its name in MDC (`manager=<Name>`) to make logs easier to filter.
-     */
     fun setup() {
         log.info("event" to "managers.setup", "registered" to managers.size) {
             "Bootstrapping managers"
@@ -134,13 +88,6 @@ object ManagersRegistry {
         log.info("event" to "managers.setup.done") { "Finished bootstrapping managers" }
     }
 
-    /**
-     * Shuts down all registered managers by calling [Manager.teardown],
-     * then clears the registry.
-     *
-     * Note: teardown runs in registration order (same as setup).
-     * If you ever need reverse-order teardown for dependency reasons, this is the place to change it.
-     */
     fun teardown() {
         log.info("event" to "managers.teardown", "registered" to managers.size) {
             "Tearing down managers"
@@ -155,17 +102,11 @@ object ManagersRegistry {
         }
 
         managers.clear()
+        invalidateCache()
+
         log.info("event" to "managers.teardown.done") { "Finished tearing down managers" }
     }
 
-    /**
-     * Runs [block] with a fresh manager set:
-     * - Tears down the current registry
-     * - Executes [block] (where callers usually register managers)
-     * - Bootstraps the newly registered managers
-     *
-     * This is primarily useful for tests that need isolation between scenarios.
-     */
     fun withScope(block: ManagersRegistry.() -> Unit) {
         log.info("event" to "managers.scope") { "Creating scoped Managers registry..." }
         teardown()
@@ -173,21 +114,90 @@ object ManagersRegistry {
         setup()
         log.info("event" to "managers.scope.done") { "Finished creating scoped Managers registry" }
     }
+
+    private fun invalidateCache() {
+        resolvedCache.clear()
+    }
+
+    private fun <T : Manager> resolveManagerOrNull(clazz: KClass<T>): Manager? {
+        managers[clazz]?.let { return it }
+
+        val matches = managers.values.filter { clazz.isInstance(it) }
+
+        return when (matches.size) {
+            0 -> null
+
+            1 -> matches.first()
+
+            else -> throw IllegalStateException(
+                buildString {
+                    append("Multiple managers match ")
+                    append(clazz.simpleName ?: clazz.toString())
+                    append(": ")
+                    append(matches.joinToString { it::class.simpleName ?: "<anonymous>" })
+                }
+            )
+        }
+    }
+
+    private fun findConflictingAssignableTypes(candidate: Manager): List<KClass<out Manager>> {
+        val candidateClass = candidate::class
+        val existingManagers = managers.values.toList()
+
+        if (existingManagers.isEmpty()) return emptyList()
+
+        val candidateTypes = candidateClass.managerTypeClosure()
+
+        return candidateTypes.filter { type ->
+            existingManagers.any { type.isInstance(it) }
+        }
+    }
+
+    private fun <T : Manager> resolveRegistrationKey(clazz: KClass<T>): KClass<out Manager>? {
+        if (clazz in managers) return clazz
+
+        val matches = managers.keys.filter { key ->
+            clazz.isInstance(managers[key])
+        }
+
+        return when (matches.size) {
+            0 -> null
+
+            1 -> matches.first()
+
+            else -> throw IllegalStateException(
+                buildString {
+                    append("Multiple registered managers match ")
+                    append(clazz.simpleName ?: clazz.toString())
+                    append(": ")
+                    append(matches.joinToString { it.simpleName ?: "<anonymous>" })
+                }
+            )
+        }
+    }
+
+    @Suppress("UNCHECKED_CAST")
+    private fun KClass<out Manager>.managerTypeClosure(): Set<KClass<out Manager>> {
+        val visited = linkedSetOf<KClass<*>>()
+
+        fun visit(type: KClass<*>) {
+            if (!visited.add(type)) return
+            type.superclasses.forEach(::visit)
+        }
+
+        visit(this)
+
+        return visited
+            .filter { it.isConcreteManagerLookupType() }
+            .map { it as KClass<out Manager> }
+            .toSet()
+    }
+
+    private fun KClass<*>.isSubclassOfManager(): Boolean = Manager::class.java.isAssignableFrom(this.java)
+
+    private fun KClass<*>.isConcreteManagerLookupType(): Boolean = isSubclassOfManager() && this != Manager::class
 }
 
-/* ------------------------------------------------------------------
- * Convenience helpers
- * ------------------------------------------------------------------ */
-
-/**
- * Retrieves a manager instance from [ManagersRegistry].
- *
- * Example:
- * `val assets = manager<AssetsManager>()`
- */
 inline fun <reified T : Manager> manager(): T = ManagersRegistry.getManager(T::class)
 
-/**
- * Lazy version of [manager], resolved on first access.
- */
 inline fun <reified T : Manager> lazyManager() = lazy { manager<T>() }

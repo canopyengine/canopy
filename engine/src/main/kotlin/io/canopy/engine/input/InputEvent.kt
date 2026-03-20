@@ -1,6 +1,6 @@
 package io.canopy.engine.input
 
-import com.badlogic.gdx.math.Vector2
+import io.canopy.engine.math.Vector2
 
 /**
  * Represents an input event detected by GDX and mapped by the Input Dispatcher

@@ -29,11 +29,14 @@ enableFeaturePreview("TYPESAFE_PROJECT_ACCESSORS")
 include(
     ":platforms:headless",
     ":platforms:terminal",
-   // ":platforms:desktop"
+   //":platforms:desktop"
 )
 
 // Engine
 include(":engine")
+
+// Adapters
+include(":adapters:libgdx")
 
 // Tooling
 include(

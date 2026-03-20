@@ -6,9 +6,9 @@ import io.canopy.engine.app.screen.ScreenManager
 import io.canopy.engine.app.screen.ScreenRegistry
 import io.canopy.engine.core.CanopyBuildInfo
 import io.canopy.engine.core.managers.InjectionManager
+import io.canopy.engine.core.managers.Manager
 import io.canopy.engine.core.managers.ManagersRegistry
 import io.canopy.engine.core.managers.SceneManager
-import io.canopy.engine.data.core.assets.AssetsManager
 import io.canopy.engine.logging.CanopyLogging
 import io.canopy.engine.logging.EngineLogs
 import io.canopy.engine.logging.LogContext
@@ -16,11 +16,13 @@ import io.canopy.engine.logging.LogContext
 abstract class App<C : AppConfig> protected constructor() {
 
     private val screenRegistry = ScreenRegistry()
-    val sceneManager = SceneManager()
-    private val screenManager = ScreenManager()
+
+    protected val screenManager = ScreenManager()
+    protected val sceneManager = SceneManager()
 
     private var _config: C? = null
-    protected val config: C get() = _config ?: defaultConfig()
+    protected val config: C
+        get() = _config ?: defaultConfig()
 
     private var frame: Long = 0
 
@@ -28,6 +30,8 @@ abstract class App<C : AppConfig> protected constructor() {
     protected var onUpdate: (App<C>, delta: Float) -> Unit = { _, _ -> }
     protected var onResize: (App<C>, width: Int, height: Int) -> Unit = { _, _, _ -> }
     protected var onExit: (App<C>) -> Unit = {}
+    protected var managerBuilder: ManagersRegistry.() -> Unit = {}
+    protected var sceneManagerBuilder: SceneManager.() -> Unit = {}
 
     private val startedLatch = CountDownLatch(1)
     private val finishedLatch = CountDownLatch(1)
@@ -53,9 +57,44 @@ abstract class App<C : AppConfig> protected constructor() {
     protected abstract fun internalLaunch(config: C, vararg args: String)
 
     /**
-     * Called by the platform runtime when the app is actually starting.
+     * Hook for subclasses to provide additional managers before setup.
+     *
+     * Do not include [InjectionManager], [SceneManager], or [ScreenManager] here.
+     * Those are owned by [App].
      */
-    open fun ready() {
+    protected open fun collectManagers(): List<Manager> = emptyList()
+
+    /**
+     * Hook for subclasses to configure the shared [SceneManager] before setup.
+     */
+    protected open fun configureSceneManager(sceneManager: SceneManager) = Unit
+
+    /**
+     * Hook called after managers and screens are ready.
+     */
+    protected open fun afterReady() = Unit
+
+    /**
+     * Hook called before the user update callback and screen frame update.
+     */
+    protected open fun beforeUpdate(delta: Float) = Unit
+
+    /**
+     * Hook called after the user resize callback.
+     */
+    protected open fun afterResize(width: Int, height: Int) = Unit
+
+    /**
+     * Hook called before teardown begins.
+     */
+    protected open fun beforeExit() = Unit
+
+    /**
+     * Called by the platform runtime when the app is actually starting.
+     *
+     * Final to preserve lifecycle guarantees.
+     */
+    fun ready() {
         CanopyLogging.init(
             CanopyLogging.Config(
                 engineVersion = CanopyBuildInfo.projectVersion
@@ -68,16 +107,21 @@ abstract class App<C : AppConfig> protected constructor() {
         LogContext.with("backend" to backendName) {
             EngineLogs.lifecycle.info { "Booting Canopy..." }
 
-            onReady(this)
+            sceneManager.apply(sceneManagerBuilder)
+            configureSceneManager(sceneManager)
 
             ManagersRegistry.apply {
+                managerBuilder()
+                collectManagers().forEach(::register)
                 +InjectionManager()
-                +AssetsManager()
                 +sceneManager
                 +screenManager
             }.setup()
 
             screenRegistry.setup()
+
+            onReady(this@App)
+            afterReady()
 
             startedLatch.countDown()
 
@@ -87,22 +131,31 @@ abstract class App<C : AppConfig> protected constructor() {
 
     /**
      * Called by the platform runtime every frame/tick.
+     *
+     * Final to preserve lifecycle guarantees.
      */
-    open fun update(delta: Float) {
+    fun update(delta: Float) {
         frame++
+
         LogContext.with("frame" to frame) {
-            onUpdate(this, delta)
+            beforeUpdate(delta)
+            onUpdate(this@App, delta)
         }
+
         screenManager.frame(delta)
     }
 
     /**
      * Called by the platform runtime when the surface changes size.
+     *
+     * Final to preserve lifecycle guarantees.
      */
-    open fun resize(width: Int, height: Int) {
+    fun resize(width: Int, height: Int) {
         sceneManager.resize(width, height)
         screenManager.resize(width, height)
+
         onResize(this, width, height)
+        afterResize(width, height)
 
         EngineLogs.lifecycle.debug(
             "event" to "app.resize",
@@ -113,10 +166,14 @@ abstract class App<C : AppConfig> protected constructor() {
 
     /**
      * Called by the platform runtime on shutdown.
+     *
+     * Final to preserve lifecycle guarantees.
      */
-    open fun exit() {
+    fun exit() {
         try {
             EngineLogs.lifecycle.info("event" to "app.dispose") { "Disposing app" }
+
+            beforeExit()
             ManagersRegistry.teardown()
             CanopyLogging.end(reason = "normal")
         } catch (t: Throwable) {
@@ -188,10 +245,10 @@ abstract class App<C : AppConfig> protected constructor() {
     }
 
     fun sceneManager(handler: SceneManager.() -> Unit) {
-        sceneManager.handler()
+        sceneManagerBuilder = handler
     }
 
     fun managers(handler: ManagersRegistry.() -> Unit) {
-        ManagersRegistry.apply(handler)
+        managerBuilder = handler
     }
 }

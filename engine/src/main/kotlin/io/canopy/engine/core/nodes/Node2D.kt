@@ -1,7 +1,6 @@
 package io.canopy.engine.core.nodes
 
-import com.badlogic.gdx.math.Vector2
-import ktx.math.plus
+import io.canopy.engine.math.Vector2
 import ktx.math.times
 
 /**

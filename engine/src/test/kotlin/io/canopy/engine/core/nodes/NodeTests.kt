@@ -3,11 +3,11 @@ package io.canopy.engine.core.nodes
 import kotlin.test.*
 import kotlin.time.DurationUnit
 import kotlin.time.toDuration
-import com.badlogic.gdx.math.Vector2
 import io.canopy.engine.core.managers.ManagersRegistry
 import io.canopy.engine.core.managers.SceneManager
 import io.canopy.engine.core.nodes.types.empty.EmptyNode
 import io.canopy.engine.core.nodes.types.empty.EmptyNode2D
+import io.canopy.engine.math.Vector2
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking

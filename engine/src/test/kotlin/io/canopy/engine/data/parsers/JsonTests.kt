@@ -2,6 +2,7 @@ package io.canopy.engine.data.core.parsers
 
 import kotlin.test.assertEquals
 import kotlin.test.assertIs
+import io.canopy.engine.data.parsers.Json
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.modules.SerializersModule
@@ -12,7 +13,7 @@ import org.junit.jupiter.api.Nested
 import org.junit.jupiter.api.Test
 
 /**
- * Tests for [Json].
+ * Tests for [io.canopy.engine.data.parsers.Json].
  *
  * JsonParser defaults (important for these tests):
  * - ignoreUnknownKeys = true
