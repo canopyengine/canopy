@@ -1,8 +1,9 @@
-package io.canopy.engine.core.flow
+package io.canopy.engine.core.flows
 
 import io.canopy.engine.core.managers.ManagersRegistry
 import io.canopy.engine.core.managers.SceneManager
 import io.canopy.engine.core.nodes.Node
+import io.canopy.engine.core.nodes.types.empty.EmptyNode
 import org.junit.jupiter.api.Assertions.*
 import org.junit.jupiter.api.BeforeAll
 import org.junit.jupiter.api.Test
@@ -25,8 +26,6 @@ class ContextTests {
     }
 
     // --- Helpers ------------------------------------------------------------
-
-    private class EmptyNode(name: String, block: EmptyNode.() -> Unit = {}) : Node<EmptyNode>(name, block)
 
     private fun n(name: String, block: EmptyNode.() -> Unit = {}) = EmptyNode(name, block)
 

@@ -1,6 +1,7 @@
-package io.canopy.engine.core.flow
+package io.canopy.engine.core.flows
 
 import kotlin.jvm.Throws
+import java.util.UUID
 import io.canopy.engine.core.nodes.Node
 
 /**
@@ -51,10 +52,10 @@ interface ContextKey {
  * ```
  */
 class Context(
-    name: String = "__context__",
+    name: String = "__context__" + UUID.randomUUID().toString(),
     internal val provided: MutableMap<String, () -> Any?> = linkedMapOf(),
     block: Context.() -> Unit = {},
-) : Node<Context>(name, block) {
+) : Node<Context>(name, skipOnSearch = true, block) {
 
     /**
      * Provides a value under a raw string key.
@@ -88,10 +89,8 @@ fun <T : Any> Node<*>.fromContextOrNull(key: String): T? {
 
     while (current != null) {
         if (current is Context) {
-            val provider = current.provided[key]
-            if (provider != null) {
-                val value = provider.invoke() as? T
-                if (value != null) return value
+            current.provided[key]?.let {
+                return it.invoke() as? T ?: continue
             }
         }
         current = current.parent
@@ -108,12 +107,12 @@ fun <T : Any> Node<*>.fromContextOrNull(key: ContextKey): T? = fromContextOrNull
 /**
  * Lazily resolves a context value by raw string key, returning null if not found.
  */
-fun <T : Any> Node<*>.lazyFromContextOrNull(key: String): Lazy<T?> = lazy { fromContextOrNull<T>(key) }
+fun <T : Any> Node<*>.lazyFromContextOrNull(key: String): Lazy<T?> = lazy { fromContextOrNull(key) }
 
 /**
  * Lazily resolves a context value by [ContextKey], returning null if not found.
  */
-fun <T : Any> Node<*>.lazyFromContextOrNull(key: ContextKey): Lazy<T?> = lazy { fromContextOrNull<T>(key) }
+fun <T : Any> Node<*>.lazyFromContextOrNull(key: ContextKey): Lazy<T?> = lazy { fromContextOrNull(key) }
 
 /**
  * Resolves a context value by raw string key.
@@ -121,7 +120,7 @@ fun <T : Any> Node<*>.lazyFromContextOrNull(key: ContextKey): Lazy<T?> = lazy { 
  * @throws NoSuchElementException if the key does not exist in any visible context scope.
  */
 @Throws(NoSuchElementException::class)
-fun <T : Any> Node<*>.fromContext(key: String): T = fromContextOrNull<T>(key)
+fun <T : Any> Node<*>.fromContext(key: String): T = fromContextOrNull(key)
     ?: throw NoSuchElementException("Context key '$key' not found")
 
 /**
@@ -138,7 +137,7 @@ fun <T : Any> Node<*>.fromContext(key: ContextKey): T = fromContext(key.key)
  * @throws NoSuchElementException if the key does not exist in any visible context scope.
  */
 @Throws(NoSuchElementException::class)
-fun <T : Any> Node<*>.lazyFromContext(key: String): Lazy<T> = lazy { fromContext<T>(key) }
+fun <T : Any> Node<*>.lazyFromContext(key: String): Lazy<T> = lazy { fromContext(key) }
 
 /**
  * Lazily resolves a context value by [ContextKey].
@@ -146,4 +145,4 @@ fun <T : Any> Node<*>.lazyFromContext(key: String): Lazy<T> = lazy { fromContext
  * @throws NoSuchElementException if the key does not exist in any visible context scope.
  */
 @Throws(NoSuchElementException::class)
-fun <T : Any> Node<*>.lazyFromContext(key: ContextKey): Lazy<T> = lazy { fromContext<T>(key) }
+fun <T : Any> Node<*>.lazyFromContext(key: ContextKey): Lazy<T> = lazy { fromContext(key) }

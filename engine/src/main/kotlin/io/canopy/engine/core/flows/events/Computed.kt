@@ -1,4 +1,4 @@
-package io.canopy.engine.core.flow.events
+package io.canopy.engine.core.flows.events
 
 import io.canopy.engine.logging.EngineLogs
 
@@ -58,7 +58,7 @@ class Computed<T>(private val block: () -> T) {
 
     /**
      * Reads the current derived value, registering this computed as a dependency in
-     * the enclosing [computed] or [effect] block (if any). Equivalent to [value].
+     * the enclosing [computed] or [effect] block (if any). Equivalent to [signal()].
      */
     operator fun invoke(): T = signal()
 

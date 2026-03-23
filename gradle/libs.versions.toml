@@ -5,7 +5,7 @@
 [versions]
 # Kotlin
 kotlin = "2.3.10"
-ktlint = "14.0.1"
+ktlint = "14.2.0"
 kotlinxSerialization = "1.10.0"
 
 # Gdx
@@ -19,13 +19,13 @@ ktx = "1.13.1-rc1"
 
 # Testing
 coroutines = "1.10.2"
-junit = "5.13.4"
+junit = "5.14.3"
 assertj = "3.27.7"
-mockk = "1.13.8"
-mockitoKotlin = "5.1.0"
+mockk = "1.14.9"
+mockitoKotlin = "5.4.0"
 
 # Logging
-slf4j = "2.0.16"
+slf4j = "2.0.17"
 logback = "1.5.32"
 logstash="9.0"
 

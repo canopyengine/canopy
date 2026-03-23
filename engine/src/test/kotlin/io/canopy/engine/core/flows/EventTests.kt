@@ -1,9 +1,9 @@
-package io.canopy.engine.core.flow
+package io.canopy.engine.core.flows
 
 import kotlin.concurrent.atomics.AtomicInt
 import kotlin.concurrent.atomics.ExperimentalAtomicApi
 import kotlin.test.Test
-import io.canopy.engine.core.flow.events.event
+import io.canopy.engine.core.flows.events.event
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.joinAll
 import kotlinx.coroutines.launch

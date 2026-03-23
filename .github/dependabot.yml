@@ -11,6 +11,7 @@ updates:
     open-pull-requests-limit: 5
     labels:
       - "dependencies"
+      - "pull-request"
     commit-message:
       prefix: "Build"
       include: "scope"
@@ -55,6 +56,7 @@ updates:
     labels:
       - "dependencies"
       - "ci"
+      - "pull-request"
     commit-message:
       prefix: "CI"
       include: "scope"

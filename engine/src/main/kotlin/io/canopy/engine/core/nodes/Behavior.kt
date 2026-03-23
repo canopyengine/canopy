@@ -32,9 +32,6 @@ import io.canopy.engine.input.InputEvent
  */
 abstract class Behavior<N : Node<N>>(protected open val node: N? = null) {
 
-    /** Secondary constructor allowing behaviors to be created without a node reference. */
-    constructor() : this(null)
-
     // ===============================
     //        LIFECYCLE METHODS
     // ===============================
