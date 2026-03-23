@@ -25,7 +25,7 @@ mockk = "1.13.8"
 mockitoKotlin = "5.1.0"
 
 # Logging
-slf4j = "2.0.16"
+slf4j = "2.0.17"
 logback = "1.5.32"
 logstash="9.0"
 
