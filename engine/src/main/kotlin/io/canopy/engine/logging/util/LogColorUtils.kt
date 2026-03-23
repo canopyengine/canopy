@@ -1,6 +1,6 @@
 package io.canopy.engine.logging.util
 
-object LogColorUtils {
+internal object LogColorUtils {
 
     const val ANSI_RESET = "\u001B[0m"
     const val ANSI_YELLOW = "\u001B[33m"

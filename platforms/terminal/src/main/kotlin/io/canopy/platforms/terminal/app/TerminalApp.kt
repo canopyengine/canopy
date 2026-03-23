@@ -26,10 +26,6 @@ class TerminalApp internal constructor() : App<AppConfig>() {
         assetsManager
     )
 
-    override fun beforeUpdate(delta: Float) {
-        inputManager.beginFrame()
-    }
-
     override fun internalLaunch(config: AppConfig, vararg args: String) {
         log.info { "Starting terminal runtime" }
         HeadlessHost.launch(this)

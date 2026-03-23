@@ -23,7 +23,7 @@ import org.slf4j.LoggerFactory
  * - Prints startup banner
  * - Tracks session lifecycle
  */
-object CanopyLogging {
+internal object CanopyLogging {
 
     /**
      * Lazily created loggers.

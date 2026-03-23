@@ -1,6 +1,6 @@
 package io.canopy.engine.input.binds
 
-import io.canopy.engine.input.mapper.InputMapper
+import io.canopy.engine.input.InputMapper
 import kotlinx.serialization.Serializable
 
 /**

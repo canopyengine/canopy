@@ -7,7 +7,7 @@ import io.canopy.engine.logging.util.withTemporaryMdcContext
 import org.slf4j.Logger as Slf4j
 import org.slf4j.MDC
 
-class Slf4jLogger(private val delegate: Slf4j) : Logger {
+internal class Slf4jLogger(private val delegate: Slf4j) : Logger {
 
     override fun isTraceEnabled(): Boolean = delegate.isTraceEnabled
     override fun isDebugEnabled(): Boolean = delegate.isDebugEnabled

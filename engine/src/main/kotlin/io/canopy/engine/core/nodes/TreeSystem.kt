@@ -2,7 +2,6 @@ package io.canopy.engine.core.nodes
 
 import kotlin.reflect.KClass
 import io.canopy.engine.core.managers.SceneManager
-import io.canopy.engine.core.managers.lazyManager
 import io.canopy.engine.core.managers.manager
 import io.canopy.engine.logging.EngineLogs
 import io.canopy.engine.logging.LogContext
@@ -18,8 +17,6 @@ abstract class TreeSystem(
     // Engine subsystem logger for systems
     private val log = EngineLogs.subsystem("system")
 
-    protected val sceneManager: SceneManager by lazyManager<SceneManager>()
-
     /** Nodes currently matching the system's type requirements */
     protected val matchingNodes = mutableListOf<Node<*>>()
 
@@ -29,13 +26,9 @@ abstract class TreeSystem(
     //         LIFECYCLE HOOKS
     // ===============================
 
-    open fun onRegister() {
-        // default: nothing
-    }
+    open fun onRegister() = Unit
 
-    open fun onUnregister() {
-        // default: nothing
-    }
+    open fun onUnregister() = Unit
 
     // ===============================
     //         NODE REGISTRATION

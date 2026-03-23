@@ -1,4 +1,4 @@
-package io.canopy.engine.app.screen
+package io.canopy.engine.app
 
 import io.canopy.engine.core.managers.SceneManager
 import io.canopy.engine.core.managers.manager

@@ -1,4 +1,4 @@
-package io.canopy.engine.core.flow.events
+package io.canopy.engine.core.flows.events
 
 import io.canopy.engine.logging.EngineLogs
 
