@@ -180,7 +180,6 @@ abstract class App<C : AppConfig> protected constructor() {
         frame++
 
         LogContext.with("frame" to frame) {
-            beforeUpdate(delta)
             onUpdate(this@App, delta)
         }
 
