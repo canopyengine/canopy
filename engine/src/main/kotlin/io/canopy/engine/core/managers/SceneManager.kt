@@ -1,8 +1,8 @@
 package io.canopy.engine.core.managers
 
 import kotlin.reflect.KClass
-import io.canopy.engine.core.flow.events.asSignal
-import io.canopy.engine.core.flow.events.event
+import io.canopy.engine.core.flows.events.asSignal
+import io.canopy.engine.core.flows.events.event
 import io.canopy.engine.core.nodes.Node
 import io.canopy.engine.core.nodes.TreeSystem
 import io.canopy.engine.logging.EngineLogs
@@ -110,9 +110,14 @@ class SceneManager(private var physicsStep: Float = 1f / 60f, private val block:
 
     /**
      * Named groups of nodes.
-     * Useful for broadcasting operations without traversing the tree.
+     * Maps a node to its list of groups
      */
-    val groups = mutableMapOf<String, MutableList<Node<*>>>()
+    private val groupsByNode = mutableMapOf<Node<*>, MutableList<String>>()
+
+    /**
+     * Maps a group to all their nodes
+     */
+    private val groups = mutableMapOf<String, MutableList<Node<*>>>()
 
     /* ============================================================
      * Scene replacement
@@ -312,16 +317,36 @@ class SceneManager(private var physicsStep: Float = 1f / 60f, private val block:
 
     fun addToGroup(group: String, node: Node<*>) {
         groups.computeIfAbsent(group) { mutableListOf() }.add(node)
+        groupsByNode.computeIfAbsent(node) { mutableListOf() }.add(group)
+
         log.trace("event" to "group.add", "group" to group, "nodePath" to node.path) {
             "Added node to group"
         }
     }
 
     fun removeFromGroup(group: String, node: Node<*>) {
-        val groupNodes = groups[group] ?: error("Group $group does not exist")
-        groupNodes -= node
+        groups[group]?.remove(node) ?: error("Node $node does not exist in group $group")
+        groupsByNode[node]?.remove(group) ?: error("Group $group does not exist")
+
         log.trace("event" to "group.remove", "group" to group, "nodePath" to node.path) {
             "Removed node from group"
+        }
+    }
+
+    fun updateGroups(node: Node<*>) {
+        // Get or create entry
+        val oldGroups = groupsByNode.computeIfAbsent(node) { mutableListOf() }
+
+        // Remove old entries
+        oldGroups.forEach { group ->
+            groups[group]?.remove(node)
+        }
+        oldGroups.clear()
+
+        // Add new entries
+        oldGroups.addAll(node.groups)
+        node.groups.forEach { group ->
+            groups.computeIfAbsent(group) { mutableListOf() }.add(node)
         }
     }
 

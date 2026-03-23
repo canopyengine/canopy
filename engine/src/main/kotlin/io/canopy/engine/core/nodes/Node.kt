@@ -1,7 +1,7 @@
 package io.canopy.engine.core.nodes
 
 import kotlin.reflect.KClass
-import io.canopy.engine.core.flow.Context
+import io.canopy.engine.core.flows.Context
 import io.canopy.engine.core.managers.SceneManager
 import io.canopy.engine.core.managers.lazyManager
 import io.canopy.engine.core.managers.manager
@@ -22,7 +22,7 @@ import io.canopy.engine.logging.LogContext
  *
  * Construction vs initialization:
  * - `init { ... }` attaches this node to the current DSL parent (if any).
- * - `nodeReady()` runs `create()` and the user-provided DSL [block] exactly once
+ * - `nodeEnterTree()` runs `create()` and the user-provided DSL [block] exactly once
  *   to build children and configure the node.
  *
  * Generic type parameter:
@@ -33,9 +33,10 @@ import io.canopy.engine.logging.LogContext
 abstract class Node<N : Node<N>> protected constructor(
     /** Node name (expected to be unique among siblings). */
     name: String,
+    protected open val skipOnSearch: Boolean = false,
     /**
      * Node DSL block used to configure/build the node subtree.
-     * Executed once during [nodeReady].
+     * Executed once during [nodeEnterTree].
      */
     private val block: N.() -> Unit = {},
 ) {
@@ -44,44 +45,87 @@ abstract class Node<N : Node<N>> protected constructor(
      * Identity
      * ============================================================ */
 
-    private var _name = name
-
     /**
      * Node name. Renaming updates:
      * - the parent’s children map key
      * - this node’s [path] and all descendant paths
      */
+    private var _name = name
     var name
         get() = _name
         set(value) = rename(value)
 
+    /* ============================================================
+     * Groups
+     * ============================================================ */
+
     /**
-     * Local group memberships. Groups are also mirrored into the [SceneManager] registry
-     * when the node enters the tree.
+     * Local group memberships for this node.
+     *
+     * Stored as a set to avoid duplicates.
+     * Publicly exposed as read-only.
      */
-    val groups: MutableList<String> = mutableListOf()
+    private val _groups = linkedSetOf<String>()
+    val groups: Set<String> get() = _groups
 
-    /** Stable engine logger for node operations (routable to engine logs). */
-    private val log = EngineLogs.node
+    /**
+     * Adds this node to a group.
+     *
+     * If the node is already inside the built tree, also mirrors the change
+     * into the SceneManager group registry.
+     */
+    fun addGroup(group: String) {
+        if (_groups.add(group) && built) {
+            sceneManager.addToGroup(group, this)
+        }
+    }
 
-    /** Scene manager instance (resolved lazily from ManagersRegistry). */
-    protected val sceneManager: SceneManager by lazyManager()
+    /**
+     * Removes this node from a group.
+     *
+     * If the node is already inside the built tree, also mirrors the change
+     * into the SceneManager group registry.
+     */
+    fun removeGroup(group: String) {
+        if (_groups.remove(group) && built) {
+            sceneManager.removeFromGroup(group, this)
+        }
+    }
 
-    /** Prefab nodes do not run lifecycle automatically when attached. */
-    private var isPrefab: Boolean = false
+    /**
+     * Batch-updates groups and applies only the actual diff to SceneManager.
+     *
+     * Example:
+     * ```kotlin
+     * updateGroups {
+     *     remove("enemy")
+     *     add("player")
+     *     add("controllable")
+     * }
+     * ```
+     */
+    fun updateGroups(block: MutableSet<String>.() -> Unit) {
+        val before = _groups.toSet()
+        _groups.block()
+
+        if (!built) return
+
+        sceneManager.updateGroups(this)
+    }
 
     /** Optional behavior instance attached to this node. */
     internal var behavior: Behavior<N>? = null
 
     /* ============================================================
-     * Tree structure
+     * Managers
      * ============================================================ */
 
-    private var _parent: Node<*>? = null
-    val parent get() = _parent
+    /** Scene manager instance (resolved lazily from ManagersRegistry). */
+    protected val sceneManager: SceneManager by lazyManager()
 
-    private val _children: MutableMap<String, Node<*>> = mutableMapOf()
-    val children: Map<String, Node<*>> get() = _children
+    /* ============================================================
+     * Other
+     * ============================================================ */
 
     /**
      * Full path from the tree root.
@@ -94,8 +138,30 @@ abstract class Node<N : Node<N>> protected constructor(
      *   - a node is attached/detached
      *   - a node is renamed
      */
-    private var _path: String = name
+    private var _path: String = "/$name"
     val path: String get() = _path
+
+    /** Stable engine logger for node operations (routable to engine logs). */
+    private val log = EngineLogs.node
+
+    /** Prefab nodes do not run lifecycle automatically when attached. */
+    private var isPrefab: Boolean = false
+
+    /* ============================================================
+     * Tree structure
+     * ============================================================ */
+
+    /**
+     * References this node's parent
+     */
+    private var _parent: Node<*>? = null
+    val parent get() = _parent
+
+    /**
+     * References this node's children
+     */
+    private val _children: MutableMap<String, Node<*>> = mutableMapOf()
+    val children get() = _children.toMap()
 
     /* ============================================================
      * DSL support
@@ -112,11 +178,10 @@ abstract class Node<N : Node<N>> protected constructor(
     }
 
     init {
-        // If we are inside a DSL build block, auto-attach to the current parent.
-        // This is intentionally done in init to allow nested construction:
-        //
-        // parent.nodeReady() sets currentParent = parent
-        // child init reads it and attaches itself to parent
+        /*
+         * If we are inside a DSL build block, auto-attach to the current parent.
+         * This is intentionally done in init to allow nested construction:
+         */
         currentParent.get()?.addChildInternal(this)
     }
 
@@ -237,7 +302,7 @@ abstract class Node<N : Node<N>> protected constructor(
      * Path rules:
      * - "$/..." resolves from the current scene root
      * - "./..." resolves from this node
-     * - "../" goes to parent (skipping [ContextScopeNode] wrappers)
+     * - "../" goes to parent (skipping [Context] wrappers)
      * - Paths may omit ContextScopeNode segments; lookup searches through context wrappers
      *   to make DSL context blocks transparent.
      *
@@ -246,46 +311,47 @@ abstract class Node<N : Node<N>> protected constructor(
      * - `./UI/HUD`
      * - `../Camera`
      */
-    @Suppress("UNCHECKED_CAST")
     fun <T : Node<T>> getNode(path: String): T {
         val parts = path.split("/")
+        val firstPart = parts.firstOrNull()
 
-        var current: Node<*>? = when (parts.firstOrNull()) {
-            "$" -> sceneManager.currScene
-            "", "." -> this
-            else -> this
+        var current: Node<*>? =
+            if (firstPart == "$") sceneManager.currScene else this
+
+        val searchParts = when {
+            path.startsWith("/") -> parts.drop(1)
+            firstPart == "$" || firstPart == "." -> parts.drop(1)
+            else -> parts
         }
 
-        val searchParts =
-            if (parts.firstOrNull() in listOf("$", ".") || path.startsWith("/")) {
-                parts.drop(1)
-            } else {
-                parts
-            }
-
-        // Walk up skipping ContextScopeNode wrappers (they are implementation details).
-        fun Node<*>.visibleParent(): Node<*>? {
-            var p = this.parent
-            while (p is Context) p = p.parent
+        /**
+         * Skips wrapper nodes(nodes with skipOnSearch = false) and finds closest parent node
+         */
+        fun Node<*>.findVisibleParent(): Node<*>? {
+            var p = parent
+            while (p?.skipOnSearch == true) p = p.parent
             return p
         }
 
-        // Find child, treating ContextScopeNode as transparent containers.
-        fun Node<*>.findChildSkippingContext(name: String): Node<*>? {
-            // 1) direct child wins
-            this.children[name]?.let { return it }
+        fun Node<*>.resolveSearchHit(): Node<*>? {
+            if (!skipOnSearch) return this
 
-            // 2) otherwise, search one level into context scopes
-            for (c in this.children.values) {
-                if (c is Context) {
-                    c.children[name]?.let { return it }
+            for (child in children.values) {
+                child.resolveSearchHit()?.let { return it }
+            }
 
-                    // 3) also allow nested context scopes (common with nested context blocks)
-                    for (nested in c.children.values) {
-                        if (nested is Context) {
-                            nested.children[name]?.let { return it }
-                        }
-                    }
+            return null
+        }
+
+        /**
+         * Skips wrapper nodes to find searchable nodes
+         */
+        fun Node<*>.findVisibleChild(name: String): Node<*>? {
+            children[name]?.resolveSearchHit()?.let { return it }
+
+            for (child in children.values) {
+                if (child.skipOnSearch) {
+                    child.findVisibleChild(name)?.let { return it }
                 }
             }
 
@@ -293,17 +359,21 @@ abstract class Node<N : Node<N>> protected constructor(
         }
 
         for (part in searchParts) {
-            when (part) {
-                "", "." -> Unit
-                ".." -> {
-                    current = current?.visibleParent()
-                        ?: throw IllegalArgumentException("No parent for path: $path")
-                }
+            current = when (part) {
+                // Start here
+                "", "." -> current
+                // Go back one node
+                ".." -> current?.findVisibleParent()
+                    ?: throw IllegalArgumentException("No parent for path: $path")
+                // Paths (ex: [a,b,c])
                 else -> {
-                    val cur = current ?: throw IllegalArgumentException("Null node while resolving path: $path")
-                    val next = cur.findChildSkippingContext(part)
-                        ?: throw IllegalArgumentException("No child '$part' under '${cur.name}' for path '$path'")
-                    current = next
+                    val node = current
+                        ?: throw IllegalArgumentException("Null node while resolving path: $path")
+
+                    node.findVisibleChild(part)
+                        ?: throw IllegalArgumentException(
+                            "No child '$part' under '${node.name}' for path '$path'"
+                        )
                 }
             }
         }
@@ -311,7 +381,9 @@ abstract class Node<N : Node<N>> protected constructor(
         return current as T
     }
 
-    /** Kotlin shorthand: `node["Player/Weapon"]` */
+    /**
+     * Kotlin shorthand: `node["Player/Weapon"]`
+     */
     inline operator fun <reified T : Node<T>> get(path: String): T = getNode(path)
 
     /* ============================================================
@@ -332,7 +404,11 @@ abstract class Node<N : Node<N>> protected constructor(
         return this as N
     }
 
-    /** Removes this node from its parent. */
+    /**
+     * Removes this node from its parent.
+     *
+     * TODO: Improve this method so that it properly frees the node/queues it for removal
+     */
     fun queueFree() {
         LogContext.with("nodePath" to path) {
             log.debug("event" to "node.queue_free") { "Queue free" }
@@ -359,8 +435,8 @@ abstract class Node<N : Node<N>> protected constructor(
 
     /**
      * Builds this node as a root/subtree:
-     * - enterTree
-     * - ready (which executes create() + DSL block once)
+     * - enterTree (which executes create() + DSL block once)
+     * - ready
      */
     fun buildTree() {
         LogContext.with("nodePath" to path) {
@@ -387,27 +463,10 @@ abstract class Node<N : Node<N>> protected constructor(
     private var built = false
 
     /**
-     * Called when the node and its subtree should finish initialization.
-     *
-     * This method:
-     * - runs `create()` + the DSL [block] once (guarded by [built])
-     * - then recurses into children (so the entire subtree becomes ready)
-     * - then fires behavior.onReady()
-     */
-    open fun nodeReady() {
-        LogContext.with("nodePath" to path) {
-            log.trace("event" to "node.ready") { "nodeReady()" }
-        }
-
-        // Children were attached during their init; now recurse.
-        children.values.forEach { it.nodeReady() }
-        behavior?.let { runBehavior("ready") { it.onReady() } }
-    }
-
-    /**
      * Called when the node enters the tree.
      *
      * Order:
+     * - runs `create()` + the DSL [block] once (guarded by [built])
      * - register groups in SceneManager
      * - behavior.onEnterTree()
      * - recurse into children
@@ -417,7 +476,7 @@ abstract class Node<N : Node<N>> protected constructor(
             log.trace("event" to "node.enter_tree") { "nodeEnterTree()" }
         }
 
-        // Avoid executing DSL/build twice (e.g., if nodeReady is triggered again).
+        // Avoid executing DSL/build twice (e.g., if nodeEnterTree is triggered again).
         if (built) return
         built = true
 
@@ -438,6 +497,23 @@ abstract class Node<N : Node<N>> protected constructor(
         groups.forEach { sceneManager.addToGroup(it, this) }
         behavior?.let { runBehavior("enter_tree") { it.onEnterTree() } }
         children.values.forEach { it.nodeEnterTree() }
+    }
+
+    /**
+     * Called when the node and its subtree should finish initialization.
+     *
+     * This method:
+     * - then recurses into children (so the entire subtree becomes ready)
+     * - then fires behavior.onReady()
+     */
+    open fun nodeReady() {
+        LogContext.with("nodePath" to path) {
+            log.trace("event" to "node.ready") { "nodeReady()" }
+        }
+
+        // Children were attached during their init; now recurse.
+        children.values.forEach { it.nodeReady() }
+        behavior?.let { runBehavior("ready") { it.onReady() } }
     }
 
     /**
