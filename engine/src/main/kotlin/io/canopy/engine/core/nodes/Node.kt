@@ -105,7 +105,6 @@ abstract class Node<N : Node<N>> protected constructor(
      * ```
      */
     fun updateGroups(block: MutableSet<String>.() -> Unit) {
-        val before = _groups.toSet()
         _groups.block()
 
         if (!built) return
