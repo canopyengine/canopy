@@ -1,16 +1,16 @@
-package io.canopy.engine.core.flow
+package io.canopy.engine.core.flows
 
 import kotlin.test.Test
-import io.canopy.engine.core.flow.events.computed
-import io.canopy.engine.core.flow.events.signal
-import io.canopy.engine.core.flow.events.untrack
+import io.canopy.engine.core.flows.events.computed
+import io.canopy.engine.core.flows.events.signal
+import io.canopy.engine.core.flows.events.untrack
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.yield
 import org.junit.jupiter.api.Assertions.assertEquals
 
 /**
- * Tests for [io.canopy.engine.core.flow.events.Computed].
+ * Tests for [io.canopy.engine.core.flows.events.Computed].
  *
  * Signals are written via `signal.update { }` and read via `signal()`.
  * Computed values are read via `computed()` or `computed()`.

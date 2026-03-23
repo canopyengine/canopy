@@ -225,7 +225,7 @@ class NodeTests {
     fun `custom scene should work`() {
         // Verifies create() can define internal structure.
         class CustomScene(name: String = "custom", block: CustomScene.() -> Unit = {}) :
-            Node<CustomScene>(name, block) {
+            Node<CustomScene>(name, block = block) {
             override fun create() {
                 EmptyNode("empty")
             }
@@ -245,7 +245,7 @@ class NodeTests {
     fun `patching internal node should work`() {
         // Verifies patch() can locate and mutate internally created nodes by path.
         class CustomScene(name: String = "custom", block: CustomScene.() -> Unit = {}) :
-            Node<CustomScene>(name, block) {
+            Node<CustomScene>(name, block = block) {
             override fun create() {
                 EmptyNode2D("empty")
             }

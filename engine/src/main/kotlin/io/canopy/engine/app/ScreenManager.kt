@@ -1,14 +1,26 @@
-package io.canopy.engine.app.screen
+package io.canopy.engine.app
 
 import kotlin.reflect.KClass
 import io.canopy.engine.core.managers.Manager
 
 class ScreenManager : Manager {
 
+    /* ============================================================
+     * Registry
+     * ============================================================ */
+
     private val screens = linkedMapOf<KClass<out Screen>, Screen>()
+
+    /* ============================================================
+     * State
+     * ============================================================ */
 
     var current: Screen? = null
         private set
+
+    /* ============================================================
+     * Registration
+     * ============================================================ */
 
     fun register(screen: Screen) {
         screens[screen::class] = screen
@@ -16,11 +28,16 @@ class ScreenManager : Manager {
 
     fun <T : Screen> remove(type: KClass<T>) {
         val removed = screens.remove(type)
-        if (current == removed) {
+
+        if (current === removed) {
             current?.onExit()
             current = null
         }
     }
+
+    /* ============================================================
+     * Navigation
+     * ============================================================ */
 
     fun <T : Screen> start(type: KClass<T>) {
         val next = screens[type]
@@ -33,6 +50,10 @@ class ScreenManager : Manager {
         current?.onEnter()
     }
 
+    /* ============================================================
+     * Frame lifecycle
+     * ============================================================ */
+
     fun frame(delta: Float) {
         current?.onFrame(delta)
     }
@@ -41,11 +62,17 @@ class ScreenManager : Manager {
         current?.onResize(width, height)
     }
 
+    /* ============================================================
+     * Teardown
+     * ============================================================ */
+
     override fun teardown() {
         super.teardown()
+
         current?.onExit()
+        current = null
+
         screens.values.forEach { it.dispose() }
         screens.clear()
-        current = null
     }
 }

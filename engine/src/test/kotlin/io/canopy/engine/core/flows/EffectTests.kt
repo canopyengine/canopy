@@ -1,13 +1,13 @@
-package io.canopy.engine.core.flow
+package io.canopy.engine.core.flows
 
 import kotlin.test.Test
-import io.canopy.engine.core.flow.events.effect
-import io.canopy.engine.core.flow.events.signal
-import io.canopy.engine.core.flow.events.untrack
+import io.canopy.engine.core.flows.events.effect
+import io.canopy.engine.core.flows.events.signal
+import io.canopy.engine.core.flows.events.untrack
 import org.junit.jupiter.api.Assertions.assertEquals
 
 /**
- * Tests for [io.canopy.engine.core.flow.events.Effect], a reactive side-effect
+ * Tests for [io.canopy.engine.core.flows.events.Effect], a reactive side-effect
  * that re-runs when its signal dependencies change.
  *
  * Contracts verified:

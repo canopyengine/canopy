@@ -1,4 +1,4 @@
-package io.canopy.engine.core.flow.events
+package io.canopy.engine.core.flows.events
 
 /**
  * Thread-local stack of dependency-tracking frames.
@@ -24,14 +24,14 @@ internal object TrackingContext {
      * Opens a new tracking frame and returns it.
      * The caller must call [pop] when the computation block finishes.
      */
-    fun push(): MutableSet<Signal<*>> {
+    internal fun push(): MutableSet<Signal<*>> {
         val frame = mutableSetOf<Signal<*>>()
         stack.get().addLast(frame)
         return frame
     }
 
     /** Closes the innermost tracking frame. */
-    fun pop() {
+    internal fun pop() {
         stack.get().removeLastOrNull()
     }
 
@@ -39,7 +39,7 @@ internal object TrackingContext {
      * Adds [signal] to the innermost active frame, if any.
      * If no computation is active (stack is empty), this is a no-op.
      */
-    fun register(signal: Signal<*>) {
+    internal fun register(signal: Signal<*>) {
         stack.get().lastOrNull()?.add(signal)
     }
 
@@ -49,7 +49,7 @@ internal object TrackingContext {
      *
      * The saved frames are restored after [block] returns (or throws).
      */
-    fun <T> untrack(block: () -> T): T {
+    internal fun <T> untrack(block: () -> T): T {
         val deque = stack.get()
         if (deque.isEmpty()) return block()
         val saved = ArrayDeque(deque)

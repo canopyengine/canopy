@@ -1,15 +1,15 @@
-package io.canopy.engine.core.flow
+package io.canopy.engine.core.flows
 
 import kotlin.test.Test
-import io.canopy.engine.core.flow.events.asSignal
-import io.canopy.engine.core.flow.events.signal
+import io.canopy.engine.core.flows.events.asSignal
+import io.canopy.engine.core.flows.events.signal
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.yield
 import org.junit.jupiter.api.Assertions.assertEquals
 
 /**
- * Tests for [io.canopy.engine.core.flow.events.Signal].
+ * Tests for [io.canopy.engine.core.flows.events.Signal].
  *
  * Signal is read via `signal()` (invoke) and written via `signal.update { }`.
  */

@@ -1,4 +1,4 @@
-package io.canopy.engine.core.flow.events
+package io.canopy.engine.core.flows.events
 
 class EventDisconnectHandler(private val disconnectHandler: () -> Unit) {
     fun disconnect() {

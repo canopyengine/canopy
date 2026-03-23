@@ -3,7 +3,7 @@ package io.canopy.devtools.app
 import kotlin.test.Test
 import kotlin.test.assertTrue
 import java.util.concurrent.TimeUnit
-import io.canopy.engine.app.screen.Screen
+import io.canopy.engine.app.Screen
 
 class CanopyScreenTests {
 
