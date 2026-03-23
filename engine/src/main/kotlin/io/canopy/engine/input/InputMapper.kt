@@ -1,4 +1,4 @@
-package io.canopy.engine.input.mapper
+package io.canopy.engine.input
 
 import io.canopy.engine.input.binds.InputBind
 import io.canopy.engine.input.binds.InputData

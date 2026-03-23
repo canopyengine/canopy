@@ -1,19 +1,18 @@
 package io.canopy.engine.input
 
-import io.canopy.engine.app.App
 import io.canopy.engine.core.managers.Manager
-import io.canopy.engine.core.managers.manager
 import io.canopy.engine.data.saving.registerSaveModule
+import io.canopy.engine.input.InputMapper
 import io.canopy.engine.input.binds.InputBind
 import io.canopy.engine.input.binds.InputData
-import io.canopy.engine.input.mapper.InputMapper
 import io.canopy.engine.math.Vector2
 
 abstract class InputManager : Manager {
 
-    val mapper = InputMapper()
+    private val mapper = InputMapper()
 
-    private val actionStates = mutableMapOf<String, InputState>()
+    private val _actionStates = mutableMapOf<String, InputState>()
+    val actionStates get() = _actionStates.toMap()
 
     /**
      * Backend-specific raw polling.
@@ -33,11 +32,11 @@ abstract class InputManager : Manager {
                 rawState = if (rawPressed) InputState.Pressed else InputState.Released
             )
 
-            actionStates[action] = nextState
+            _actionStates[action] = nextState
         }
     }
 
-    fun getActionState(action: String): InputState = actionStates[action] ?: InputState.Released
+    fun getActionState(action: String): InputState = _actionStates[action] ?: InputState.Released
 
     fun isActionPressed(action: String): Boolean {
         val state = getActionState(action)
@@ -74,25 +73,25 @@ abstract class InputManager : Manager {
     fun mapActions(vararg actions: Pair<String, List<InputBind>>, replace: Boolean = true) {
         mapper.mapActions(*actions, replace = replace)
 
-        if (replace) actionStates.clear()
+        if (replace) _actionStates.clear()
 
         actions.forEach { (action, _) ->
-            actionStates[action] = InputState.Released
+            _actionStates[action] = InputState.Released
         }
     }
 
-    operator fun plus(mapping: Pair<String, List<InputBind>>) {
-        mapActions(mapping)
+    operator fun Pair<String, List<InputBind>>.unaryPlus() {
+        mapActions(this)
     }
 
     fun unmapAction(action: String) {
         mapper.unmapAction(action)
-        actionStates.remove(action)
+        _actionStates.remove(action)
     }
 
     fun clearMappings() {
         mapper.clearMappings()
-        actionStates.clear()
+        _actionStates.clear()
     }
 
     fun registerPersistence(destination: String = "input", moduleId: String = "input") {
@@ -103,9 +102,9 @@ abstract class InputManager : Manager {
             onSave = { mapper.toData() },
             onLoad = {
                 mapper.loadData(it)
-                actionStates.clear()
+                _actionStates.clear()
                 mapper.actions.keys.forEach { action ->
-                    actionStates[action] = InputState.Released
+                    _actionStates[action] = InputState.Released
                 }
             }
         )
@@ -128,8 +127,4 @@ abstract class InputManager : Manager {
             else -> InputState.Released
         }
     }
-}
-
-fun App<*>.inputs(handler: InputManager.() -> Unit) {
-    manager<InputManager>().apply(handler)
 }
