@@ -20,7 +20,7 @@ import ch.qos.logback.classic.spi.ILoggingEvent
  * <pattern>%d{HH:mm:ss.SSS} %-5level - %coloredMsg%n</pattern>
  * ```
  */
-class ColoredFieldsConverter : ch.qos.logback.classic.pattern.MessageConverter() {
+internal class ColoredFieldsConverter : ch.qos.logback.classic.pattern.MessageConverter() {
 
     companion object {
         // ANSI color codes

@@ -11,7 +11,7 @@ import ch.qos.logback.core.sift.Discriminator
  * - "canopy.engine.physics" → "physics"
  * - "LoggingTests" → "LoggingTests"
  */
-class ClassNameDiscriminator : Discriminator<ILoggingEvent> {
+internal class ClassNameDiscriminator : Discriminator<ILoggingEvent> {
 
     private var started = false
     private var key = "className"
