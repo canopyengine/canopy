@@ -1,9 +1,18 @@
 package io.canopy.engine.core.flows
 
+import kotlin.test.assertFailsWith
+import kotlin.time.Duration.Companion.seconds
+import java.util.concurrent.atomic.AtomicBoolean
 import io.canopy.engine.core.managers.ManagersRegistry
 import io.canopy.engine.core.managers.SceneManager
 import io.canopy.engine.core.nodes.Node
 import io.canopy.engine.core.nodes.types.empty.EmptyNode
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeout
+import kotlinx.coroutines.yield
 import org.junit.jupiter.api.Assertions.*
 import org.junit.jupiter.api.BeforeAll
 import org.junit.jupiter.api.Test
@@ -205,6 +214,34 @@ class ContextTests {
         val c = root.getNode<EmptyNode>("./a")
 
         assertEquals(1, c.fromContext("keyA"))
+    }
+
+    @Test
+    fun `resolving un-provided data shouldn't hang the thread`() = runBlocking {
+        val root = n("root") {
+            Context {
+                n("a")
+            }
+        }
+
+        root.buildTree()
+
+        val a = root.getNode<EmptyNode>("./a")
+
+        val noHang = AtomicBoolean(false)
+
+        val job = launch(Dispatchers.Default) {
+            withTimeout(2.seconds) {
+                assertFailsWith<NoSuchElementException> {
+                    a.fromContext<String>("data")
+                }
+                noHang.set(true)
+            }
+        }
+
+        job.join()
+
+        assertTrue(noHang.get())
     }
 
     // --- Tiny adapter -------------------------------------------------------
