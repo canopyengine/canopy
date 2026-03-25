@@ -23,6 +23,7 @@ dependencies {
 
     // Mordant
     api(libs.mordant.core)
+    api(libs.mordant.coroutines)
 
     // Logging
     api(libs.slf4j.api)

@@ -1,20 +1,27 @@
 package io.canopy.platforms.terminal.app
 
-import com.github.ajalt.mordant.input.receiveEvents
+import com.github.ajalt.mordant.input.KeyboardEvent
+import com.github.ajalt.mordant.input.MouseEvent
+import com.github.ajalt.mordant.input.coroutines.receiveEventsFlow
+import com.github.ajalt.mordant.input.isCtrlC
 import com.github.ajalt.mordant.terminal.Terminal
 import io.canopy.adapters.libgdx.data.assets.GdxAssetsManager
 import io.canopy.adapters.mordant.input.MordantInputManager
 import io.canopy.engine.app.App
 import io.canopy.engine.app.AppConfig
+import io.canopy.engine.core.flows.events.event
 import io.canopy.engine.data.saving.SaveManager
 import io.canopy.engine.logging.EngineLogs
+import kotlinx.coroutines.flow.takeWhile
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
 
 class TerminalApp internal constructor() : App<AppConfig>() {
 
     private val log = EngineLogs.app
-    private val terminal = Terminal()
+    private val terminal = Terminal(interactive = true)
 
-    private val inputManager = MordantInputManager(terminal)
+    private val inputManager = MordantInputManager()
     private val assetsManager = GdxAssetsManager()
 
     override fun defaultConfig(): AppConfig = AppConfig(
@@ -27,8 +34,20 @@ class TerminalApp internal constructor() : App<AppConfig>() {
         assetsManager
     )
 
-    override fun afterReady() {
-        inputManager.receiveEvents()
+    override fun afterReady() = runBlocking {
+        val job = launch {
+            terminal.receiveEventsFlow()
+                .takeWhile { it !is KeyboardEvent || it.isCtrlC }
+                .collect { event ->
+                    when (event) {
+                        is KeyboardEvent -> log.info { "You pressed ${event.key}" }
+                        is MouseEvent -> log.info { "You clicked at ${event.x}, ${event.y}" }
+                    }
+                }
+        }
+
+        job.start()
+        job.join()
     }
 
     override fun internalLaunch(config: AppConfig, vararg args: String) {

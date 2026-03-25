@@ -1,10 +1,6 @@
 package io.canopy.adapters.mordant.input
 
-import com.github.ajalt.mordant.input.InputEvent
-import com.github.ajalt.mordant.input.InputReceiver
 import com.github.ajalt.mordant.input.KeyboardEvent
-import com.github.ajalt.mordant.input.isCtrlC
-import com.github.ajalt.mordant.terminal.Terminal
 import io.canopy.engine.input.InputManager
 import io.canopy.engine.input.binds.InputBind
 
@@ -16,9 +12,7 @@ import io.canopy.engine.input.binds.InputBind
  * key-down / key-up transitions, so true "held key" tracking is not available
  * from this API alone.
  */
-class MordantInputManager(override val terminal: Terminal) :
-    InputManager(),
-    InputReceiver<Unit> {
+class MordantInputManager : InputManager() {
 
     /**
      * Binds pressed since the last action update.
@@ -35,29 +29,29 @@ class MordantInputManager(override val terminal: Terminal) :
      */
     override fun pollPressed(bind: InputBind): Boolean = bind in pressedThisTick
 
-    override fun receiveEvent(event: InputEvent): InputReceiver.Status<Unit> {
-        when (event) {
-            is KeyboardEvent -> {
-                if (event.isCtrlC) {
-                    return InputReceiver.Status.Finished
-                }
-
-                handleKeyboardEvent(event)
-
-                // Recompute action states from the presses we've accumulated.
-                updateActions()
-
-                // Consume the one-shot press pulses after actions are updated.
-                pressedThisTick.clear()
-            }
-
-            else -> {
-                // Ignore non-keyboard events for now.
-            }
-        }
-
-        return InputReceiver.Status.Continue
-    }
+//    override fun receiveEvent(event: InputEvent): InputReceiver.Status<Unit> {
+//        when (event) {
+//            is KeyboardEvent -> {
+//                if (event.isCtrlC) {
+//                    return InputReceiver.Status.Finished
+//                }
+//
+//                handleKeyboardEvent(event)
+//
+//                // Recompute action states from the presses we've accumulated.
+//                updateActions()
+//
+//                // Consume the one-shot press pulses after actions are updated.
+//                pressedThisTick.clear()
+//            }
+//
+//            else -> {
+//                // Ignore non-keyboard events for now.
+//            }
+//        }
+//
+//        return InputReceiver.Status.Continue
+//    }
 
     private fun handleKeyboardEvent(event: KeyboardEvent) {
         val bind = event.toInputBind() ?: return

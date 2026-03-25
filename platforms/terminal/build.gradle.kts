@@ -17,6 +17,8 @@ dependencies {
     implementation(projects.engine)
     implementation(projects.tooling.utils)
     implementation(projects.platforms.headless)
+
+    // Adapters
     implementation(projects.adapters.libgdx)
     implementation(projects.adapters.mordant)
 

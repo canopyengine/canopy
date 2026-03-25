@@ -37,18 +37,18 @@ subprojects {
 
     plugins.withId("java") {
         extensions.configure<JavaPluginExtension>("java") {
-            toolchain.languageVersion.set(JavaLanguageVersion.of(21))
-            sourceCompatibility = JavaVersion.VERSION_21
-            targetCompatibility = JavaVersion.VERSION_21
+            toolchain.languageVersion.set(JavaLanguageVersion.of(25))
+            sourceCompatibility = JavaVersion.VERSION_25
+            targetCompatibility = JavaVersion.VERSION_25
             withSourcesJar()
         }
     }
 
     plugins.withId("java-library") {
         extensions.configure<JavaPluginExtension>("java") {
-            toolchain.languageVersion.set(JavaLanguageVersion.of(21))
-            sourceCompatibility = JavaVersion.VERSION_21
-            targetCompatibility = JavaVersion.VERSION_21
+            toolchain.languageVersion.set(JavaLanguageVersion.of(25))
+            sourceCompatibility = JavaVersion.VERSION_25
+            targetCompatibility = JavaVersion.VERSION_25
             withSourcesJar()
         }
     }
@@ -92,4 +92,8 @@ tasks.named("clean", Delete::class.java) {
             .filter { it.isDirectory && it.name == ".canopy" }
             .toList()
     )
+}
+
+tasks.withType<JavaExec> {
+    jvmArgs("--enable-native-access=ALL-UNNAMED")
 }
