@@ -2,7 +2,6 @@ package io.canopy.engine.input
 
 import io.canopy.engine.core.managers.Manager
 import io.canopy.engine.data.saving.registerSaveModule
-import io.canopy.engine.input.InputMapper
 import io.canopy.engine.input.binds.InputBind
 import io.canopy.engine.input.binds.InputData
 import io.canopy.engine.math.Vector2
@@ -126,5 +125,9 @@ abstract class InputManager : Manager {
 
             else -> InputState.Released
         }
+    }
+
+    override fun setup() {
+        registerPersistence()
     }
 }

@@ -131,6 +131,10 @@ enum class InputBind(val type: Type, val code: Int) {
     FORWARD_MOUSE(Type.Mouse, 1004),
     ;
 
+    companion object {
+        fun from(code: String) = entries.first { it.name.equals(code, true) }
+    }
+
     @Serializable
     enum class Type {
         Keyboard,

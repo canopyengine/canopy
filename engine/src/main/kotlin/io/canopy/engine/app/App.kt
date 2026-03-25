@@ -4,11 +4,7 @@ import java.util.concurrent.CountDownLatch
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicReference
 import io.canopy.engine.core.CanopyBuildInfo
-import io.canopy.engine.core.managers.InjectionManager
-import io.canopy.engine.core.managers.Manager
-import io.canopy.engine.core.managers.ManagersRegistry
-import io.canopy.engine.core.managers.SceneManager
-import io.canopy.engine.core.managers.manager
+import io.canopy.engine.core.managers.*
 import io.canopy.engine.input.InputManager
 import io.canopy.engine.input.binds.InputBind
 import io.canopy.engine.logging.CanopyLogging

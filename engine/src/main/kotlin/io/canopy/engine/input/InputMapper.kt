@@ -6,7 +6,6 @@ import io.canopy.engine.input.binds.asData
 import io.canopy.engine.logging.logger
 
 class InputMapper {
-
     private val logger = logger<InputMapper>()
 
     private val mappings: MutableMap<String, MutableList<InputBind>> = mutableMapOf()
@@ -28,12 +27,6 @@ class InputMapper {
             }
         )
     }
-
-    fun mapToAction(bind: InputBind): List<String> = mappings.entries
-        .asSequence()
-        .filter { bind in it.value }
-        .map { it.key }
-        .toList()
 
     fun clearMappings() {
         mappings.clear()

@@ -1,5 +1,9 @@
 package io.canopy.engine.core.flows.events
 
+import io.canopy.engine.core.flows.events.TrackingContext.pop
+import io.canopy.engine.core.flows.events.TrackingContext.register
+import io.canopy.engine.core.flows.events.TrackingContext.untrack
+
 /**
  * Thread-local stack of dependency-tracking frames.
  *

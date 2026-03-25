@@ -191,6 +191,7 @@ Canopy tracks modern Kotlin releases closely.
 MIT License — see [LICENSE-MIT](/LICENSE-MIT)
 
 APACHE License - see [LICENSE-APACHE](/LICENSE-APACHE)
+
 ---
 
 <p align="center">

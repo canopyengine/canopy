@@ -18,9 +18,7 @@ dependencies {
     implementation(projects.tooling.utils)
     implementation(projects.platforms.headless)
     implementation(projects.adapters.libgdx)
-
-    // Mordant
-    implementation(libs.mordant.core)
+    implementation(projects.adapters.mordant)
 
     // Logging
     runtimeOnly(libs.logback.classic)

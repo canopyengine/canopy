@@ -1,10 +1,3 @@
-import org.gradle.api.JavaVersion
-import org.gradle.api.plugins.BasePlugin
-import org.gradle.api.plugins.BasePluginExtension
-import org.gradle.api.plugins.JavaPluginExtension
-import org.gradle.api.publish.PublishingExtension
-import org.gradle.api.publish.maven.MavenPublication
-import org.gradle.jvm.toolchain.JavaLanguageVersion
 import org.gradle.plugins.ide.eclipse.model.EclipseModel
 import org.gradle.plugins.ide.idea.model.IdeaModel
 
