@@ -89,8 +89,9 @@ fun <T : Any> Node<*>.fromContextOrNull(key: String): T? {
 
     while (current != null) {
         if (current is Context) {
-            current.provided[key]?.let {
-                return it.invoke() as? T ?: continue
+            val value = current.provided[key]
+            if (value != null) {
+                return value() as T
             }
         }
         current = current.parent
