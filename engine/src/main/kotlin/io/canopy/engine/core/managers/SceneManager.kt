@@ -69,6 +69,14 @@ class SceneManager(private var physicsStep: Float = 1f / 60f, private val block:
     /** Emitted after the scene root is replaced. Payload is the new root (or null). */
     val onSceneReplaced = event<Node<*>?>()
 
+    /** Current viewport width. Updated in [resize]. */
+    var viewportWidth: Int = 0
+        private set
+
+    /** Current viewport height. Updated in [resize]. */
+    var viewportHeight: Int = 0
+        private set
+
     /* ============================================================
      * Scene state
      * ============================================================ */
@@ -459,6 +467,8 @@ class SceneManager(private var physicsStep: Float = 1f / 60f, private val block:
      * Emits resize event for listeners (UI/layout/camera systems).
      */
     fun resize(width: Int, height: Int) {
+        viewportWidth = width
+        viewportHeight = height
         onResize.emit(width, height)
         log.debug("event" to "scene.resize", "width" to width, "height" to height) { "Resize" }
     }

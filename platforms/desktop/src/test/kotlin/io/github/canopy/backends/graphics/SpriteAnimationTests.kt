@@ -8,7 +8,7 @@ import io.canopy.engine.app.test.testHeadlessApp
 import io.canopy.engine.core.managers.ManagersRegistry
 import io.canopy.engine.core.managers.lazyManager
 import io.canopy.engine.core.nodes.treeSystem
-import io.canopy.engine.core.nodes.types.empty.EmptyNode
+import io.canopy.engine.core.nodes.types.empty.TestNode
 import io.canopy.engine.data.core.assets.AssetsManager
 import io.canopy.engine.graphics.nodes.animation.tracks.ActionTrack
 import io.canopy.engine.graphics.nodes.animation.tracks.SpriteTrack
@@ -40,7 +40,7 @@ class SpriteAnimationTests {
     @Test
     fun `should create empty animation`() {
         val emptyNode =
-            EmptyNode("root") {
+            TestNode("root") {
                 AnimatedSprite2D<TextureRegion>("sprite")
                 AnimationPlayer("player")
             }

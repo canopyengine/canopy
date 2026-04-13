@@ -6,7 +6,7 @@ import java.util.concurrent.atomic.AtomicBoolean
 import io.canopy.engine.core.managers.ManagersRegistry
 import io.canopy.engine.core.managers.SceneManager
 import io.canopy.engine.core.nodes.Node
-import io.canopy.engine.core.nodes.types.empty.EmptyNode
+import io.canopy.engine.core.nodes.types.empty.TestNode
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
@@ -34,7 +34,7 @@ class ContextTests {
 
     // --- Helpers ------------------------------------------------------------
 
-    private fun n(name: String, block: EmptyNode.() -> Unit = {}) = EmptyNode(name, block)
+    private fun n(name: String, block: TestNode.() -> Unit = {}) = TestNode(name, block)
 
     private object DebugModeKey // any object key (no ::class)
     private object SeasonKey
@@ -55,7 +55,7 @@ class ContextTests {
         root.buildTree()
 
         // Find the "child" node. Adjust if you have find-by-path utilities.
-        val child = root.getNode<EmptyNode>("./child")
+        val child = root.getNode<TestNode>("./child")
 
         val debug: Boolean = child.fromContext("debug")
         assertTrue(debug)
@@ -74,7 +74,7 @@ class ContextTests {
 
         root.buildTree()
 
-        val b = root.getNode<EmptyNode>("./a/b")
+        val b = root.getNode<TestNode>("./a/b")
 
         val debug: Boolean = b.fromContext("debug")
         assertTrue(debug)
@@ -97,8 +97,8 @@ class ContextTests {
 
         root.buildTree()
 
-        val a = root.getNode<EmptyNode>("./a")
-        val b = root.getNode<EmptyNode>("./b")
+        val a = root.getNode<TestNode>("./a")
+        val b = root.getNode<TestNode>("./b")
 
         val aDebug: Boolean = a.fromContext("debug")
         val bDebug: Boolean = b.fromContext("debug")
@@ -113,7 +113,7 @@ class ContextTests {
 
         root.buildTree()
 
-        val child = root.getNode<EmptyNode>("./child")
+        val child = root.getNode<TestNode>("./child")
 
         val missing: String? = child.fromContextOrNull("nope")
         assertNull(missing)
@@ -125,7 +125,7 @@ class ContextTests {
 
         root.buildTree()
 
-        val child = root.getNode<EmptyNode>("./child")
+        val child = root.getNode<TestNode>("./child")
 
         val ex = assertThrows<NoSuchElementException> {
             child.fromContext<Int>("missing")
@@ -147,7 +147,7 @@ class ContextTests {
 
         root.buildTree()
 
-        val child = root.getNode<EmptyNode>("./child")
+        val child = root.getNode<TestNode>("./child")
 
         val debug: Boolean = child.fromContext("debugMode")
         val season: String = child.fromContext("season")
@@ -168,7 +168,7 @@ class ContextTests {
 
         root.buildTree()
 
-        val child = root.getNode<EmptyNode>("./child")
+        val child = root.getNode<TestNode>("./child")
 
         assertEquals(1, child.fromContext("keyA"))
         assertEquals(2, child.fromContext("keyB"))
@@ -190,7 +190,7 @@ class ContextTests {
 
         root.buildTree()
 
-        val c = root.getNode<EmptyNode>("./a/b/c")
+        val c = root.getNode<TestNode>("./a/b/c")
         assertEquals(42, c.fromContext("x"))
     }
 
@@ -209,7 +209,7 @@ class ContextTests {
         }
         root.buildTree()
 
-        val c = root.getNode<EmptyNode>("./a")
+        val c = root.getNode<TestNode>("./a")
 
         assertEquals(1, c.fromContext("keyA"))
     }
@@ -224,7 +224,7 @@ class ContextTests {
 
         root.buildTree()
 
-        val a = root.getNode<EmptyNode>("./a")
+        val a = root.getNode<TestNode>("./a")
 
         val noHang = AtomicBoolean(false)
 

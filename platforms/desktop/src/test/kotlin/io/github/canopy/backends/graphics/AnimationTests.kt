@@ -7,7 +7,7 @@ import com.badlogic.gdx.math.Vector2
 import io.canopy.engine.core.managers.ManagersRegistry
 import io.canopy.engine.core.managers.SceneManager
 import io.canopy.engine.core.managers.lazyManager
-import io.canopy.engine.core.nodes.types.empty.EmptyNode
+import io.canopy.engine.core.nodes.types.empty.TestNode
 import io.canopy.engine.graphics.nodes.animation.tracks.ActionTrack
 import io.canopy.engine.graphics.nodes.animation.tracks.PropertyTrack
 import io.canopy.engine.utils.UnstableApi
@@ -33,7 +33,7 @@ class AnimationTests {
 
     @Test
     fun `animation structure should work`() {
-        val emptyNode = EmptyNode("node")
+        val emptyNode = TestNode("node")
 
         val animation =
             Animation("anim", 1.5f) {
@@ -49,7 +49,7 @@ class AnimationTests {
     @Test
     fun `test animation`() {
         val emptyNode =
-            EmptyNode("node") {
+            TestNode("node") {
                 AnimationPlayer("player")
             }
         var counter = 0

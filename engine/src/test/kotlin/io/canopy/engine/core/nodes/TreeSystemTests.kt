@@ -3,7 +3,7 @@ package io.canopy.engine.core.nodes
 import kotlin.test.*
 import io.canopy.engine.core.managers.ManagersRegistry
 import io.canopy.engine.core.managers.SceneManager
-import io.canopy.engine.core.nodes.types.empty.EmptyNode
+import io.canopy.engine.core.nodes.types.empty.TestNode
 import org.junit.jupiter.api.BeforeAll
 
 class TreeSystemTests {
@@ -23,7 +23,7 @@ class TreeSystemTests {
         val callOrder = mutableListOf<String>()
         var errorThrown = false
 
-        val system = object : TreeSystem(UpdatePhase.FramePre, 0, EmptyNode::class) {
+        val system = object : TreeSystem(UpdatePhase.FramePre, 0, TestNode::class) {
             override fun onRegister() {
                 callOrder += "onRegister"
             }
@@ -50,10 +50,10 @@ class TreeSystemTests {
 
         system.onRegister()
 
-        val node1 = EmptyNode("node1")
+        val node1 = TestNode("node1")
         node1.buildTree()
 
-        val nodeFail = EmptyNode("fail")
+        val nodeFail = TestNode("fail")
         nodeFail.buildTree()
 
         // Registration
@@ -91,7 +91,7 @@ class TreeSystemTests {
         var unregistered = false
         var matched = 0
 
-        val sys = object : TreeSystem(UpdatePhase.FramePre, 0, EmptyNode::class) {
+        val sys = object : TreeSystem(UpdatePhase.FramePre, 0, TestNode::class) {
             override fun onRegister() {
                 registered = true
             }
@@ -106,7 +106,7 @@ class TreeSystemTests {
         sys.onRegister()
         assertTrue(registered)
 
-        val node = EmptyNode("test")
+        val node = TestNode("test")
         node.buildTree()
         sys.register(node)
 
@@ -124,7 +124,7 @@ class TreeSystemTests {
 
         val sys = object : TreeSystem(UpdatePhase.FramePre, 0, CustomType::class) {}
 
-        val node1 = EmptyNode("root") {
+        val node1 = TestNode("root") {
             CustomType()
         }
         node1.buildTree()

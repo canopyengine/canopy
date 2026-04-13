@@ -8,7 +8,7 @@ import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 import io.canopy.engine.core.nodes.Node
 import io.canopy.engine.core.nodes.TreeSystem
-import io.canopy.engine.core.nodes.types.empty.EmptyNode
+import io.canopy.engine.core.nodes.types.empty.TestNode
 
 class SceneManagerTests {
 
@@ -16,7 +16,7 @@ class SceneManagerTests {
         phase: TreeSystem.UpdatePhase,
         priority: Int,
         private val calls: MutableList<String>,
-    ) : TreeSystem(phase, priority, EmptyNode::class) {
+    ) : TreeSystem(phase, priority, TestNode::class) {
         override fun onRegister() {
             calls += "register:$priority"
         }
@@ -59,8 +59,8 @@ class SceneManagerTests {
             register(sceneManager)
         }
 
-        val oldScene = EmptyNode("old") { EmptyNode("old-child") }
-        val newScene = EmptyNode("new") { EmptyNode("new-child") }
+        val oldScene = TestNode("old") { TestNode("old-child") }
+        val newScene = TestNode("new") { TestNode("new-child") }
 
         sceneManager.currScene = oldScene
         sceneManager.currScene = newScene
@@ -82,7 +82,7 @@ class SceneManagerTests {
         ManagersRegistry.withScope {
             register(sceneManager)
         }
-        sceneManager.currScene = EmptyNode("root")
+        sceneManager.currScene = TestNode("root")
         calls.clear()
 
         sceneManager.tick(0.25f)
@@ -103,7 +103,7 @@ class SceneManagerTests {
             register(sceneManager)
         }
 
-        val node = EmptyNode("root")
+        val node = TestNode("root")
         node.addGroup("old")
         sceneManager.currScene = node
 
@@ -163,8 +163,8 @@ class SceneManagerTests {
         assertTrue(sceneManager.hasSystem(system::class))
         assertEquals(system, sceneManager.getSystem(system::class))
 
-        sceneManager.currScene = EmptyNode("first")
-        sceneManager.currScene = EmptyNode("second")
+        sceneManager.currScene = TestNode("first")
+        sceneManager.currScene = TestNode("second")
 
         assertEquals(listOf<String?>("first", "second"), replaced)
 
@@ -193,7 +193,7 @@ class SceneManagerTests {
             register(sceneManager)
         }
 
-        val node = EmptyNode("root")
+        val node = TestNode("root")
         sceneManager.currScene = node // triggers registerSubtree
 
         assertTrue(calls.contains("add:root:1"))
@@ -226,7 +226,7 @@ class SceneManagerTests {
             register(sceneManager)
         }
 
-        sceneManager.currScene = EmptyNode("root")
+        sceneManager.currScene = TestNode("root")
         calls.clear()
 
         // run delta enough to trigger physics tick
@@ -240,7 +240,7 @@ class SceneManagerTests {
     @Test
     fun `removeFromGroup throws when group or node is invalid`() {
         val sceneManager = SceneManager()
-        val node = EmptyNode("root")
+        val node = TestNode("root")
 
         assertFailsWith<IllegalStateException> {
             sceneManager.removeFromGroup("ghost", node)

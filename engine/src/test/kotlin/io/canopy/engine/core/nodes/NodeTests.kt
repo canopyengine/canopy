@@ -6,8 +6,8 @@ import kotlin.time.toDuration
 import io.canopy.engine.core.managers.ManagersRegistry
 import io.canopy.engine.core.managers.SceneManager
 import io.canopy.engine.core.managers.manager
-import io.canopy.engine.core.nodes.types.empty.EmptyNode
-import io.canopy.engine.core.nodes.types.empty.EmptyNode2D
+import io.canopy.engine.core.nodes.types.empty.TestNode
+import io.canopy.engine.core.nodes.types.empty.TestNode2D
 import io.canopy.engine.math.Vector2
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -30,21 +30,21 @@ class NodeTests {
     @Test
     fun `structure should pass`() {
         // Verifies DSL-built hierarchy and parent pointers.
-        val scene = EmptyNode("root") {
-            EmptyNode("child-a")
+        val scene = TestNode("root") {
+            TestNode("child-a")
 
-            EmptyNode("child-b") {
-                EmptyNode("child-c")
+            TestNode("child-b") {
+                TestNode("child-c")
             }
         }
 
         scene.buildTree()
 
         assertEquals(2, scene.children.size)
-        assertSame(scene, scene.getNode<EmptyNode>("child-b").parent)
+        assertSame(scene, scene.getNode<TestNode>("child-b").parent)
         assertSame(
-            scene.getNode<EmptyNode>("child-b"),
-            scene.getNode<EmptyNode>("child-b/child-c").parent
+            scene.getNode<TestNode>("child-b"),
+            scene.getNode<TestNode>("child-b/child-c").parent
         )
     }
 
@@ -54,7 +54,7 @@ class NodeTests {
         val childCount: MutableMap<String, Int> = mutableMapOf()
 
         val lambdaBehavior =
-            createBehavior<EmptyNode>(
+            createBehavior<TestNode>(
                 onReady = {
                     val parent = parent ?: return@createBehavior
                     childCount.merge(parent.name, 1) { old, new -> old + new }
@@ -62,15 +62,15 @@ class NodeTests {
                 }
             )
 
-        EmptyNode("Test 2") {
-            EmptyNode("child-a") {
+        TestNode("Test 2") {
+            TestNode("child-a") {
                 attachBehavior(lambdaBehavior)
             }
 
-            EmptyNode("child-b") {
+            TestNode("child-b") {
                 attachBehavior(lambdaBehavior)
 
-                EmptyNode("child-c") {
+                TestNode("child-c") {
                     attachBehavior(lambdaBehavior)
                 }
             }
@@ -94,21 +94,21 @@ class NodeTests {
         val callOrder = mutableListOf<String>()
 
         val behaviour =
-            createBehavior<EmptyNode>(
+            createBehavior<TestNode>(
                 onReady = { callOrder += name }
             )
 
-        EmptyNode("Test 2") {
+        TestNode("Test 2") {
             attachBehavior(behaviour)
 
-            EmptyNode("child-a") {
+            TestNode("child-a") {
                 attachBehavior(behaviour)
             }
 
-            EmptyNode("child-b") {
+            TestNode("child-b") {
                 attachBehavior(behaviour)
 
-                EmptyNode("child-c") {
+                TestNode("child-c") {
                     attachBehavior(behaviour)
                 }
             }
@@ -132,12 +132,12 @@ class NodeTests {
         var nPhysicsTicks = 0
 
         val behavior =
-            createBehavior<EmptyNode>(
+            createBehavior<TestNode>(
                 onUpdate = { nTicks++ },
                 onPhysicsUpdate = { nPhysicsTicks++ }
             )
 
-        val tree = EmptyNode("root") {
+        val tree = TestNode("root") {
             attachBehavior(behavior)
         }
         tree.buildTree()
@@ -164,16 +164,16 @@ class NodeTests {
         var wasCalled = false
 
         val behavior =
-            createBehavior<EmptyNode>(
+            createBehavior<TestNode>(
                 onReady = { wasCalled = true }
             )
 
-        val root = EmptyNode("root")
+        val root = TestNode("root")
         root.buildTree()
 
         assertFalse(wasCalled)
 
-        root += EmptyNode("child") {
+        root += TestNode("child") {
             attachBehavior(behavior)
         }
 
@@ -186,13 +186,13 @@ class NodeTests {
         var wasCalled = false
 
         val behavior =
-            createBehavior<EmptyNode>(
+            createBehavior<TestNode>(
                 onExitTree = { wasCalled = true }
             )
 
         val tree =
-            EmptyNode("root") {
-                EmptyNode("child") {
+            TestNode("root") {
+                TestNode("child") {
                     attachBehavior(behavior)
                 }
             }.asSceneRoot()
@@ -208,13 +208,13 @@ class NodeTests {
     fun `queue free should delete node`() {
         // Verifies queueFree removes a node from its parent.
         val tree =
-            EmptyNode("root") {
-                EmptyNode("child")
+            TestNode("root") {
+                TestNode("child")
             }
 
         tree.buildTree()
 
-        val child = tree.getNode<EmptyNode>("child")
+        val child = tree.getNode<TestNode>("child")
         assertNotNull(child)
 
         child.queueFree()
@@ -228,13 +228,13 @@ class NodeTests {
         class CustomScene(name: String = "custom", block: CustomScene.() -> Unit = {}) :
             Node<CustomScene>(name, block = block) {
             override fun create() {
-                EmptyNode("empty")
+                TestNode("empty")
             }
         }
 
         val customScene =
             CustomScene {
-                EmptyNode("child")
+                TestNode("child")
             }
 
         customScene.buildTree()
@@ -248,19 +248,19 @@ class NodeTests {
         class CustomScene(name: String = "custom", block: CustomScene.() -> Unit = {}) :
             Node<CustomScene>(name, block = block) {
             override fun create() {
-                EmptyNode2D("empty")
+                TestNode2D("empty")
             }
         }
 
         val node = CustomScene {
-            patch<EmptyNode2D>("./empty") {
+            patch<TestNode2D>("./empty") {
                 name = "patched"
                 position = Vector2(100f, 100f)
             }
         }
         node.buildTree()
 
-        val child = node.getNode<EmptyNode2D>("./patched")
+        val child = node.getNode<TestNode2D>("./patched")
 
         assertEquals("patched", child.name)
         assertEquals(Vector2(100f, 100f), child.position)
@@ -286,31 +286,31 @@ class NodeTests {
 
     @Test
     fun `rename reparent and relative lookups should update paths`() {
-        val root = EmptyNode("root") {
-            EmptyNode("a")
-            EmptyNode("b")
+        val root = TestNode("root") {
+            TestNode("a")
+            TestNode("b")
         }
         root.buildTree()
 
-        val a = root.getNode<EmptyNode>("a")
+        val a = root.getNode<TestNode>("a")
         a.name = "renamed"
         assertEquals("/root/renamed", a.path)
-        assertSame(a, root.getNode<EmptyNode>("renamed"))
+        assertSame(a, root.getNode<TestNode>("renamed"))
 
-        root.reparent(a, root.getNode<EmptyNode>("b"))
+        root.reparent(a, root.getNode<TestNode>("b"))
 
         assertEquals("/root/b/renamed", a.path)
-        assertSame(a, root.getNode<EmptyNode>("b/renamed"))
-        assertSame(root.getNode<EmptyNode>("b"), a.getNode<EmptyNode>(".."))
+        assertSame(a, root.getNode<TestNode>("b/renamed"))
+        assertSame(root.getNode<TestNode>("b"), a.getNode<TestNode>(".."))
     }
 
     @Test
     fun `prefab child skips lifecycle until built manually`() {
         var readyCalls = 0
-        val root = EmptyNode("root")
+        val root = TestNode("root")
         root.buildTree()
 
-        val prefab = EmptyNode("child") {
+        val prefab = TestNode("child") {
             behavior(onReady = { readyCalls++ })
         }.asPrefab()
 
@@ -323,7 +323,7 @@ class NodeTests {
 
     @Test
     fun `group changes on built node should mirror through scene manager`() {
-        val root = EmptyNode("root")
+        val root = TestNode("root")
         root.asSceneRoot()
         root.buildTree()
 
@@ -341,30 +341,30 @@ class NodeTests {
 
     @Test
     fun `getNode allows complex resolution with relative and wrapper paths`() {
-        val root = EmptyNode("root") {
-            EmptyNode("visibleChild") {
+        val root = TestNode("root") {
+            TestNode("visibleChild") {
                 // Not visible/skipOnSearch = true (using empty node for now but just assume we test relative resolution)
-                EmptyNode("subChild")
+                TestNode("subChild")
             }
         }.asSceneRoot()
         root.buildTree()
 
-        val child = root.getNode<EmptyNode>("./visibleChild/subChild")
+        val child = root.getNode<TestNode>("./visibleChild/subChild")
         assertEquals("subChild", child.name)
 
-        val sibling = child.getNode<EmptyNode>("..")
+        val sibling = child.getNode<TestNode>("..")
         assertEquals("visibleChild", sibling.name)
 
-        val backToRoot = sibling.getNode<EmptyNode>("..")
+        val backToRoot = sibling.getNode<TestNode>("..")
         assertEquals("root", backToRoot.name)
     }
 
     @Test
     fun `unary plus and unary minus operators work`() {
-        val child1 = EmptyNode("child1").asPrefab()
-        val child2 = EmptyNode("child2").asPrefab()
+        val child1 = TestNode("child1").asPrefab()
+        val child2 = TestNode("child2").asPrefab()
 
-        val root = EmptyNode("root") {
+        val root = TestNode("root") {
             +child1
             +child2
         }
@@ -379,8 +379,8 @@ class NodeTests {
 
     @Test
     fun `plusAssign and minusAssign operators work`() {
-        val root = EmptyNode("root")
-        val child = EmptyNode("child")
+        val root = TestNode("root")
+        val child = TestNode("child")
 
         root += child
         assertEquals(1, root.children.size)
@@ -391,8 +391,8 @@ class NodeTests {
 
     @Test
     fun `plus operator returns parent`() {
-        val root = EmptyNode("root")
-        val child = EmptyNode("child")
+        val root = TestNode("root")
+        val child = TestNode("child")
 
         with(root) {
             val returned = this + child
@@ -403,22 +403,22 @@ class NodeTests {
 
     @Test
     fun `hasChildType works correctly`() {
-        val root = EmptyNode("root") {
-            EmptyNode2D("a2d")
+        val root = TestNode("root") {
+            TestNode2D("a2d")
         }
         root.buildTree()
 
-        assertTrue(root.hasChildType(EmptyNode2D::class))
-        assertFalse(root.hasChildType(EmptyNode::class)) // children does not include EmptyNode
+        assertTrue(root.hasChildType(TestNode2D::class))
+        assertFalse(root.hasChildType(TestNode::class)) // children does not include TestNode
     }
 
     @Test
     fun `runBehavior catches and logs exceptions`() {
-        val behavior = createBehavior<EmptyNode>(
+        val behavior = createBehavior<TestNode>(
             onReady = { throw RuntimeException("Throwing behavior") }
         )
 
-        val root = EmptyNode("root") {
+        val root = TestNode("root") {
             attachBehavior(behavior)
         }
 
@@ -429,33 +429,33 @@ class NodeTests {
 
     @Test
     fun `getNode supports complex path resolution`() {
-        val target = EmptyNode("target")
-        val child = EmptyNode("child") { +target }
-        val wrapper = EmptyNode("wrapper") { +child }
-        val root = EmptyNode("root") {
+        val target = TestNode("target")
+        val child = TestNode("child") { +target }
+        val wrapper = TestNode("wrapper") { +child }
+        val root = TestNode("root") {
             +wrapper
-            EmptyNode("sibling")
+            TestNode("sibling")
         }
         root.buildTree()
 
         // From target's perspective
-        assertEquals(target, target.getNode<EmptyNode>("."))
-        assertEquals(target, target.getNode<EmptyNode>(""))
-        assertEquals(child, target.getNode<EmptyNode>(".."))
+        assertEquals(target, target.getNode<TestNode>("."))
+        assertEquals(target, target.getNode<TestNode>(""))
+        assertEquals(child, target.getNode<TestNode>(".."))
         // Resolving parent, skipping wrapper
-        assertEquals(wrapper, target.getNode<EmptyNode>("../.."))
+        assertEquals(wrapper, target.getNode<TestNode>("../.."))
         // Resolving up and down
-        assertEquals<EmptyNode>(root.getNode("sibling"), target.getNode("../../../sibling"))
+        assertEquals<TestNode>(root.getNode("sibling"), target.getNode("../../../sibling"))
 
         // From root's perspective
-        assertEquals<EmptyNode>(target, root.getNode("wrapper/child/target"))
-        assertEquals<EmptyNode>(target, wrapper.getNode("child/target")) // Because wrapper is skipped
+        assertEquals<TestNode>(target, root.getNode("wrapper/child/target"))
+        assertEquals<TestNode>(target, wrapper.getNode("child/target")) // Because wrapper is skipped
 
         // Invalid paths
-        assertNull(root.getNodeOrNull<EmptyNode>("missing"))
-        assertNull(root.getNodeOrNull<EmptyNode>("../missing"))
+        assertNull(root.getNodeOrNull<TestNode>("missing"))
+        assertNull(root.getNodeOrNull<TestNode>("../missing"))
 
         // Root path fallback
-        assertEquals<EmptyNode>(root, root.getNode("/"))
+        assertEquals<TestNode>(root, root.getNode("/"))
     }
 }

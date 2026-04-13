@@ -340,7 +340,12 @@ abstract class Node<N : Node<N>> protected constructor(
          */
         fun Node<*>.findVisibleParent(): Node<*>? {
             var p = parent
-            while (p?.skipOnSearch == true) p = p.parent
+            while (p?.skipOnSearch == true) {
+                log.trace("event" to "node.lookup_skip_parent_wrapper", "wrapper" to p.name) {
+                    "Skipping transparent parent wrapper"
+                }
+                p = p.parent
+            }
             return p
         }
 
@@ -362,6 +367,9 @@ abstract class Node<N : Node<N>> protected constructor(
 
             for (child in children.values) {
                 if (child.skipOnSearch) {
+                    log.trace("event" to "node.lookup_skip_wrapper", "wrapper" to child.name, "seeking" to name) {
+                        "Skipping transparent wrapper to seek child"
+                    }
                     child.findVisibleChild(name)?.let { return it }
                 }
             }
