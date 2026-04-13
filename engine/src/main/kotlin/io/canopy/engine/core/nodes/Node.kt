@@ -50,10 +50,11 @@ abstract class Node<N : Node<N>> protected constructor(
      * - the parent’s children map key
      * - this node’s [path] and all descendant paths
      */
-    private var _name = name
-    var name
-        get() = _name
-        set(value) = rename(value)
+    var name = name
+        set(value) {
+            rename(value)
+            field = value
+        }
 
     /* ============================================================
      * Groups
@@ -65,8 +66,8 @@ abstract class Node<N : Node<N>> protected constructor(
      * Stored as a set to avoid duplicates.
      * Publicly exposed as read-only.
      */
-    private val _groups = linkedSetOf<String>()
-    val groups: Set<String> get() = _groups
+    val groups: Set<String>
+        field = linkedSetOf()
 
     /**
      * Adds this node to a group.
@@ -75,7 +76,7 @@ abstract class Node<N : Node<N>> protected constructor(
      * into the SceneManager group registry.
      */
     fun addGroup(group: String) {
-        if (_groups.add(group) && built) {
+        if (groups.add(group) && built) {
             sceneManager.addToGroup(group, this)
         }
     }
@@ -87,7 +88,7 @@ abstract class Node<N : Node<N>> protected constructor(
      * into the SceneManager group registry.
      */
     fun removeGroup(group: String) {
-        if (_groups.remove(group) && built) {
+        if (groups.remove(group) && built) {
             sceneManager.removeFromGroup(group, this)
         }
     }
@@ -105,7 +106,7 @@ abstract class Node<N : Node<N>> protected constructor(
      * ```
      */
     fun updateGroups(block: MutableSet<String>.() -> Unit) {
-        _groups.block()
+        groups.block()
 
         if (!built) return
 
@@ -137,8 +138,8 @@ abstract class Node<N : Node<N>> protected constructor(
      *   - a node is attached/detached
      *   - a node is renamed
      */
-    private var _path: String = "/$name"
-    val path: String get() = _path
+    var path: String = "/$name"
+        private set
 
     /** Stable engine logger for node operations (routable to engine logs). */
     private val log = EngineLogs.node
@@ -153,14 +154,16 @@ abstract class Node<N : Node<N>> protected constructor(
     /**
      * References this node's parent
      */
-    private var _parent: Node<*>? = null
-    val parent get() = _parent
+    // private var _parent: Node<*>? = null
+    var parent: Node<*>? = null
+        private set
 
     /**
      * References this node's children
      */
-    private val _children: MutableMap<String, Node<*>> = mutableMapOf()
-    val children get() = _children.toMap()
+    // private val _children: MutableMap<String, Node<*>> = mutableMapOf()
+    val children: Map<String, Node<*>>
+        field = mutableMapOf()
 
     /* ============================================================
      * DSL support
@@ -200,8 +203,8 @@ abstract class Node<N : Node<N>> protected constructor(
             "Child with name '${child.name}' already exists under '${this.name}'"
         }
 
-        _children[child.name] = child
-        child._parent = this
+        children[child.name] = child
+        child.parent = this
         child.recomputePathRecursively()
 
         LogContext.with("nodePath" to this.path, "childPath" to child.path) {
@@ -269,8 +272,8 @@ abstract class Node<N : Node<N>> protected constructor(
             child.nodeExitTree()
         }
 
-        _children.remove(child.name)
-        child._parent = null
+        children.remove(child.name)
+        child.parent = null
         child.recomputePathRecursively()
 
         sceneManager.unregisterSubtree(child)
@@ -586,8 +589,8 @@ abstract class Node<N : Node<N>> protected constructor(
 
     /** Recomputes this node path and all descendant paths. */
     private fun recomputePathRecursively() {
-        _path = parent?.let { "${it.path}/$name" } ?: "/$name"
-        _children.values.forEach { it.recomputePathRecursively() }
+        path = parent?.let { "${it.path}/$name" } ?: "/$name"
+        children.values.forEach { it.recomputePathRecursively() }
     }
 
     /**
@@ -598,15 +601,14 @@ abstract class Node<N : Node<N>> protected constructor(
 
         val p = parent
         if (p != null) {
-            require(!p._children.containsKey(newName)) {
+            require(!p.children.containsKey(newName)) {
                 "Sibling with name '$newName' already exists under parent '${p.path}'."
             }
 
-            p._children.remove(name)
-            p._children[newName] = this
+            p.children.remove(name)
+            p.children[newName] = this
         }
 
-        _name = newName
         recomputePathRecursively()
     }
 

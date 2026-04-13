@@ -11,8 +11,8 @@ abstract class InputManager : Manager {
 
     private val mapper = InputMapper()
 
-    private val _actionStates = mutableMapOf<String, InputState>()
-    val actionStates get() = _actionStates.toMap()
+    val actionStates: Map<String, InputState>
+        field = mutableMapOf()
 
     /**
      * Backend-specific raw polling.
@@ -23,7 +23,7 @@ abstract class InputManager : Manager {
      * Recomputes all mapped action states for the current frame.
      */
     fun updateActions() {
-        mapper.actions.forEach { (action, binds) ->
+        mapper.mappings.forEach { (action, binds) ->
             val rawPressed = binds.any(::pollPressed)
             val previousState = getActionState(action)
 
@@ -32,11 +32,11 @@ abstract class InputManager : Manager {
                 rawState = if (rawPressed) InputState.Pressed else InputState.Released
             )
 
-            _actionStates[action] = nextState
+            actionStates[action] = nextState
         }
     }
 
-    fun getActionState(action: String): InputState = _actionStates[action] ?: InputState.Released
+    fun getActionState(action: String): InputState = actionStates[action] ?: InputState.Released
 
     fun isActionPressed(action: String): Boolean {
         val state = getActionState(action)
@@ -73,10 +73,10 @@ abstract class InputManager : Manager {
     fun mapActions(vararg actions: Pair<String, List<InputBind>>, replace: Boolean = true) {
         mapper.mapActions(*actions, replace = replace)
 
-        if (replace) _actionStates.clear()
+        if (replace) actionStates.clear()
 
         actions.forEach { (action, _) ->
-            _actionStates[action] = InputState.Released
+            actionStates[action] = InputState.Released
         }
     }
 
@@ -86,12 +86,12 @@ abstract class InputManager : Manager {
 
     fun unmapAction(action: String) {
         mapper.unmapAction(action)
-        _actionStates.remove(action)
+        actionStates.remove(action)
     }
 
     fun clearMappings() {
         mapper.clearMappings()
-        _actionStates.clear()
+        actionStates.clear()
     }
 
     fun registerPersistence(destination: String = "input", moduleId: String = "input") {
@@ -102,9 +102,9 @@ abstract class InputManager : Manager {
             onSave = { mapper.toData() },
             onLoad = {
                 mapper.loadData(it)
-                _actionStates.clear()
-                mapper.actions.keys.forEach { action ->
-                    _actionStates[action] = InputState.Released
+                actionStates.clear()
+                mapper.mappings.keys.forEach { action ->
+                    actionStates[action] = InputState.Released
                 }
             }
         )

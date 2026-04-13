@@ -7,6 +7,7 @@ import org.gradle.api.publish.maven.MavenPublication
 import org.gradle.jvm.toolchain.JavaLanguageVersion
 import org.gradle.plugins.ide.eclipse.model.EclipseModel
 import org.gradle.plugins.ide.idea.model.IdeaModel
+import org.jetbrains.kotlin.gradle.tasks.KotlinCompile
 
 val canopyVersion: String by project
 
@@ -24,7 +25,7 @@ allprojects {
     apply(plugin = "eclipse")
     apply(plugin = "idea")
 
-    group = "io.canopy"
+    group = "io.github.canopy"
     version = canopyVersion
 
     extensions.configure<IdeaModel> {
@@ -86,6 +87,14 @@ subprojects {
 
     tasks.withType(Test::class.java).configureEach {
         useJUnitPlatform()
+    }
+
+    plugins.withId("org.jetbrains.kotlin.jvm") {
+        tasks.withType<KotlinCompile>().configureEach {
+            compilerOptions {
+                freeCompilerArgs.add("-Xexplicit-backing-fields")
+            }
+        }
     }
 }
 

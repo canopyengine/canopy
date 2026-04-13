@@ -30,9 +30,8 @@ abstract class App<C : AppConfig> protected constructor() {
      * Configuration
      * ============================================================ */
 
-    private var _config: C? = null
-    protected val config: C
-        get() = _config ?: defaultConfig()
+    protected var config: C = defaultConfig()
+        private set
 
     abstract fun defaultConfig(): C
 
@@ -268,7 +267,7 @@ abstract class App<C : AppConfig> protected constructor() {
      * ============================================================ */
 
     fun config(newConfig: C) {
-        _config = newConfig
+        config = newConfig
     }
 
     fun onReady(handler: App<C>.() -> Unit) {

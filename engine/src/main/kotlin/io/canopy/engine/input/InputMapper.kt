@@ -9,10 +9,8 @@ class InputMapper {
 
     private val logger = logger<InputMapper>()
 
-    private val mappings: MutableMap<String, MutableList<InputBind>> = mutableMapOf()
-
-    val actions: Map<String, List<InputBind>>
-        get() = mappings.mapValues { it.value.toList() }
+    val mappings: Map<String, List<InputBind>>
+        field = mutableMapOf<String, MutableList<InputBind>>()
 
     init {
         clearMappings()

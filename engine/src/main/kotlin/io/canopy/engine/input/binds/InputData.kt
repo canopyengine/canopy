@@ -33,7 +33,7 @@ class InputData(
  */
 fun InputMapper.asData(): InputData {
     val entries: List<InputEntry> =
-        actions.map { (action, binds) ->
+        mappings.map { (action, binds) ->
             InputEntry(action, binds)
         }
 

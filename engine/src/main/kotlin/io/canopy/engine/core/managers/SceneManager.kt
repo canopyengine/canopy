@@ -70,17 +70,17 @@ class SceneManager(private var physicsStep: Float = 1f / 60f, private val block:
      * Scene state
      * ============================================================ */
 
-    private var _currScene: Node<*>? = null
-
     /**
      * Active scene root. Assigning to this property replaces the scene and triggers:
      * - exit/unregister on the previous scene subtree
      * - register/build on the new scene subtree
      * - [onSceneReplaced] emission
      */
-    var currScene: Node<*>?
-        get() = _currScene
-        set(value) = replaceScene(value)
+    var currScene: Node<*>? = null
+        set(value) {
+            field = value
+            replaceScene(currScene, value)
+        }
 
     /** Accumulator used to determine when to run fixed-step physics ticks. */
     private var physicsAccumulator = 0f
@@ -131,9 +131,7 @@ class SceneManager(private var physicsStep: Float = 1f / 60f, private val block:
      * 2) Swap pointer and emit [onSceneReplaced]
      * 3) Register + build new subtree
      */
-    private fun replaceScene(newScene: Node<*>?) {
-        val oldScene = _currScene
-
+    private fun replaceScene(oldScene: Node<*>?, newScene: Node<*>?) {
         log.info(
             "event" to "scene.replace",
             "oldScene" to oldScene?.name,
@@ -148,8 +146,7 @@ class SceneManager(private var physicsStep: Float = 1f / 60f, private val block:
             }
         }
 
-        _currScene = newScene
-        onSceneReplaced.emit(_currScene)
+        onSceneReplaced.emit(currScene)
 
         newScene?.let { scene ->
             LogContext.with("scene" to scene.name) {
