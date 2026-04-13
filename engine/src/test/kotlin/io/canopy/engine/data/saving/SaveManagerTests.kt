@@ -2,13 +2,14 @@ package io.canopy.engine.data.saving
 
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
 import io.canopy.engine.core.managers.ManagersRegistry
 import io.canopy.engine.core.managers.manager
 import io.canopy.engine.data.assets.WritableAssetEntry
 import kotlinx.serialization.builtins.serializer
 import org.junit.jupiter.api.AfterEach
-import org.junit.jupiter.api.BeforeAll
+import org.junit.jupiter.api.BeforeEach
 
 /**
  * Tests for [SaveManager] + [SaveModule] integration.
@@ -29,12 +30,16 @@ class SaveManagerTests {
             "player" to ::entryForSlot
         )
 
-        @JvmStatic
-        @BeforeAll
-        fun setup() {
+        fun reset() {
             entries.clear()
+            ManagersRegistry.teardown()
             ManagersRegistry.register(saveManager)
         }
+    }
+
+    @BeforeEach
+    fun setup() {
+        reset()
     }
 
     @AfterEach
@@ -75,5 +80,79 @@ class SaveManagerTests {
 
         assertEquals(5, intData)
         assertEquals("abc", stringData)
+    }
+
+    @Test
+    fun `load should ignore missing destinations and missing module payloads`() {
+        var loaded = 0
+        registerSaveModule(
+            destination = "player",
+            id = "test-int",
+            serializer = Int.serializer(),
+            onSave = { 7 },
+            onLoad = { loaded = it }
+        )
+
+        saveManager.load("missing", 3)
+        assertEquals(0, loaded)
+
+        entries.getOrPut(3) { InMemoryAssetEntry("player-3.json", """{"other": 99}""") }
+        saveManager.load("player", 3)
+
+        assertEquals(0, loaded)
+    }
+
+    @Test
+    fun `saveAll and loadAll process every destination`() {
+        val settingsEntries = mutableMapOf<Int, InMemoryAssetEntry>()
+        fun settingsEntryForSlot(slot: Int): WritableAssetEntry =
+            settingsEntries.getOrPut(slot) { InMemoryAssetEntry("settings-$slot.json") }
+
+        val manager = SaveManager(
+            "player" to ::entryForSlot,
+            "settings" to ::settingsEntryForSlot
+        )
+
+        ManagersRegistry.teardown()
+        ManagersRegistry.register(manager)
+
+        var player = 0
+        var settings = ""
+        registerSaveModule(
+            destination = "player",
+            id = "player-score",
+            serializer = Int.serializer(),
+            onSave = { 42 },
+            onLoad = { player = it }
+        )
+        registerSaveModule(
+            destination = "settings",
+            id = "difficulty",
+            serializer = String.serializer(),
+            onSave = { "hard" },
+            onLoad = { settings = it }
+        )
+
+        manager.saveAll(0)
+        manager.loadAll(0)
+
+        assertEquals(42, player)
+        assertEquals("hard", settings)
+    }
+
+    @Test
+    fun `cleanModules removes registered module data`() {
+        registerSaveModule(
+            destination = "player",
+            id = "test-int",
+            serializer = Int.serializer(),
+            onSave = { 5 }
+        )
+
+        saveManager.cleanModules("player")
+
+        assertFailsWith<NoSuchElementException> {
+            saveManager.loadData("player", Int::class)
+        }
     }
 }

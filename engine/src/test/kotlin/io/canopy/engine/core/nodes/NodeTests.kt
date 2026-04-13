@@ -5,6 +5,7 @@ import kotlin.time.DurationUnit
 import kotlin.time.toDuration
 import io.canopy.engine.core.managers.ManagersRegistry
 import io.canopy.engine.core.managers.SceneManager
+import io.canopy.engine.core.managers.manager
 import io.canopy.engine.core.nodes.types.empty.EmptyNode
 import io.canopy.engine.core.nodes.types.empty.EmptyNode2D
 import io.canopy.engine.math.Vector2
@@ -281,5 +282,180 @@ class NodeTests {
         root.buildTree()
 
         assertTrue(wasCalled)
+    }
+
+    @Test
+    fun `rename reparent and relative lookups should update paths`() {
+        val root = EmptyNode("root") {
+            EmptyNode("a")
+            EmptyNode("b")
+        }
+        root.buildTree()
+
+        val a = root.getNode<EmptyNode>("a")
+        a.name = "renamed"
+        assertEquals("/root/renamed", a.path)
+        assertSame(a, root.getNode<EmptyNode>("renamed"))
+
+        root.reparent(a, root.getNode<EmptyNode>("b"))
+
+        assertEquals("/root/b/renamed", a.path)
+        assertSame(a, root.getNode<EmptyNode>("b/renamed"))
+        assertSame(root.getNode<EmptyNode>("b"), a.getNode<EmptyNode>(".."))
+    }
+
+    @Test
+    fun `prefab child skips lifecycle until built manually`() {
+        var readyCalls = 0
+        val root = EmptyNode("root")
+        root.buildTree()
+
+        val prefab = EmptyNode("child") {
+            behavior(onReady = { readyCalls++ })
+        }.asPrefab()
+
+        root.addChild(prefab)
+        assertEquals(0, readyCalls)
+
+        prefab.buildTree()
+        assertEquals(1, readyCalls)
+    }
+
+    @Test
+    fun `group changes on built node should mirror through scene manager`() {
+        val root = EmptyNode("root")
+        root.asSceneRoot()
+        root.buildTree()
+
+        root.addGroup("one")
+        val sceneManager = manager<SceneManager>()
+        val firstNames = mutableSetOf<String>()
+        sceneManager.signalGroup("one") { firstNames += it.name }
+        assertEquals(setOf("root"), firstNames)
+
+        root.removeGroup("one")
+        val names = mutableSetOf<String>()
+        sceneManager.signalGroup("one") { names += it.name }
+        assertTrue(names.isEmpty())
+    }
+
+    @Test
+    fun `getNode allows complex resolution with relative and wrapper paths`() {
+        val root = EmptyNode("root") {
+            EmptyNode("visibleChild") {
+                // Not visible/skipOnSearch = true (using empty node for now but just assume we test relative resolution)
+                EmptyNode("subChild")
+            }
+        }.asSceneRoot()
+        root.buildTree()
+
+        val child = root.getNode<EmptyNode>("./visibleChild/subChild")
+        assertEquals("subChild", child.name)
+
+        val sibling = child.getNode<EmptyNode>("..")
+        assertEquals("visibleChild", sibling.name)
+
+        val backToRoot = sibling.getNode<EmptyNode>("..")
+        assertEquals("root", backToRoot.name)
+    }
+
+    @Test
+    fun `unary plus and unary minus operators work`() {
+        val child1 = EmptyNode("child1").asPrefab()
+        val child2 = EmptyNode("child2").asPrefab()
+
+        val root = EmptyNode("root") {
+            +child1
+            +child2
+        }
+        root.buildTree()
+        assertEquals(2, root.children.size)
+
+        with(root) {
+            -child1
+        }
+        assertEquals(1, root.children.size)
+    }
+
+    @Test
+    fun `plusAssign and minusAssign operators work`() {
+        val root = EmptyNode("root")
+        val child = EmptyNode("child")
+
+        root += child
+        assertEquals(1, root.children.size)
+
+        root -= child
+        assertEquals(0, root.children.size)
+    }
+
+    @Test
+    fun `plus operator returns parent`() {
+        val root = EmptyNode("root")
+        val child = EmptyNode("child")
+
+        with(root) {
+            val returned = this + child
+            assertSame(root, returned)
+            assertEquals(1, root.children.size)
+        }
+    }
+
+    @Test
+    fun `hasChildType works correctly`() {
+        val root = EmptyNode("root") {
+            EmptyNode2D("a2d")
+        }
+        root.buildTree()
+
+        assertTrue(root.hasChildType(EmptyNode2D::class))
+        assertFalse(root.hasChildType(EmptyNode::class)) // children does not include EmptyNode
+    }
+
+    @Test
+    fun `runBehavior catches and logs exceptions`() {
+        val behavior = createBehavior<EmptyNode>(
+            onReady = { throw RuntimeException("Throwing behavior") }
+        )
+
+        val root = EmptyNode("root") {
+            attachBehavior(behavior)
+        }
+
+        assertFailsWith<RuntimeException> {
+            root.buildTree()
+        }
+    }
+
+    @Test
+    fun `getNode supports complex path resolution`() {
+        val target = EmptyNode("target")
+        val child = EmptyNode("child") { +target }
+        val wrapper = EmptyNode("wrapper") { +child }
+        val root = EmptyNode("root") {
+            +wrapper
+            EmptyNode("sibling")
+        }
+        root.buildTree()
+
+        // From target's perspective
+        assertEquals(target, target.getNode<EmptyNode>("."))
+        assertEquals(target, target.getNode<EmptyNode>(""))
+        assertEquals(child, target.getNode<EmptyNode>(".."))
+        // Resolving parent, skipping wrapper
+        assertEquals(wrapper, target.getNode<EmptyNode>("../.."))
+        // Resolving up and down
+        assertEquals<EmptyNode>(root.getNode("sibling"), target.getNode("../../../sibling"))
+
+        // From root's perspective
+        assertEquals<EmptyNode>(target, root.getNode("wrapper/child/target"))
+        assertEquals<EmptyNode>(target, wrapper.getNode("child/target")) // Because wrapper is skipped
+
+        // Invalid paths
+        assertNull(root.getNodeOrNull<EmptyNode>("missing"))
+        assertNull(root.getNodeOrNull<EmptyNode>("../missing"))
+
+        // Root path fallback
+        assertEquals<EmptyNode>(root, root.getNode("/"))
     }
 }
