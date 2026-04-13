@@ -179,6 +179,7 @@ abstract class App<C : AppConfig> protected constructor() {
         frame++
 
         LogContext.with("frame" to frame) {
+            beforeUpdate(delta)
             onUpdate(this@App, delta)
         }
 
@@ -210,17 +211,14 @@ abstract class App<C : AppConfig> protected constructor() {
             EngineLogs.lifecycle.info("event" to "app.dispose") { "Disposing app" }
 
             beforeExit()
+            onExit(this)
             ManagersRegistry.teardown()
             CanopyLogging.end(reason = "normal")
         } catch (t: Throwable) {
             CanopyLogging.end(reason = "crash", t = t)
             throw t
         } finally {
-            try {
-                onExit(this)
-            } finally {
-                markFinished()
-            }
+            markFinished()
         }
     }
 

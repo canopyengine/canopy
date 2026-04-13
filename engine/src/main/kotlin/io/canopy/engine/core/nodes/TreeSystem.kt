@@ -67,9 +67,10 @@ abstract class TreeSystem(
     protected open fun onNodeAdded(node: Node<*>) {}
     protected open fun onNodeRemoved(node: Node<*>) {}
 
-    private fun acceptsNode(node: Node<*>) = requiredTypes.any { type ->
-        type.isInstance(node) || node.hasChildType(type)
-    }
+    private fun acceptsNode(node: Node<*>) = requiredTypes.isEmpty() ||
+        requiredTypes.any { type ->
+            type.isInstance(node) || node.hasChildType(type)
+        }
 
     // ===============================
     //           TICK PROCESSING
