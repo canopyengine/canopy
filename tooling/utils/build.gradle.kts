@@ -5,4 +5,7 @@ plugins {
     `maven-publish`
 }
 
-dependencies {}
+dependencies {
+    testImplementation(libs.kotlin.test.junit5)
+    testImplementation(libs.junit.jupiter)
+}

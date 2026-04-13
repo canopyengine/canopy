@@ -14,11 +14,21 @@ plugins {
     base
     alias(libs.plugins.kotlin.jvm) apply false
     alias(libs.plugins.kotlin.serialization) apply false
+    alias(libs.plugins.kover)
     alias(libs.plugins.ktlint) apply false
 }
 
 group = "io.canopy"
 version = canopyVersion
+
+dependencies {
+    kover(projects.engine)
+    kover(projects.adapters.libgdx)
+    kover(projects.platforms.headless)
+    kover(projects.platforms.terminal)
+    kover(projects.tooling.devtools)
+    kover(projects.tooling.utils)
+}
 
 allprojects {
     apply(plugin = "eclipse")
@@ -36,6 +46,8 @@ allprojects {
 }
 
 subprojects {
+    apply(plugin = "org.jetbrains.kotlinx.kover")
+
     plugins.withType<BasePlugin> {
         extensions.configure<BasePluginExtension>("base") {
             archivesName.set(project.path.removePrefix(":").replace(":", "-"))
@@ -88,6 +100,19 @@ subprojects {
         useJUnitPlatform()
     }
 
+}
+
+kover {
+    reports {
+        total {
+            html {
+                onCheck = true
+            }
+            xml {
+                onCheck = true
+            }
+        }
+    }
 }
 
 extensions.configure<EclipseModel> {

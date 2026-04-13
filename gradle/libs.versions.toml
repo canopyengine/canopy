@@ -5,6 +5,7 @@
 [versions]
 # Kotlin
 kotlin = "2.3.20"
+kover = "0.9.3"
 ktlint = "14.2.0"
 kotlinxSerialization = "1.10.0"
 
@@ -100,4 +101,5 @@ mordant-markdown = {module= "com.github.ajalt.mordant:mordant-markdown", version
 # Kotlin
 kotlin-jvm = { id = "org.jetbrains.kotlin.jvm", version.ref = "kotlin" }
 kotlin-serialization = { id = "org.jetbrains.kotlin.plugin.serialization", version.ref = "kotlin" }
+kover = { id = "org.jetbrains.kotlinx.kover", version.ref = "kover" }
 ktlint = { id = "org.jlleitschuh.gradle.ktlint", version.ref = "ktlint" }
