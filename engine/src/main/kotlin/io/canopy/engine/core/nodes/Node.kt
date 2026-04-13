@@ -52,8 +52,9 @@ abstract class Node<N : Node<N>> protected constructor(
      */
     var name = name
         set(value) {
-            rename(value)
+            val oldName = field
             field = value
+            rename(oldName, value)
         }
 
     /* ============================================================
@@ -249,7 +250,7 @@ abstract class Node<N : Node<N>> protected constructor(
     }
 
     /** DSL: `+childNode` inside a node scope. */
-    operator fun Node<*>.unaryPlus() = addChild(this)
+    operator fun Node<*>.unaryPlus() = this@Node.addChild(this)
 
     /** DSL: `node += child` */
     operator fun plusAssign(child: Node<*>) = addChild(child)
@@ -285,7 +286,7 @@ abstract class Node<N : Node<N>> protected constructor(
     }
 
     /** DSL: `-childNode` */
-    operator fun Node<*>.unaryMinus() = removeChild(this)
+    operator fun Node<*>.unaryMinus() = this@Node.removeChild(this)
 
     /** DSL: `node -= child` */
     operator fun minusAssign(child: Node<*>) = removeChild(child)
@@ -316,6 +317,12 @@ abstract class Node<N : Node<N>> protected constructor(
      * - `../Camera`
      */
     fun <T : Node<T>> getNode(path: String): T {
+        val node = getNodeOrNull<T>(path)
+        requireNotNull(node) { "Node at path '$path' not found (relative to '${this.path}')" }
+        return node
+    }
+
+    fun <T : Node<T>> getNodeOrNull(path: String): T? {
         val parts = path.split("/")
         val firstPart = parts.firstOrNull()
 
@@ -368,27 +375,38 @@ abstract class Node<N : Node<N>> protected constructor(
                 "", "." -> current
                 // Go back one node
                 ".." -> current?.findVisibleParent()
-                    ?: throw IllegalArgumentException("No parent for path: $path")
+                    ?: null.also {
+                        log.error("event" to "node.lookup_no_parent", "path" to path) {
+                            "No parent while resolving path: $path"
+                        }
+                    }
+
                 // Paths (ex: [a,b,c])
                 else -> {
                     val node = current
-                        ?: throw IllegalArgumentException("Null node while resolving path: $path")
-
-                    node.findVisibleChild(part)
-                        ?: throw IllegalArgumentException(
-                            "No child '$part' under '${node.name}' for path '$path'"
-                        )
+                    if (node == null) {
+                        log.error("event" to "node.lookup_null_current", "path" to path, "part" to part, "base" to this.path) {
+                            "Base node went null while resolving path '$path' at part '$part'"
+                        }
+                        null
+                    } else {
+                        node.findVisibleChild(part) ?: null.also {
+                            log.error("event" to "node.lookup_child_not_found", "path" to path, "child" to part, "base" to this.path) {
+                                "Child '$part' not found while resolving path '$path' from '${this.path}'"
+                            }
+                        }
+                    }
                 }
             }
         }
 
-        return current as T
+        return current as T?
     }
 
     /**
      * Kotlin shorthand: `node["Player/Weapon"]`
      */
-    inline operator fun <reified T : Node<T>> get(path: String): T = getNode(path)
+    inline operator fun <reified T : Node<T>> get(path: String): T? = getNode(path)
 
     /* ============================================================
      * Prefab / instancing
@@ -598,8 +616,8 @@ abstract class Node<N : Node<N>> protected constructor(
     /**
      * Renames this node and updates the parent index + paths.
      */
-    private fun rename(newName: String) {
-        if (newName == name) return
+    private fun rename(oldName: String, newName: String) {
+        if (newName == oldName) return
 
         val p = parent
         if (p != null) {
@@ -607,7 +625,7 @@ abstract class Node<N : Node<N>> protected constructor(
                 "Sibling with name '$newName' already exists under parent '${p.path}'."
             }
 
-            p.mutableChildren.remove(name)
+            p.mutableChildren.remove(oldName)
             p.mutableChildren[newName] = this
         }
 
@@ -622,7 +640,8 @@ abstract class Node<N : Node<N>> protected constructor(
 
     // fun groups(vararg groups: String) = apply { groups.forEach { addGroup(it) } }
 
-    fun <T : Node<T>> patch(path: String, handler: T.() -> Unit) = getNode<T>(path).apply(handler)
+    fun <T : Node<T>> patch(path: String, handler: T.() -> Unit) = getNode<T>(path)?.apply(handler)
+        ?: throw IllegalArgumentException("Node at path '$path' not found for patching.")
 
     /* ------------------------------------------------------------------
      * Top-level DSL helpers

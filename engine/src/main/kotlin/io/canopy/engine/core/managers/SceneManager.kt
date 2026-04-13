@@ -47,6 +47,9 @@ class SceneManager(private var physicsStep: Float = 1f / 60f, private val block:
          * SceneManager during construction.
          */
         internal val currentParent = ThreadLocal.withInitial<SceneManager?> { null }
+
+        /** Limits the number of physics steps per frame to avoid "spiral of death" during lag. */
+        private const val MAX_PHYSICS_STEPS = 8
     }
 
     init {
@@ -104,6 +107,7 @@ class SceneManager(private var physicsStep: Float = 1f / 60f, private val block:
      * Systems indexed by node type they care about. Used for registering/unregistering nodes.
      */
     private val systemsByNodeTypes = mutableMapOf<KClass<out Node<*>>, MutableList<TreeSystem>>()
+    private val globalSystems = mutableListOf<TreeSystem>()
 
     /* ============================================================
      * Groups
@@ -173,6 +177,17 @@ class SceneManager(private var physicsStep: Float = 1f / 60f, private val block:
             flatTree[node.path] = node
 
             // Register node into systems interested in its type.
+            globalSystems.forEach { sys ->
+                LogContext.with(
+                    "scene" to root.name,
+                    "nodePath" to node.path,
+                    "system" to sys::class.simpleName
+                ) {
+                    log.trace("event" to "system.register_node") { "Registering node in global system" }
+                }
+                sys.register(node)
+            }
+
             systemsByNodeTypes[node::class]?.forEach { sys ->
                 LogContext.with(
                     "scene" to root.name,
@@ -202,6 +217,17 @@ class SceneManager(private var physicsStep: Float = 1f / 60f, private val block:
 
         traverseNodes(root) { node ->
             flatTree.remove(node.path)
+
+            globalSystems.forEach { sys ->
+                LogContext.with(
+                    "scene" to root.name,
+                    "nodePath" to node.path,
+                    "system" to sys::class.simpleName
+                ) {
+                    log.trace("event" to "system.unregister_node") { "Unregistering node from global system" }
+                }
+                sys.unregister(node)
+            }
 
             systemsByNodeTypes[node::class]?.forEach { sys ->
                 LogContext.with(
@@ -254,8 +280,12 @@ class SceneManager(private var physicsStep: Float = 1f / 60f, private val block:
             list.sortBy(TreeSystem::priority)
         }
 
-        system.requiredTypes.forEach { type ->
-            systemsByNodeTypes.computeIfAbsent(type) { mutableListOf() }.add(system)
+        if (system.requiredTypes.isEmpty()) {
+            globalSystems += system
+        } else {
+            system.requiredTypes.forEach { type ->
+                systemsByNodeTypes.computeIfAbsent(type) { mutableListOf() }.add(system)
+            }
         }
 
         log.info(
@@ -281,7 +311,11 @@ class SceneManager(private var physicsStep: Float = 1f / 60f, private val block:
 
         systems[system.phase]?.apply {
             remove(system)
-            system.requiredTypes.forEach { type -> systemsByNodeTypes[type]?.remove(system) }
+            if (system.requiredTypes.isEmpty()) {
+                globalSystems.remove(system)
+            } else {
+                system.requiredTypes.forEach { type -> systemsByNodeTypes[type]?.remove(system) }
+            }
             sortBy(TreeSystem::priority)
         }
         systemsByClass.remove(kClass)
@@ -378,16 +412,17 @@ class SceneManager(private var physicsStep: Float = 1f / 60f, private val block:
      */
     fun tick(delta: Float) {
         val root = currScene ?: return
+        physicsAccumulator += delta
 
         LogContext.with(
             "scene" to root.name,
             "delta" to delta,
             "physicsStep" to physicsStep
         ) {
-            val physicsFrame = isPhysicsFrame(delta)
-
-            if (physicsFrame) {
-                log.trace("event" to "tick.physics") { "Physics tick" }
+            var steps = 0
+            while (hasPhysicsStep() && steps < MAX_PHYSICS_STEPS) {
+                steps++
+                log.trace("event" to "tick.physics", "step" to steps) { "Physics tick" }
 
                 systems[TreeSystem.UpdatePhase.PhysicsPre]?.forEach { sys ->
                     LogContext.with("system" to (sys::class.simpleName ?: "UnknownSystem"), "phase" to "PhysicsPre") {
@@ -432,8 +467,7 @@ class SceneManager(private var physicsStep: Float = 1f / 60f, private val block:
      * Fixed time-step accumulator.
      * Returns true when we should run a physics step.
      */
-    private fun isPhysicsFrame(delta: Float): Boolean {
-        physicsAccumulator += delta
+    private fun hasPhysicsStep(): Boolean {
         if (physicsAccumulator >= physicsStep) {
             physicsAccumulator -= physicsStep
             return true
