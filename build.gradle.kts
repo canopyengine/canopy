@@ -7,7 +7,6 @@ import org.gradle.api.publish.maven.MavenPublication
 import org.gradle.jvm.toolchain.JavaLanguageVersion
 import org.gradle.plugins.ide.eclipse.model.EclipseModel
 import org.gradle.plugins.ide.idea.model.IdeaModel
-import org.jetbrains.kotlin.gradle.tasks.KotlinCompile
 
 val canopyVersion: String by project
 
@@ -89,13 +88,6 @@ subprojects {
         useJUnitPlatform()
     }
 
-    plugins.withId("org.jetbrains.kotlin.jvm") {
-        tasks.withType<KotlinCompile>().configureEach {
-            compilerOptions {
-                freeCompilerArgs.add("-Xexplicit-backing-fields")
-            }
-        }
-    }
 }
 
 extensions.configure<EclipseModel> {

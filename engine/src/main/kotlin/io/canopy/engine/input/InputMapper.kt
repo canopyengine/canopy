@@ -9,8 +9,9 @@ class InputMapper {
 
     private val logger = logger<InputMapper>()
 
+    private val mutableMappings = mutableMapOf<String, MutableList<InputBind>>()
     val mappings: Map<String, List<InputBind>>
-        field = mutableMapOf<String, MutableList<InputBind>>()
+        get() = mutableMappings
 
     init {
         clearMappings()
@@ -19,8 +20,8 @@ class InputMapper {
     fun toData(): InputData = asData()
 
     fun loadData(data: InputData) {
-        mappings.clear()
-        mappings.putAll(
+        mutableMappings.clear()
+        mutableMappings.putAll(
             data.mappings.associate { entry ->
                 entry.name to entry.binds.toMutableList()
             }
@@ -34,7 +35,7 @@ class InputMapper {
         .toList()
 
     fun clearMappings() {
-        mappings.clear()
+        mutableMappings.clear()
     }
 
     fun mapActions(vararg newMappings: Pair<String, List<InputBind>>, replace: Boolean = true) {
@@ -43,7 +44,7 @@ class InputMapper {
                 "Mapping action [$action] to: ${newBinds.joinToString { it.describe() }}"
             }
 
-            val binds = mappings.getOrPut(action) { mutableListOf() }
+            val binds = mutableMappings.getOrPut(action) { mutableListOf() }
 
             if (replace) binds.clear()
 
@@ -52,7 +53,7 @@ class InputMapper {
     }
 
     fun unmapAction(action: String) {
-        mappings.remove(action)
+        mutableMappings.remove(action)
     }
 
     private fun InputBind.describe(): String = when (type) {

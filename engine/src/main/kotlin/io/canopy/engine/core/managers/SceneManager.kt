@@ -78,8 +78,9 @@ class SceneManager(private var physicsStep: Float = 1f / 60f, private val block:
      */
     var currScene: Node<*>? = null
         set(value) {
+            val oldScene = field
             field = value
-            replaceScene(currScene, value)
+            replaceScene(oldScene, value)
         }
 
     /** Accumulator used to determine when to run fixed-step physics ticks. */

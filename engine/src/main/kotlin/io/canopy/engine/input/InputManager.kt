@@ -11,8 +11,9 @@ abstract class InputManager : Manager {
 
     private val mapper = InputMapper()
 
+    private val mutableActionStates = mutableMapOf<String, InputState>()
     val actionStates: Map<String, InputState>
-        field = mutableMapOf()
+        get() = mutableActionStates
 
     /**
      * Backend-specific raw polling.
@@ -32,11 +33,11 @@ abstract class InputManager : Manager {
                 rawState = if (rawPressed) InputState.Pressed else InputState.Released
             )
 
-            actionStates[action] = nextState
+            mutableActionStates[action] = nextState
         }
     }
 
-    fun getActionState(action: String): InputState = actionStates[action] ?: InputState.Released
+    fun getActionState(action: String): InputState = mutableActionStates[action] ?: InputState.Released
 
     fun isActionPressed(action: String): Boolean {
         val state = getActionState(action)
@@ -73,10 +74,10 @@ abstract class InputManager : Manager {
     fun mapActions(vararg actions: Pair<String, List<InputBind>>, replace: Boolean = true) {
         mapper.mapActions(*actions, replace = replace)
 
-        if (replace) actionStates.clear()
+        if (replace) mutableActionStates.clear()
 
         actions.forEach { (action, _) ->
-            actionStates[action] = InputState.Released
+            mutableActionStates[action] = InputState.Released
         }
     }
 
@@ -86,12 +87,12 @@ abstract class InputManager : Manager {
 
     fun unmapAction(action: String) {
         mapper.unmapAction(action)
-        actionStates.remove(action)
+        mutableActionStates.remove(action)
     }
 
     fun clearMappings() {
         mapper.clearMappings()
-        actionStates.clear()
+        mutableActionStates.clear()
     }
 
     fun registerPersistence(destination: String = "input", moduleId: String = "input") {
@@ -102,9 +103,9 @@ abstract class InputManager : Manager {
             onSave = { mapper.toData() },
             onLoad = {
                 mapper.loadData(it)
-                actionStates.clear()
+                mutableActionStates.clear()
                 mapper.mappings.keys.forEach { action ->
-                    actionStates[action] = InputState.Released
+                    mutableActionStates[action] = InputState.Released
                 }
             }
         )

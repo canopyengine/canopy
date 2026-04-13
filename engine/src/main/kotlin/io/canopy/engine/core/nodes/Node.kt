@@ -66,8 +66,9 @@ abstract class Node<N : Node<N>> protected constructor(
      * Stored as a set to avoid duplicates.
      * Publicly exposed as read-only.
      */
+    private val mutableGroups = linkedSetOf<String>()
     val groups: Set<String>
-        field = linkedSetOf()
+        get() = mutableGroups
 
     /**
      * Adds this node to a group.
@@ -76,7 +77,7 @@ abstract class Node<N : Node<N>> protected constructor(
      * into the SceneManager group registry.
      */
     fun addGroup(group: String) {
-        if (groups.add(group) && built) {
+        if (mutableGroups.add(group) && built) {
             sceneManager.addToGroup(group, this)
         }
     }
@@ -88,7 +89,7 @@ abstract class Node<N : Node<N>> protected constructor(
      * into the SceneManager group registry.
      */
     fun removeGroup(group: String) {
-        if (groups.remove(group) && built) {
+        if (mutableGroups.remove(group) && built) {
             sceneManager.removeFromGroup(group, this)
         }
     }
@@ -106,7 +107,7 @@ abstract class Node<N : Node<N>> protected constructor(
      * ```
      */
     fun updateGroups(block: MutableSet<String>.() -> Unit) {
-        groups.block()
+        mutableGroups.block()
 
         if (!built) return
 
@@ -162,8 +163,9 @@ abstract class Node<N : Node<N>> protected constructor(
      * References this node's children
      */
     // private val _children: MutableMap<String, Node<*>> = mutableMapOf()
+    private val mutableChildren = mutableMapOf<String, Node<*>>()
     val children: Map<String, Node<*>>
-        field = mutableMapOf()
+        get() = mutableChildren
 
     /* ============================================================
      * DSL support
@@ -203,7 +205,7 @@ abstract class Node<N : Node<N>> protected constructor(
             "Child with name '${child.name}' already exists under '${this.name}'"
         }
 
-        children[child.name] = child
+        mutableChildren[child.name] = child
         child.parent = this
         child.recomputePathRecursively()
 
@@ -272,7 +274,7 @@ abstract class Node<N : Node<N>> protected constructor(
             child.nodeExitTree()
         }
 
-        children.remove(child.name)
+        mutableChildren.remove(child.name)
         child.parent = null
         child.recomputePathRecursively()
 
@@ -605,8 +607,8 @@ abstract class Node<N : Node<N>> protected constructor(
                 "Sibling with name '$newName' already exists under parent '${p.path}'."
             }
 
-            p.children.remove(name)
-            p.children[newName] = this
+            p.mutableChildren.remove(name)
+            p.mutableChildren[newName] = this
         }
 
         recomputePathRecursively()
