@@ -393,13 +393,23 @@ abstract class Node<N : Node<N>> protected constructor(
                 else -> {
                     val node = current
                     if (node == null) {
-                        log.error("event" to "node.lookup_null_current", "path" to path, "part" to part, "base" to this.path) {
+                        log.error(
+                            "event" to "node.lookup_null_current",
+                            "path" to path,
+                            "part" to part,
+                            "base" to this.path
+                        ) {
                             "Base node went null while resolving path '$path' at part '$part'"
                         }
                         null
                     } else {
                         node.findVisibleChild(part) ?: null.also {
-                            log.error("event" to "node.lookup_child_not_found", "path" to path, "child" to part, "base" to this.path) {
+                            log.error(
+                                "event" to "node.lookup_child_not_found",
+                                "path" to path,
+                                "child" to part,
+                                "base" to this.path
+                            ) {
                                 "Child '$part' not found while resolving path '$path' from '${this.path}'"
                             }
                         }
