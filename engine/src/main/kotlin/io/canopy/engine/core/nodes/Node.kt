@@ -424,7 +424,7 @@ abstract class Node<N : Node<N>> protected constructor(
     /**
      * Kotlin shorthand: `node["Player/Weapon"]`
      */
-    inline operator fun <reified T : Node<T>> get(path: String): T? = getNode(path)
+    inline operator fun <reified T : Node<T>> get(path: String): T? = getNodeOrNull(path)
 
     /* ============================================================
      * Prefab / instancing
@@ -658,8 +658,7 @@ abstract class Node<N : Node<N>> protected constructor(
 
     // fun groups(vararg groups: String) = apply { groups.forEach { addGroup(it) } }
 
-    fun <T : Node<T>> patch(path: String, handler: T.() -> Unit) = getNode<T>(path)?.apply(handler)
-        ?: throw IllegalArgumentException("Node at path '$path' not found for patching.")
+    fun <T : Node<T>> patch(path: String, handler: T.() -> Unit) = getNode<T>(path).apply(handler)
 
     /* ------------------------------------------------------------------
      * Top-level DSL helpers
