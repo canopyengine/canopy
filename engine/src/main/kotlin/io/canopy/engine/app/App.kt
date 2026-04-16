@@ -1,6 +1,6 @@
 package io.canopy.engine.app
 
-import java.util.concurrent.CountDownLatch
+import kotlin.time.Duration
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicReference
 import io.canopy.engine.core.CanopyBuildInfo
@@ -8,28 +8,16 @@ import io.canopy.engine.core.managers.InjectionManager
 import io.canopy.engine.core.managers.Manager
 import io.canopy.engine.core.managers.ManagersRegistry
 import io.canopy.engine.core.managers.SceneManager
-import io.canopy.engine.core.managers.manager
-import io.canopy.engine.input.InputManager
-import io.canopy.engine.input.binds.InputBind
 import io.canopy.engine.logging.CanopyLogging
 import io.canopy.engine.logging.EngineLogs
 import io.canopy.engine.logging.LogContext
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.withTimeout
 
 abstract class App<C : AppConfig> protected constructor() {
-
-    /* ============================================================
-     * Core systems
-     * ============================================================ */
-
-    private val screenRegistry = ScreenRegistry()
-
-    protected val screenManager = ScreenManager()
-    protected val sceneManager = SceneManager()
-
     /* ============================================================
      * Configuration
      * ============================================================ */
-
     private var _config: C? = null
     protected val config: C
         get() = _config ?: defaultConfig()
@@ -42,156 +30,147 @@ abstract class App<C : AppConfig> protected constructor() {
 
     private var frame: Long = 0
 
-    private val startedLatch = CountDownLatch(1)
-    private val finishedLatch = CountDownLatch(1)
+    private val onStarted = CompletableDeferred<Unit>()
+    private val onStopped = CompletableDeferred<Unit>()
     private val finished = AtomicBoolean(false)
 
     private val backendExitRef = AtomicReference<(() -> Unit)?>(null)
     private val backendForceRef = AtomicReference<(() -> Unit)?>(null)
     private val launchThreadRef = AtomicReference<Thread?>(null)
-    private val launchErrorRef = AtomicReference<Throwable?>(null)
 
     /* ============================================================
      * User callbacks
      * ============================================================ */
 
-    protected var onReady: (App<C>) -> Unit = {}
+    protected var onEnter: (App<C>) -> Unit = {}
     protected var onUpdate: (App<C>, delta: Float) -> Unit = { _, _ -> }
     protected var onResize: (App<C>, width: Int, height: Int) -> Unit = { _, _, _ -> }
     protected var onExit: (App<C>) -> Unit = {}
-    protected var onInputs: (InputManager) -> Unit = {}
 
     /* ============================================================
      * Builder hooks
      * ============================================================ */
-
     protected var managerBuilder: ManagersRegistry.() -> Unit = {}
-    protected var sceneManagerBuilder: SceneManager.() -> Unit = {}
 
     /* ============================================================
      * Public handle
      * ============================================================ */
 
-    val handle: AppHandle = AppHandle(
-        onRequestExit = {
-            backendExitRef.get()?.invoke() ?: launchThreadRef.get()?.interrupt()
-        },
-        onForceClose = {
-            backendForceRef.get()?.invoke() ?: Runtime.getRuntime().halt(0)
-        },
-        onJoin = { timeout, unit -> finishedLatch.await(timeout, unit) },
-        onAwaitStarted = { timeout, unit -> startedLatch.await(timeout, unit) }
-    )
+    val handle: AppHandle = object : AppHandle {
 
-    /* ============================================================
-     * Extension hooks
-     * ============================================================ */
+        override fun requestExit() {
+            val exit = backendExitRef.get()
+            val thread = launchThreadRef.get()
 
-    /**
-     * Hook for subclasses to provide additional managers before setup.
-     *
-     * Do not include [InjectionManager], [SceneManager], or [ScreenManager] here.
-     * Those are owned by [App].
-     */
-    protected open fun collectManagers(): List<Manager> = emptyList()
-
-    /**
-     * Hook for subclasses to configure the shared [SceneManager] before setup.
-     */
-    protected open fun configureSceneManager(sceneManager: SceneManager) = Unit
-
-    /**
-     * Hook called after managers and screens are ready.
-     */
-    protected open fun afterReady() = Unit
-
-    /**
-     * Hook called before the user update callback and screen frame update.
-     */
-    protected open fun beforeUpdate(delta: Float) = Unit
-
-    /**
-     * Hook called after the user resize callback.
-     */
-    protected open fun afterResize(width: Int, height: Int) = Unit
-
-    /**
-     * Hook called before teardown begins.
-     */
-    protected open fun beforeExit() = Unit
-
-    /**
-     * Platform-specific app entrypoint.
-     */
-    protected abstract fun internalLaunch(config: C, vararg args: String)
-
-    /* ============================================================
-     * Platform lifecycle
-     * ============================================================ */
-
-    /**
-     * Called by the platform runtime when the app is actually starting.
-     *
-     * Final in behavior even if not marked final: subclasses should customize via hooks.
-     */
-    fun ready() {
-        CanopyLogging.init(
-            CanopyLogging.Config(
-                engineVersion = CanopyBuildInfo.projectVersion
-            )
-        )
-
-        val backendName = this::class.simpleName ?: "unknown"
-        LogContext.with("backend" to backendName) {
-            EngineLogs.lifecycle.info { "Booting Canopy..." }
-
-            sceneManager.apply(sceneManagerBuilder)
-            configureSceneManager(sceneManager)
-
-            ManagersRegistry.withScope {
-                managerBuilder()
-                collectManagers().forEach(::register)
-                +InjectionManager()
-                +sceneManager
-                +screenManager
+            when {
+                exit != null -> exit()
+                thread != null -> thread.interrupt()
             }
+        }
 
-            screenRegistry.setup()
+        override fun forceClose() {
+            val force = backendForceRef.get()
 
-            if (ManagersRegistry.has(InputManager::class)) {
-                onInputs(manager())
+            when {
+                force != null -> force()
+                else -> Runtime.getRuntime().halt(0)
             }
+        }
 
-            onReady(this@App)
-            afterReady()
+        override suspend fun join() {
+            onStopped.await()
+        }
 
-            startedLatch.countDown()
-
-            EngineLogs.lifecycle.info("event" to "app.launch.init") {
-                "Application started."
+        override suspend fun join(timeout: Duration): Boolean = try {
+            withTimeout(timeout) {
+                onStopped.await()
+                true
             }
+        } catch (_: Exception) {
+            false
+        }
+
+        override suspend fun awaitStarted() {
+            onStarted.await()
+        }
+
+        override suspend fun awaitStarted(timeout: Duration): Boolean = try {
+            withTimeout(timeout) {
+                onStarted.await()
+                true
+            }
+        } catch (_: Exception) {
+            false
         }
     }
 
-    /**
-     * Called by the platform runtime every frame/tick.
-     */
+    /* ============================================================
+     * Hooks
+     * ============================================================ */
+
+    protected open fun afterEnter() = Unit
+    protected open fun beforeUpdate(delta: Float) = Unit
+    protected open fun afterResize(width: Int, height: Int) = Unit
+    protected open fun beforeExit() = Unit
+
+    protected open fun provideManagers(): List<Manager> = emptyList()
+    protected open fun SceneManager.configureSceneManager() = Unit
+
+    protected abstract fun internalLaunch(config: C, vararg args: String)
+
+    /* ============================================================
+     * Lifecycle
+     * ============================================================ */
+
+    fun enter() {
+        try {
+            CanopyLogging.init(
+                CanopyLogging.Config(
+                    engineVersion = CanopyBuildInfo.projectVersion
+                )
+            )
+
+            val backendName = this::class.simpleName ?: "unknown"
+            LogContext.with("backend" to backendName) {
+                EngineLogs.lifecycle.info { "Booting Canopy..." }
+
+                ManagersRegistry.withScope {
+                    provideManagers().forEach(::register)
+                    +InjectionManager()
+                    +ScreenManager()
+                    +SceneManager().also { it.configureSceneManager() }
+                    managerBuilder()
+                }
+
+                onEnter(this@App)
+                afterEnter()
+
+                onStarted.safeComplete()
+
+                EngineLogs.lifecycle.info("event" to "app.launch.init") {
+                    "Application started."
+                }
+            }
+        } catch (t: Throwable) {
+            onStarted.safeFail(t)
+            onStopped.safeFail(t)
+            throw t
+        }
+    }
+
     fun update(delta: Float) {
         frame++
 
         LogContext.with("frame" to frame) {
+            beforeUpdate(delta)
             onUpdate(this@App, delta)
         }
 
-        screenManager.frame(delta)
+        ManagersRegistry.update(delta)
     }
 
-    /**
-     * Called by the platform runtime when the surface changes size.
-     */
     fun resize(width: Int, height: Int) {
-        sceneManager.resize(width, height)
-        screenManager.resize(width, height)
+        ManagersRegistry.resize(width, height)
 
         onResize(this, width, height)
         afterResize(width, height)
@@ -203,30 +182,29 @@ abstract class App<C : AppConfig> protected constructor() {
         ) { "Screen resized." }
     }
 
-    /**
-     * Called by the platform runtime on shutdown.
-     */
     fun exit() {
         try {
             EngineLogs.lifecycle.info("event" to "app.dispose") { "Disposing app" }
 
             beforeExit()
-            ManagersRegistry.teardown()
+            ManagersRegistry.exit()
             CanopyLogging.end(reason = "normal")
         } catch (t: Throwable) {
             CanopyLogging.end(reason = "crash", t = t)
+            onStopped.safeFail(t)
             throw t
         } finally {
             try {
                 onExit(this)
             } finally {
+                onStopped.safeComplete()
                 markFinished()
             }
         }
     }
 
     /* ============================================================
-     * Launch control
+     * Launch
      * ============================================================ */
 
     fun launch(vararg args: String) {
@@ -234,26 +212,20 @@ abstract class App<C : AppConfig> protected constructor() {
     }
 
     fun launchAsync(threadName: String = "canopy-app", vararg args: String): AppHandle {
-        val runnable = {
+        val thread = Thread({
             try {
                 internalLaunch(config, *args)
             } catch (t: Throwable) {
-                launchErrorRef.set(t)
-                startedLatch.countDown()
-                markFinished()
+                onStarted.safeFail(t)
+                onStopped.safeFail(t)
                 throw t
             }
-        }
-
-        val thread = Thread(runnable, threadName).apply {
+        }, threadName).apply {
             isDaemon = false
         }
 
         launchThreadRef.set(thread)
         thread.start()
-
-        startedLatch.await()
-        launchErrorRef.get()?.let { throw it }
 
         return handle
     }
@@ -264,15 +236,15 @@ abstract class App<C : AppConfig> protected constructor() {
     }
 
     /* ============================================================
-     * Configuration DSL
+     * DSL
      * ============================================================ */
 
     fun config(newConfig: C) {
         _config = newConfig
     }
 
-    fun onReady(handler: App<C>.() -> Unit) {
-        onReady = handler
+    fun onEnter(handler: App<C>.() -> Unit) {
+        onEnter = handler
     }
 
     fun onUpdate(handler: App<C>.(Float) -> Unit) {
@@ -287,18 +259,6 @@ abstract class App<C : AppConfig> protected constructor() {
         onExit = handler
     }
 
-    fun screens(handler: ScreenRegistry.() -> Unit) {
-        screenRegistry.registerSetupCallback(handler)
-    }
-
-    fun inputs(vararg mappings: Pair<String, List<InputBind>>) {
-        onInputs = { manager -> manager.mapActions(*mappings) }
-    }
-
-    fun sceneManager(handler: SceneManager.() -> Unit) {
-        sceneManagerBuilder = handler
-    }
-
     fun managers(handler: ManagersRegistry.() -> Unit) {
         managerBuilder = handler
     }
@@ -308,8 +268,14 @@ abstract class App<C : AppConfig> protected constructor() {
      * ============================================================ */
 
     private fun markFinished() {
-        if (finished.compareAndSet(false, true)) {
-            finishedLatch.countDown()
-        }
+        finished.compareAndSet(false, true)
+    }
+
+    private fun CompletableDeferred<Unit>.safeComplete() {
+        if (!isCompleted) complete(Unit)
+    }
+
+    private fun CompletableDeferred<Unit>.safeFail(t: Throwable) {
+        if (!isCompleted) completeExceptionally(t)
     }
 }

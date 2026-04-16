@@ -8,6 +8,7 @@ class ScreenManager : Manager {
     /* ============================================================
      * Registry
      * ============================================================ */
+    internal val screenRegistry = ScreenRegistry()
 
     private val screens = linkedMapOf<KClass<out Screen>, Screen>()
 
@@ -54,11 +55,15 @@ class ScreenManager : Manager {
      * Frame lifecycle
      * ============================================================ */
 
-    fun frame(delta: Float) {
-        current?.onFrame(delta)
+    override fun onEnter() {
+        screenManagerBuilder()
     }
 
-    fun resize(width: Int, height: Int) {
+    override fun onUpdate(delta: Float) {
+        current?.onUpdate(delta)
+    }
+
+    override fun onResize(width: Int, height: Int) {
         current?.onResize(width, height)
     }
 
@@ -66,13 +71,19 @@ class ScreenManager : Manager {
      * Teardown
      * ============================================================ */
 
-    override fun teardown() {
-        super.teardown()
-
+    override fun onExit() {
         current?.onExit()
         current = null
 
-        screens.values.forEach { it.dispose() }
+        screens.values.forEach { it.onExit() }
         screens.clear()
     }
+
+    companion object {
+        internal var screenManagerBuilder: ScreenManager.() -> Unit = {}
+    }
+}
+
+fun App<*>.screens(handler: ScreenRegistry.() -> Unit) {
+    ScreenManager.screenManagerBuilder = { screenRegistry.apply(handler) }
 }

@@ -3,11 +3,8 @@ package io.canopy.engine.data.parsers
 import io.canopy.engine.data.assets.AssetEntry
 import io.canopy.engine.data.assets.WritableAssetEntry
 import kotlinx.serialization.KSerializer
+import kotlinx.serialization.json.*
 import kotlinx.serialization.json.Json
-import kotlinx.serialization.json.JsonBuilder
-import kotlinx.serialization.json.JsonElement
-import kotlinx.serialization.json.JsonObject
-import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.modules.SerializersModule
 import kotlinx.serialization.serializer
 

@@ -1,6 +1,7 @@
 package io.canopy.engine.core.managers
 
 import kotlin.reflect.KClass
+import io.canopy.engine.app.App
 import io.canopy.engine.core.flows.events.asSignal
 import io.canopy.engine.core.flows.events.event
 import io.canopy.engine.core.nodes.Node
@@ -29,6 +30,8 @@ import io.canopy.engine.math.Vector2
  */
 class SceneManager(private var physicsStep: Float = 1f / 60f, private val block: SceneManager.() -> Unit = {}) :
     Manager {
+
+    private var sceneManagerBuilder: SceneManager.() -> Unit = {}
 
     /** Dedicated subsystem logger (routable + consistent). */
     private val log = EngineLogs.subsystem("scene")
@@ -378,7 +381,7 @@ class SceneManager(private var physicsStep: Float = 1f / 60f, private val block:
      * - nodeUpdate(delta)
      * - FramePost systems
      */
-    fun tick(delta: Float) {
+    override fun onUpdate(delta: Float) {
         val root = currScene ?: return
 
         LogContext.with(
@@ -425,7 +428,7 @@ class SceneManager(private var physicsStep: Float = 1f / 60f, private val block:
     /**
      * Emits resize event for listeners (UI/layout/camera systems).
      */
-    fun resize(width: Int, height: Int) {
+    override fun onResize(width: Int, height: Int) {
         onResize.emit(width, height)
         log.debug("event" to "scene.resize", "width" to width, "height" to height) { "Resize" }
     }
@@ -447,18 +450,23 @@ class SceneManager(private var physicsStep: Float = 1f / 60f, private val block:
      * Manager lifecycle
      * ============================================================ */
 
-    override fun setup() {
+    override fun onEnter() {
         log.info("event" to "sceneManager.setup", "physicsStep" to physicsStep) { "Setup" }
 
         // Allow callers to register systems, groups, initial scene, etc.
+        sceneManagerBuilder()
         this.block()
 
         // Notify systems that they've been registered with the scene manager.
         systems.values.flatten().forEach(TreeSystem::onRegister)
     }
 
-    override fun teardown() {
+    override fun onExit() {
         log.info("event" to "sceneManager.teardown") { "Teardown" }
         systems.values.flatten().forEach(TreeSystem::onUnregister)
+    }
+
+    fun App<*>.sceneManager(handler: SceneManager.() -> Unit) {
+        sceneManagerBuilder = handler
     }
 }
