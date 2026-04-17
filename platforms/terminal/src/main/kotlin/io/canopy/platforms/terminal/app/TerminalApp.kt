@@ -6,7 +6,6 @@ import io.canopy.adapters.libgdx.data.assets.GdxAssetsManager
 import io.canopy.adapters.libgdx.input.GdxInputManager
 import io.canopy.engine.app.App
 import io.canopy.engine.app.AppConfig
-import io.canopy.engine.core.managers.Manager
 import io.canopy.engine.logging.EngineLogs
 
 class TerminalApp internal constructor() : App<AppConfig>() {
@@ -21,8 +20,8 @@ class TerminalApp internal constructor() : App<AppConfig>() {
         title = "Terminal Canopy App"
     )
 
-    override fun collectManagers(): List<Manager> = listOf(
-        inputManager,
+    override fun provideManagers() = listOf(
+        // inputManager,
         assetsManager
     )
 

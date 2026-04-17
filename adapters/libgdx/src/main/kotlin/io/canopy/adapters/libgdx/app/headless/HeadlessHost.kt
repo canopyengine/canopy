@@ -13,7 +13,7 @@ object HeadlessHost {
         val host = object : KtxGame<KtxScreen>() {
             override fun create() {
                 super.create()
-                app.ready()
+                app.enter()
             }
 
             override fun render() {

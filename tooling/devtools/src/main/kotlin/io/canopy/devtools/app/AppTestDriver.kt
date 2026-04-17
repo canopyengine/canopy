@@ -6,7 +6,7 @@ import io.canopy.platforms.headless.app.HeadlessApp
 import io.canopy.platforms.headless.app.headlessApp
 
 class AppTestDriver<C : AppConfig> internal constructor(private val app: App<C>) {
-    fun start() = app.ready()
+    fun start() = app.enter()
     fun frame(delta: Float) = app.update(delta)
     fun resize(w: Int, h: Int) = app.resize(w, h)
     fun stop() = app.exit()

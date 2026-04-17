@@ -1,6 +1,5 @@
 package io.canopy.engine.logging.logback
 
-import ch.qos.logback.classic.pattern.MessageConverter
 import ch.qos.logback.classic.spi.ILoggingEvent
 
 /**

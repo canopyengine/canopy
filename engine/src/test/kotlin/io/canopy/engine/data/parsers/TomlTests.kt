@@ -2,9 +2,7 @@ package io.canopy.engine.data.core.parsers
 
 import io.canopy.engine.data.parsers.Toml
 import kotlinx.serialization.Serializable
-import org.junit.jupiter.api.Assertions.assertEquals
-import org.junit.jupiter.api.Assertions.assertFalse
-import org.junit.jupiter.api.Assertions.assertTrue
+import org.junit.jupiter.api.Assertions.*
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertThrows
