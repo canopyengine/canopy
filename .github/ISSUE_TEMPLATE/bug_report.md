@@ -8,7 +8,7 @@ type: bug
 ---
 
 **Description**
-Briefly describe the bug.
+<!-- Briefly describe the bug. -->
 
 **Steps to Reproduce**
 1.
@@ -16,7 +16,7 @@ Briefly describe the bug.
 3.
 
 **Expected Behavior**
-What should happen instead?
+<!-- What should happen instead? -->
 
 **Environment**
 - Canopy version:
@@ -24,4 +24,4 @@ What should happen instead?
 - JVM / Kotlin version (if relevant):
 
 **Additional Context**
-Logs, stack traces, or screenshots if applicable.
+<!-- Logs, stack traces, or screenshots if applicable. -->

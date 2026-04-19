@@ -30,15 +30,15 @@ class ScreenRegistry internal constructor() {
      * Setup
      * ============================================================ */
 
-    private var setupCallback: ScreenRegistry.() -> Unit = {}
+//    private var setupCallback: ScreenRegistry.() -> Unit = {}
+//
+//    fun registerSetupCallback(callback: ScreenRegistry.() -> Unit = {}) {
+//        setupCallback = callback
+//    }
 
-    fun registerSetupCallback(callback: ScreenRegistry.() -> Unit = {}) {
-        setupCallback = callback
-    }
-
-    fun setup() {
-        setupCallback()
-    }
+//    fun setup() {
+//        setupCallback()
+//    }
 
     /* ============================================================
      * Registration

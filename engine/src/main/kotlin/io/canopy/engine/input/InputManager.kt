@@ -1,14 +1,17 @@
 package io.canopy.engine.input
 
+import io.canopy.engine.app.App
 import io.canopy.engine.core.managers.Manager
+import io.canopy.engine.core.managers.manager
 import io.canopy.engine.data.saving.registerSaveModule
 import io.canopy.engine.input.binds.InputBind
 import io.canopy.engine.input.binds.InputData
 import io.canopy.engine.math.Vector2
 
 abstract class InputManager : Manager {
-
     private val mapper = InputMapper()
+
+    internal var onInputs: () -> Unit = {}
 
     private val _actionStates = mutableMapOf<String, InputState>()
     val actionStates get() = _actionStates.toMap()
@@ -127,7 +130,13 @@ abstract class InputManager : Manager {
         }
     }
 
-    override fun setup() {
-        registerPersistence()
+    override fun onEnter() {
+        onInputs()
+    }
+}
+
+fun App<*>.inputs(vararg mappings: Pair<String, List<InputBind>>) {
+    manager<InputManager>().let {
+        it.onInputs = { it.mapActions(*mappings) }
     }
 }

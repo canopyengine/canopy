@@ -113,11 +113,11 @@ class InjectionManager : Manager {
      * Manager lifecycle
      * ============================================================ */
 
-    override fun setup() {
+    override fun onEnter() {
         log.debug("event" to "di.setup") { "Setup" }
     }
 
-    override fun teardown() {
+    override fun onExit() {
         log.debug("event" to "di.teardown", "size" to providers.size) { "Teardown" }
         providers.clear()
     }

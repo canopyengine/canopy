@@ -72,7 +72,7 @@ object ManagersRegistry {
         return resolved as T
     }
 
-    fun setup() {
+    fun enter() {
         log.info("event" to "managers.setup", "registered" to managers.size) {
             "Bootstrapping managers"
         }
@@ -81,14 +81,60 @@ object ManagersRegistry {
             val name = manager::class.simpleName ?: "UnknownManager"
             LogContext.with("manager" to name) {
                 log.debug { "setup()" }
-                manager.setup()
+                manager.onEnter()
             }
         }
 
         log.info("event" to "managers.setup.done") { "Finished bootstrapping managers" }
     }
 
-    fun teardown() {
+    fun update(delta: Float) {
+        LogContext.with("delta" to delta, "registered" to managers.size) {
+            log.trace("event" to "managers.update") { "Updating managers" }
+        }
+
+        managers.values.forEach { manager ->
+            val name = manager::class.simpleName ?: "UnknownManager"
+
+            try {
+                LogContext.with("manager" to name, "delta" to delta) {
+                    manager.onUpdate(delta)
+                }
+            } catch (t: Throwable) {
+                log.error(
+                    t = t,
+                    "event" to "manager.update.error",
+                    "manager" to name
+                ) { "Manager update failed" }
+                throw t
+            }
+        }
+    }
+
+    fun resize(width: Int, height: Int) {
+        LogContext.with("width" to width, "height" to height, "registered" to managers.size) {
+            log.info("event" to "managers.resize") { "Resizing managers" }
+        }
+
+        managers.values.forEach { manager ->
+            val name = manager::class.simpleName ?: "UnknownManager"
+
+            try {
+                LogContext.with("manager" to name, "width" to width, "height" to height) {
+                    manager.onResize(width, height)
+                }
+            } catch (t: Throwable) {
+                log.error(
+                    t = t,
+                    "event" to "manager.resize.error",
+                    "manager" to name
+                ) { "Manager resize failed" }
+                throw t
+            }
+        }
+    }
+
+    fun exit() {
         log.info("event" to "managers.teardown", "registered" to managers.size) {
             "Tearing down managers"
         }
@@ -97,7 +143,7 @@ object ManagersRegistry {
             val name = manager::class.simpleName ?: "UnknownManager"
             LogContext.with("manager" to name) {
                 log.debug { "teardown()" }
-                manager.teardown()
+                manager.onExit()
             }
         }
 
@@ -109,9 +155,9 @@ object ManagersRegistry {
 
     fun withScope(block: ManagersRegistry.() -> Unit) {
         log.info("event" to "managers.scope") { "Creating scoped Managers registry..." }
-        teardown()
+        exit()
         block()
-        setup()
+        enter()
         log.info("event" to "managers.scope.done") { "Finished creating scoped Managers registry" }
     }
 
@@ -194,10 +240,8 @@ object ManagersRegistry {
     }
 
     private fun KClass<*>.isSubclassOfManager(): Boolean = Manager::class.java.isAssignableFrom(this.java)
-
     private fun KClass<*>.isConcreteManagerLookupType(): Boolean = isSubclassOfManager() && this != Manager::class
 }
 
 inline fun <reified T : Manager> manager(): T = ManagersRegistry.getManager(T::class)
-
 inline fun <reified T : Manager> lazyManager() = lazy { manager<T>() }

@@ -361,9 +361,11 @@ abstract class Node<N : Node<N>> protected constructor(
             current = when (part) {
                 // Start here
                 "", "." -> current
+
                 // Go back one node
                 ".." -> current?.findVisibleParent()
                     ?: throw IllegalArgumentException("No parent for path: $path")
+
                 // Paths (ex: [a,b,c])
                 else -> {
                     val node = current
@@ -457,7 +459,7 @@ abstract class Node<N : Node<N>> protected constructor(
      * - default components/behavior
      * - setting initial transforms
      */
-    open fun create() {}
+    open fun nodeInit() {}
 
     private var built = false
 
@@ -484,7 +486,7 @@ abstract class Node<N : Node<N>> protected constructor(
         currentParent.set(this)
 
         try {
-            create()
+            nodeInit()
             block(this as N)
         } finally {
             currentParent.set(oldParent)

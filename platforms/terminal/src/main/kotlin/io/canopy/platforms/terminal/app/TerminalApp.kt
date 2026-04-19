@@ -9,8 +9,6 @@ import io.canopy.adapters.libgdx.data.assets.GdxAssetsManager
 import io.canopy.adapters.mordant.input.MordantInputManager
 import io.canopy.engine.app.App
 import io.canopy.engine.app.AppConfig
-import io.canopy.engine.core.flows.events.event
-import io.canopy.engine.data.saving.SaveManager
 import io.canopy.engine.logging.EngineLogs
 import kotlinx.coroutines.flow.takeWhile
 import kotlinx.coroutines.launch
@@ -28,27 +26,10 @@ class TerminalApp internal constructor() : App<AppConfig>() {
         title = "Terminal Canopy App"
     )
 
-    override fun collectManagers() = listOf(
-        SaveManager(),
-        inputManager,
+    override fun provideManagers() = listOf(
+        // inputManager,
         assetsManager
     )
-
-    override fun afterReady() = runBlocking {
-        val job = launch {
-            terminal.receiveEventsFlow()
-                .takeWhile { it !is KeyboardEvent || it.isCtrlC }
-                .collect { event ->
-                    when (event) {
-                        is KeyboardEvent -> log.info { "You pressed ${event.key}" }
-                        is MouseEvent -> log.info { "You clicked at ${event.x}, ${event.y}" }
-                    }
-                }
-        }
-
-        job.start()
-        job.join()
-    }
 
     override fun internalLaunch(config: AppConfig, vararg args: String) {
         log.info { "Starting terminal runtime" }

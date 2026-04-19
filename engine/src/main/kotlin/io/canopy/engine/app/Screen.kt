@@ -1,20 +1,17 @@
 package io.canopy.engine.app
 
-import io.canopy.engine.core.managers.SceneManager
-import io.canopy.engine.core.managers.manager
-
 /**
  * Base screen abstraction for Canopy applications.
  *
  * This class is platform-agnostic and defines a simple lifecycle:
  *
- * - [onEnter] → called when the screen becomes active
- * - [onFrame] → called every frame
+ * - [onActive] → called when the screen becomes active
+ * - [onUpdate] → called every frame
  * - [onResize] → called when the surface changes size
  * - [onExit] → called when the screen is no longer active
  * - [dispose] → called when the screen is destroyed
  *
- * Additionally, [setup] is guaranteed to run only once,
+ * Additionally, [onEnter] is guaranteed to run only once,
  * the first time the screen is entered.
  */
 abstract class Screen {
@@ -24,26 +21,24 @@ abstract class Screen {
     /**
      * Called once when the screen is first entered.
      */
-    open fun setup() {}
+    open fun onEnter() {}
 
     /**
      * Called when the screen becomes active.
      */
-    open fun onEnter() {
-        if (!setupCalled) {
-            setup()
-            setupCalled = true
-        }
-    }
+    open fun onActive() {}
+
+    /**
+     * Called when the screen is no longer active.
+     */
+    open fun onInactive() {}
 
     /**
      * Called every frame.
      *
      * @param delta Time since last frame (in seconds)
      */
-    open fun onFrame(delta: Float) {
-        manager<SceneManager>().tick(delta)
-    }
+    open fun onUpdate(delta: Float) {}
 
     /**
      * Called when the screen is resized.
@@ -51,12 +46,7 @@ abstract class Screen {
     open fun onResize(width: Int, height: Int) {}
 
     /**
-     * Called when the screen is no longer active.
-     */
-    open fun onExit() {}
-
-    /**
      * Called when the screen is destroyed.
      */
-    open fun dispose() {}
+    open fun onExit() {}
 }

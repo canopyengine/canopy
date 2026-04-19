@@ -7,13 +7,13 @@ projects: canopy/canopy-tasks
 ---
 
 **Summary**
-Describe the feature or improvement you would like.
+<!-- Describe the feature or improvement you would like. -->
 
 **Motivation**
-What problem does this solve? Why is it useful?
+<!-- What problem does this solve? Why is it useful? -->
 
 **Proposed Solution**
-Describe how you think this could work.
+<!-- Describe how you think this could work. -->
 
 **Additional Context**
-Links, examples, or related discussions.
+<!-- Links, examples, or related discussions. -->

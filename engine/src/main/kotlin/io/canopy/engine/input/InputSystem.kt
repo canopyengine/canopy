@@ -14,9 +14,10 @@ class InputSystem : TreeSystem(UpdatePhase.PhysicsPre, 10) {
 
         input.actionStates.forEach { (action, state) ->
             when (state) {
-                InputState.JustPressed, InputState.Pressed,
-                InputState.JustReleased, InputState.Released,
-                -> dispatch(action, state)
+                InputState.JustPressed -> dispatch(action, InputState.JustPressed)
+                InputState.Pressed -> dispatch(action, InputState.Pressed)
+                InputState.JustReleased -> dispatch(action, InputState.JustReleased)
+                InputState.Released -> Unit
                 else -> Unit
             }
         }
