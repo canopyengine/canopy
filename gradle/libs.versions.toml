@@ -9,7 +9,7 @@ ktlint = "14.2.0"
 kotlinxSerialization = "1.11.0"
 
 # Gdx
-gdx = "1.14.0"
+gdx = "1.14.1"
 universalTween = "6.3.3"
 gdxDialogs = "1.3.0"
 gdxControllers = "2.2.4"
