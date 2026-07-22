@@ -21,7 +21,7 @@ ktx = "1.13.1-rc1"
 coroutines = "1.11.0"
 junit = "5.14.4"
 assertj = "3.27.7"
-mockk = "1.14.9"
+mockk = "1.14.11"
 mockitoKotlin = "5.4.0"
 
 # Logging
