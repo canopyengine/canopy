@@ -13,15 +13,22 @@ val enableGraalNative: Boolean = providers
     .get()
 
 dependencies {
-    // Canopy deps
+    // Canopy core only
     implementation(projects.engine)
     implementation(projects.tooling.utils)
-    implementation(projects.platforms.headless)
 
-    // Adapters
-    implementation(projects.adapters.libgdx)
+    // Terminal adapter ONLY (no headless, no libgdx)
     implementation(projects.adapters.mordant)
+
+    // Devtools for testing (AppTestDriver, testHeadlessApp, etc.)
+    testImplementation(projects.tooling.devtools)
 
     // Logging
     runtimeOnly(libs.logback.classic)
+
+    // Test dependencies
+    testImplementation(libs.kotlin.test.junit5)
+    testImplementation(libs.junit.jupiter)
+    testImplementation(libs.assertj.core)
+    testImplementation(libs.mockk)
 }

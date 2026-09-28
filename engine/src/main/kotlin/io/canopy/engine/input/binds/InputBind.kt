@@ -136,4 +136,107 @@ enum class InputBind(val type: Type, val code: Int) {
         Keyboard,
         Mouse,
     }
+
+    companion object {
+        fun from(code: String) = entries.first { it.name.equals(code, true) }
+    }
+}
+
+/**
+ * Maps InputBind to Key enum for KeyInputEvent creation.
+ */
+fun InputBind.toKey(): Key = when (this) {
+    InputBind.A -> Key.A_KEY
+    InputBind.B -> Key.B_KEY
+    InputBind.C -> Key.C_KEY
+    InputBind.D -> Key.D_KEY
+    InputBind.E -> Key.E_KEY
+    InputBind.F -> Key.F_KEY
+    InputBind.G -> Key.G_KEY
+    InputBind.H -> Key.H_KEY
+    InputBind.I -> Key.I_KEY
+    InputBind.J -> Key.J_KEY
+    InputBind.K -> Key.K_KEY
+    InputBind.L -> Key.L_KEY
+    InputBind.M -> Key.M_KEY
+    InputBind.N -> Key.N_KEY
+    InputBind.O -> Key.O_KEY
+    InputBind.P -> Key.P_KEY
+    InputBind.Q -> Key.Q_KEY
+    InputBind.R -> Key.R_KEY
+    InputBind.S -> Key.S_KEY
+    InputBind.T -> Key.T_KEY
+    InputBind.U -> Key.U_KEY
+    InputBind.V -> Key.V_KEY
+    InputBind.W -> Key.W_KEY
+    InputBind.X -> Key.X_KEY
+    InputBind.Y -> Key.Y_KEY
+    InputBind.Z -> Key.Z_KEY
+
+    InputBind.NUM_0 -> Key.UNKNOWN
+    InputBind.NUM_1 -> Key.UNKNOWN
+    InputBind.NUM_2 -> Key.UNKNOWN
+    InputBind.NUM_3 -> Key.UNKNOWN
+    InputBind.NUM_4 -> Key.UNKNOWN
+    InputBind.NUM_5 -> Key.UNKNOWN
+    InputBind.NUM_6 -> Key.UNKNOWN
+    InputBind.NUM_7 -> Key.UNKNOWN
+    InputBind.NUM_8 -> Key.UNKNOWN
+    InputBind.NUM_9 -> Key.UNKNOWN
+
+    InputBind.LEFT -> Key.LEFT
+    InputBind.RIGHT -> Key.RIGHT
+    InputBind.UP -> Key.UP
+    InputBind.DOWN -> Key.DOWN
+
+    InputBind.SPACE -> Key.SPACE
+    InputBind.ENTER -> Key.ENTER
+    InputBind.ESCAPE -> Key.ESCAPE
+    InputBind.BACKSPACE -> Key.BACKSPACE
+
+    else -> Key.UNKNOWN
+}
+
+/**
+ * Maps Key enum to InputBind for KeyInputEvent handling.
+ */
+fun Key.toInputBind(): InputBind? = when (this) {
+    Key.A_KEY -> InputBind.A
+    Key.B_KEY -> InputBind.B
+    Key.C_KEY -> InputBind.C
+    Key.D_KEY -> InputBind.D
+    Key.E_KEY -> InputBind.E
+    Key.F_KEY -> InputBind.F
+    Key.G_KEY -> InputBind.G
+    Key.H_KEY -> InputBind.H
+    Key.I_KEY -> InputBind.I
+    Key.J_KEY -> InputBind.J
+    Key.K_KEY -> InputBind.K
+    Key.L_KEY -> InputBind.L
+    Key.M_KEY -> InputBind.M
+    Key.N_KEY -> InputBind.N
+    Key.O_KEY -> InputBind.O
+    Key.P_KEY -> InputBind.P
+    Key.Q_KEY -> InputBind.Q
+    Key.R_KEY -> InputBind.R
+    Key.S_KEY -> InputBind.S
+    Key.T_KEY -> InputBind.T
+    Key.U_KEY -> InputBind.U
+    Key.V_KEY -> InputBind.V
+    Key.W_KEY -> InputBind.W
+    Key.X_KEY -> InputBind.X
+    Key.Y_KEY -> InputBind.Y
+    Key.Z_KEY -> InputBind.Z
+
+    Key.LEFT -> InputBind.LEFT
+    Key.RIGHT -> InputBind.RIGHT
+    Key.UP -> InputBind.UP
+    Key.DOWN -> InputBind.DOWN
+
+    Key.SPACE -> InputBind.SPACE
+    Key.ENTER -> InputBind.ENTER
+    Key.ESCAPE -> InputBind.ESCAPE
+    Key.BACKSPACE -> InputBind.BACKSPACE
+
+    else -> null
 }

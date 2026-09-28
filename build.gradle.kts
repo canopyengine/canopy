@@ -1,7 +1,7 @@
 import org.gradle.plugins.ide.eclipse.model.EclipseModel
 import org.gradle.plugins.ide.idea.model.IdeaModel
 
-val canopyVersion: String by project
+val canopyVersion = project.property("canopyVersion") ?: ""
 
 plugins {
     base
@@ -14,6 +14,7 @@ group = "io.canopy"
 version = canopyVersion
 
 allprojects {
+
     apply(plugin = "eclipse")
     apply(plugin = "idea")
 

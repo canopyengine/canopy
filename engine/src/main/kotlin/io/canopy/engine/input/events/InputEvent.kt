@@ -1,5 +1,6 @@
-package io.canopy.engine.input
+package io.canopy.engine.input.events
 
+import io.canopy.engine.input.binds.Key
 import io.canopy.engine.math.Vector2
 
 /**
@@ -34,9 +35,26 @@ sealed class InputEvent(open val action: String, open val state: InputState) {
 
     fun isAnyActionJustReleased() = state == InputState.JustReleased
 
-    private fun isPressedEvent() = state in listOf(InputState.Pressed, InputState.JustPressed)
+    protected fun isPressedEvent() = state in listOf(InputState.Pressed, InputState.JustPressed)
 
-    private fun isReleasedEvent() = state in listOf(InputState.Released, InputState.JustReleased)
+    protected fun isReleasedEvent() = state in listOf(InputState.Released, InputState.JustReleased)
+}
+
+data class KeyInputEvent(
+    val key: Key,
+    val ctrl: Boolean = false,
+    val alt: Boolean = false,
+    val shift: Boolean = false,
+    override val state: InputState,
+) : InputEvent(key.name, state) {
+
+    fun isCtrlPressed() = ctrl
+    fun isAltPressed() = alt
+    fun isShiftPressed() = shift
+
+    fun isCtrlCombo(target: Key): Boolean = key == target && ctrl && isPressedEvent()
+
+    fun isCtrlC(): Boolean = isCtrlCombo(Key.C_KEY)
 }
 
 enum class InputState { Pressed, Released, JustPressed, JustReleased, Other }
@@ -46,3 +64,5 @@ class ButtonInputEvent(action: String, state: InputState) : InputEvent(action, s
 class MouseButtonEvent(val screenPos: Vector2, action: String, state: InputState) : InputEvent(action, state)
 
 class MouseMoveEvent(val screenPos: Vector2, action: String) : InputEvent(action, InputState.Other)
+
+data class TextInputEvent(val text: String) : InputEvent("text_input", InputState.JustPressed)

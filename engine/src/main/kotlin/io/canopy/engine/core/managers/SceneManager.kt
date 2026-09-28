@@ -178,7 +178,7 @@ class SceneManager(private var physicsStep: Float = 1f / 60f, private val block:
             flatTree[node.path] = node
 
             // Register node into systems interested in its type.
-            systemsByNodeTypes[node::class]?.forEach { sys ->
+            systemsFor(node).forEach { sys ->
                 LogContext.with(
                     "scene" to root.name,
                     "nodePath" to node.path,
@@ -208,7 +208,7 @@ class SceneManager(private var physicsStep: Float = 1f / 60f, private val block:
         traverseNodes(root) { node ->
             flatTree.remove(node.path)
 
-            systemsByNodeTypes[node::class]?.forEach { sys ->
+            systemsFor(node).forEach { sys ->
                 LogContext.with(
                     "scene" to root.name,
                     "nodePath" to node.path,
@@ -235,6 +235,12 @@ class SceneManager(private var physicsStep: Float = 1f / 60f, private val block:
         action(node)
         node.children.values.forEach { traverseNodes(it, action) }
     }
+
+    /** Returns systems indexed by any node type that the concrete node inherits. */
+    private fun systemsFor(node: Node<*>): Sequence<TreeSystem> = systemsByNodeTypes.asSequence()
+        .filter { (nodeType, _) -> nodeType.isInstance(node) }
+        .flatMap { (_, indexedSystems) -> indexedSystems.asSequence() }
+        .distinct()
 
     /* ============================================================
      * System management
