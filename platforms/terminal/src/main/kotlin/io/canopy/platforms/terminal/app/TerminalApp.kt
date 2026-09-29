@@ -1,6 +1,7 @@
 package io.canopy.platforms.terminal.app
 
 import kotlin.time.Duration.Companion.milliseconds
+import java.util.concurrent.atomic.AtomicBoolean
 import com.github.ajalt.mordant.input.KeyboardEvent
 import com.github.ajalt.mordant.input.coroutines.receiveEventsFlow
 import com.github.ajalt.mordant.input.isCtrlC
@@ -17,7 +18,6 @@ import io.canopy.engine.input.events.TextInputEvent
 import io.canopy.engine.logging.EngineLogs
 import io.canopy.platforms.terminal.data.assets.TerminalAssetsManager
 import io.canopy.tooling.utils.UnstableApi
-import java.util.concurrent.atomic.AtomicBoolean
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.takeWhile
 
