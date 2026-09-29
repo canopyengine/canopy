@@ -80,6 +80,7 @@ subprojects {
 
     tasks.withType(Test::class.java).configureEach {
         useJUnitPlatform()
+        jvmArgs("--enable-native-access=ALL-UNNAMED")
     }
 }
 

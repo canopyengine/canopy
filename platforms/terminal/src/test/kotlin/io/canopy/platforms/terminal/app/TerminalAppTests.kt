@@ -1,11 +1,7 @@
 package io.canopy.platforms.terminal.app
 
-import io.canopy.devtools.app.appTestDriver
-import io.canopy.engine.app.AppHandle
 import kotlin.test.Test
-import kotlin.test.assertTrue
-import kotlin.time.Duration.Companion.milliseconds
-import kotlin.time.Duration.Companion.seconds
+import io.canopy.devtools.app.appTestDriver
 import kotlinx.coroutines.runBlocking
 
 class TerminalAppTests {

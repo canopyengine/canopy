@@ -4,8 +4,8 @@ import com.github.ajalt.mordant.input.KeyboardEvent
 import com.github.ajalt.mordant.input.isCtrlC
 import io.canopy.engine.input.InputManager
 import io.canopy.engine.input.binds.InputBind
-import io.canopy.engine.input.binds.toKey
 import io.canopy.engine.input.binds.toInputBind
+import io.canopy.engine.input.binds.toKey
 import io.canopy.engine.input.events.InputEvent
 import io.canopy.engine.input.events.InputState
 import io.canopy.engine.input.events.KeyInputEvent
@@ -35,12 +35,6 @@ class MordantInputManager : InputManager() {
      */
     override fun handleEvent(event: InputEvent) {
         when (event) {
-            is KeyboardEvent -> {
-                if (event.isCtrlC) return
-
-                val bind = event.toInputBind() ?: return
-                pressedThisFrame += bind
-            }
             is KeyInputEvent -> {
                 // Allow direct KeyInputEvent enqueueing for testing
                 val bind = event.key.toInputBind() ?: return
@@ -48,6 +42,7 @@ class MordantInputManager : InputManager() {
                     pressedThisFrame += bind
                 }
             }
+
             else -> {
                 // Mordant only produces keyboard events; ignore other event types
             }
@@ -115,18 +110,27 @@ class MordantInputManager : InputManager() {
 
         return when (normalized) {
             "w" -> InputBind.W
+
             "a" -> InputBind.A
+
             "s" -> InputBind.S
+
             "d" -> InputBind.D
 
             "up" -> InputBind.UP
+
             "down" -> InputBind.DOWN
+
             "left" -> InputBind.LEFT
+
             "right" -> InputBind.RIGHT
 
             "enter" -> InputBind.ENTER
+
             "escape" -> InputBind.ESCAPE
+
             "backspace" -> InputBind.BACKSPACE
+
             "space" -> InputBind.SPACE
 
             else -> {

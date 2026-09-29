@@ -1,5 +1,6 @@
 package io.canopy.engine.input
 
+import java.util.concurrent.ConcurrentLinkedQueue
 import io.canopy.engine.app.App
 import io.canopy.engine.core.managers.Manager
 import io.canopy.engine.core.managers.manager
@@ -9,7 +10,6 @@ import io.canopy.engine.input.binds.InputData
 import io.canopy.engine.input.events.InputEvent
 import io.canopy.engine.input.events.InputState
 import io.canopy.engine.math.Vector2
-import java.util.concurrent.ConcurrentLinkedQueue
 
 abstract class InputManager : Manager {
 
@@ -191,7 +191,6 @@ abstract class InputManager : Manager {
             else -> InputState.Released
         }
     }
-
 }
 
 /**

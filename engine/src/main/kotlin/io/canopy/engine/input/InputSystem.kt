@@ -1,7 +1,7 @@
 package io.canopy.engine.input
 
-import io.canopy.engine.core.managers.lazyManager
 import io.canopy.engine.core.managers.SceneManager
+import io.canopy.engine.core.managers.lazyManager
 import io.canopy.engine.core.nodes.Node
 import io.canopy.engine.core.nodes.TreeSystem
 import io.canopy.engine.input.events.ButtonInputEvent

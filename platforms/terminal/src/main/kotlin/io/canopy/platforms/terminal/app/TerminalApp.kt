@@ -1,5 +1,6 @@
 package io.canopy.platforms.terminal.app
 
+import kotlin.time.Duration.Companion.milliseconds
 import com.github.ajalt.mordant.input.KeyboardEvent
 import com.github.ajalt.mordant.input.coroutines.receiveEventsFlow
 import com.github.ajalt.mordant.input.isCtrlC
@@ -9,11 +10,11 @@ import io.canopy.engine.app.App
 import io.canopy.engine.app.AppConfig
 import io.canopy.engine.core.managers.SceneManager
 import io.canopy.engine.input.InputSystem
-import io.canopy.engine.logging.EngineLogs
 import io.canopy.engine.input.binds.Key
 import io.canopy.engine.input.events.InputState
 import io.canopy.engine.input.events.KeyInputEvent
 import io.canopy.engine.input.events.TextInputEvent
+import io.canopy.engine.logging.EngineLogs
 import io.canopy.platforms.terminal.data.assets.TerminalAssetsManager
 import io.canopy.tooling.utils.UnstableApi
 import kotlinx.coroutines.*
@@ -44,10 +45,12 @@ class TerminalApp internal constructor() : App<AppConfig>() {
                     hasRenderedFrame = true
                 }
                 lines.forEachIndexed { index, line ->
-                    append(terminal.cursor.getMoves {
-                        setPosition(1, index + 1)
-                        clearLine()
-                    })
+                    append(
+                        terminal.cursor.getMoves {
+                            setPosition(1, index + 1)
+                            clearLine()
+                        }
+                    )
                     append(line).append('\n')
                 }
             }
@@ -95,6 +98,7 @@ class TerminalApp internal constructor() : App<AppConfig>() {
                                 // Forward into engine input system (converts to Canopy InputEvent)
                                 inputManager.enqueueMordantKeyEvent(event)
                             }
+
                             else -> {
                                 // Mordant only produces keyboard events
                             }
@@ -107,11 +111,11 @@ class TerminalApp internal constructor() : App<AppConfig>() {
                 try {
                     lineInputMode = true
                     while (running) {
-                        val line = withContext(Dispatchers.IO) { readLine() } ?: break
+                        val line = withContext(Dispatchers.IO) { readln() }
                         lineInputMode = false
                         inputManager.enqueue(TextInputEvent(line))
                         inputManager.enqueue(KeyInputEvent(Key.ENTER, state = InputState.JustPressed))
-                        delay(50)
+                        delay(50.milliseconds)
                         lineInputMode = true
                     }
                 } catch (e: CancellationException) {

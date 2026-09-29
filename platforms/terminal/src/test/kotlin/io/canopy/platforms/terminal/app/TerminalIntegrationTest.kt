@@ -1,17 +1,15 @@
 package io.canopy.platforms.terminal.app
 
-import io.canopy.devtools.app.appTestDriver
-import io.canopy.engine.core.nodes.types.empty.EmptyNode
-import io.canopy.engine.core.nodes.Node
-import io.canopy.engine.core.flows.events.signal
-import io.canopy.engine.core.nodes.behavior
-import io.canopy.engine.input.binds.InputBind
-import io.canopy.engine.input.InputManager
-import io.canopy.engine.input.inputs
-import io.canopy.engine.core.managers.manager
 import kotlin.test.Test
 import kotlin.test.assertEquals
-import kotlin.test.assertTrue
+import io.canopy.devtools.app.appTestDriver
+import io.canopy.engine.core.flows.events.signal
+import io.canopy.engine.core.managers.manager
+import io.canopy.engine.core.nodes.behavior
+import io.canopy.engine.core.nodes.types.empty.EmptyNode
+import io.canopy.engine.input.InputManager
+import io.canopy.engine.input.binds.InputBind
+import io.canopy.engine.input.inputs
 import kotlinx.coroutines.runBlocking
 
 class TerminalIntegrationTest {
@@ -21,29 +19,29 @@ class TerminalIntegrationTest {
         var updateCount = 0
         var lastDelta = 0f
 
-        val driver = appTestDriver(testTerminalApp {
-            onEnter {
-                // Map input actions (must be after managers are registered)
-                inputs(
-                    "move_left" to listOf(InputBind.LEFT, InputBind.A),
-                    "move_right" to listOf(InputBind.RIGHT, InputBind.D),
-                )
-
-                val root = EmptyNode("root") {
-                    behavior(
-                        onUpdate = { delta: Float ->
-                            updateCount++
-                            lastDelta = delta
-                            // Access input manager to verify it's wired
-                            val input = manager<InputManager>()
-                            val axis = input.getAxis("move_left", "move_right")
-                        }
+        val driver = appTestDriver(
+            testTerminalApp {
+                onEnter {
+                    // Map input actions (must be after managers are registered)
+                    inputs(
+                        "move_left" to listOf(InputBind.LEFT, InputBind.A),
+                        "move_right" to listOf(InputBind.RIGHT, InputBind.D)
                     )
-                }.asSceneRoot()
 
-
+                    val root = EmptyNode("root") {
+                        behavior(
+                            onUpdate = { delta: Float ->
+                                updateCount++
+                                lastDelta = delta
+                                // Access input manager to verify it's wired
+                                val input = manager<InputManager>()
+                                val axis = input.getAxis("move_left", "move_right")
+                            }
+                        )
+                    }.asSceneRoot()
+                }
             }
-        })
+        )
 
         driver.start()
 
@@ -61,19 +59,19 @@ class TerminalIntegrationTest {
         val hp = signal(100)
         var observedHp = 100
 
-        val driver = appTestDriver(testTerminalApp {
-            onEnter {
-                val root = EmptyNode("root") {
-                    behavior(
-                        onUpdate = { _: Float ->
-                            observedHp = hp()
-                        }
-                    )
-                }.asSceneRoot()
-
-
+        val driver = appTestDriver(
+            testTerminalApp {
+                onEnter {
+                    val root = EmptyNode("root") {
+                        behavior(
+                            onUpdate = { _: Float ->
+                                observedHp = hp()
+                            }
+                        )
+                    }.asSceneRoot()
+                }
             }
-        })
+        )
 
         driver.start()
 
@@ -95,27 +93,27 @@ class TerminalIntegrationTest {
     fun `terminal app should run node lifecycle in correct order`() = runBlocking {
         val lifecycleOrder = mutableListOf<String>()
 
-        val driver = appTestDriver(testTerminalApp {
-            onEnter {
-                val root = EmptyNode("root") {
-                    behavior(
-                        onEnterTree = { lifecycleOrder += "root:enterTree" },
-                        onReady = { lifecycleOrder += "root:ready" },
-                        onExitTree = { lifecycleOrder += "root:exitTree" }
-                    )
-
-                    EmptyNode("child") {
+        val driver = appTestDriver(
+            testTerminalApp {
+                onEnter {
+                    val root = EmptyNode("root") {
                         behavior(
-                            onEnterTree = { lifecycleOrder += "child:enterTree" },
-                            onReady = { lifecycleOrder += "child:ready" },
-                            onExitTree = { lifecycleOrder += "child:exitTree" }
+                            onEnterTree = { lifecycleOrder += "root:enterTree" },
+                            onReady = { lifecycleOrder += "root:ready" },
+                            onExitTree = { lifecycleOrder += "root:exitTree" }
                         )
-                    }
-                }.asSceneRoot()
 
-
+                        EmptyNode("child") {
+                            behavior(
+                                onEnterTree = { lifecycleOrder += "child:enterTree" },
+                                onReady = { lifecycleOrder += "child:ready" },
+                                onExitTree = { lifecycleOrder += "child:exitTree" }
+                            )
+                        }
+                    }.asSceneRoot()
+                }
             }
-        })
+        )
 
         driver.start()
         driver.frame(1f / 60f)

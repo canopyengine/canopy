@@ -1,13 +1,13 @@
 package io.canopy.adapters.mordant.input
 
-import io.canopy.engine.input.binds.InputBind
-import io.canopy.engine.input.binds.toKey
-import io.canopy.engine.input.events.InputState
-import io.canopy.engine.input.events.KeyInputEvent
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
+import io.canopy.engine.input.binds.InputBind
+import io.canopy.engine.input.binds.toKey
+import io.canopy.engine.input.events.InputState
+import io.canopy.engine.input.events.KeyInputEvent
 
 class MordantInputManagerTest {
 

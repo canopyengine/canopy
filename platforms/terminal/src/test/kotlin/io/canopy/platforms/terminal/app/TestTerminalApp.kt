@@ -47,5 +47,4 @@ class TestTerminalApp internal constructor() : App<AppConfig>() {
     }
 }
 
-fun testTerminalApp(builder: TestTerminalApp.() -> Unit = {}): TestTerminalApp =
-    TestTerminalApp().apply(builder)
+fun testTerminalApp(builder: TestTerminalApp.() -> Unit = {}): TestTerminalApp = TestTerminalApp().apply(builder)
