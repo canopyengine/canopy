@@ -17,6 +17,7 @@ import io.canopy.engine.input.events.TextInputEvent
 import io.canopy.engine.logging.EngineLogs
 import io.canopy.platforms.terminal.data.assets.TerminalAssetsManager
 import io.canopy.tooling.utils.UnstableApi
+import java.util.concurrent.atomic.AtomicBoolean
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.takeWhile
 
@@ -76,11 +77,11 @@ class TerminalApp internal constructor() : App<AppConfig>() {
         log.info { "Starting terminal runtime" }
 
         val frameNanos = 1_000_000_000L / config.fps
-        var running = true
+        val running = AtomicBoolean(true)
 
         installBackendHandle(
-            requestExit = { running = false },
-            forceClose = { running = false }
+            requestExit = { running.set(false) },
+            forceClose = { running.set(false) }
         )
 
         enter()
@@ -110,8 +111,10 @@ class TerminalApp internal constructor() : App<AppConfig>() {
                 log.info { "Raw terminal input unavailable; switching to line input: ${t.message}" }
                 try {
                     lineInputMode = true
-                    while (running) {
-                        val line = withContext(Dispatchers.IO) { readln() }
+                    while (true) {
+                        if (!running.get()) break
+                        val line = withContext(Dispatchers.IO) { readLine() } ?: break
+                        if (!running.get()) break
                         lineInputMode = false
                         inputManager.enqueue(TextInputEvent(line))
                         inputManager.enqueue(KeyInputEvent(Key.ENTER, state = InputState.JustPressed))
@@ -125,14 +128,14 @@ class TerminalApp internal constructor() : App<AppConfig>() {
                 }
             } finally {
                 // Ctrl+C or flow ended → stop app
-                running = false
+                running.set(false)
             }
         }
 
         var lastTime = System.nanoTime()
 
         // 🔹 Main loop (sync)
-        while (running && !Thread.currentThread().isInterrupted) {
+        while (running.get() && !Thread.currentThread().isInterrupted) {
             val now = System.nanoTime()
             val deltaNanos = now - lastTime
             lastTime = now
