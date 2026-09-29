@@ -48,7 +48,7 @@ class TerminalApp internal constructor() : App<AppConfig>() {
                         setPosition(1, index + 1)
                         clearLine()
                     })
-                    append(line)
+                    append(line).append('\n')
                 }
             }
             terminal.rawPrint(frame)
