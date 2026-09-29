@@ -1,6 +1,5 @@
 package io.canopy.engine.logging
 
-import io.canopy.engine.logging.CanopyLogs.setProvider
 import io.canopy.engine.logging.slf4j.Slf4jLogger
 import org.slf4j.LoggerFactory
 

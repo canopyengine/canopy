@@ -1,6 +1,6 @@
 package io.canopy.engine.core.nodes
 
-import io.canopy.engine.input.InputEvent
+import io.canopy.engine.input.events.InputEvent
 
 // ===============================
 //       NODE BEHAVIOR BASE

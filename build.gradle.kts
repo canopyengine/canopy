@@ -1,14 +1,7 @@
-import org.gradle.api.JavaVersion
-import org.gradle.api.plugins.BasePlugin
-import org.gradle.api.plugins.BasePluginExtension
-import org.gradle.api.plugins.JavaPluginExtension
-import org.gradle.api.publish.PublishingExtension
-import org.gradle.api.publish.maven.MavenPublication
-import org.gradle.jvm.toolchain.JavaLanguageVersion
 import org.gradle.plugins.ide.eclipse.model.EclipseModel
 import org.gradle.plugins.ide.idea.model.IdeaModel
 
-val canopyVersion: String by project
+val canopyVersion = project.property("canopyVersion") ?: ""
 
 plugins {
     base
@@ -21,6 +14,7 @@ group = "io.canopy"
 version = canopyVersion
 
 allprojects {
+
     apply(plugin = "eclipse")
     apply(plugin = "idea")
 
@@ -44,18 +38,18 @@ subprojects {
 
     plugins.withId("java") {
         extensions.configure<JavaPluginExtension>("java") {
-            toolchain.languageVersion.set(JavaLanguageVersion.of(21))
-            sourceCompatibility = JavaVersion.VERSION_21
-            targetCompatibility = JavaVersion.VERSION_21
+            toolchain.languageVersion.set(JavaLanguageVersion.of(25))
+            sourceCompatibility = JavaVersion.VERSION_25
+            targetCompatibility = JavaVersion.VERSION_25
             withSourcesJar()
         }
     }
 
     plugins.withId("java-library") {
         extensions.configure<JavaPluginExtension>("java") {
-            toolchain.languageVersion.set(JavaLanguageVersion.of(21))
-            sourceCompatibility = JavaVersion.VERSION_21
-            targetCompatibility = JavaVersion.VERSION_21
+            toolchain.languageVersion.set(JavaLanguageVersion.of(25))
+            sourceCompatibility = JavaVersion.VERSION_25
+            targetCompatibility = JavaVersion.VERSION_25
             withSourcesJar()
         }
     }
@@ -86,6 +80,7 @@ subprojects {
 
     tasks.withType(Test::class.java).configureEach {
         useJUnitPlatform()
+        jvmArgs("--enable-native-access=ALL-UNNAMED")
     }
 }
 
@@ -99,4 +94,8 @@ tasks.named("clean", Delete::class.java) {
             .filter { it.isDirectory && it.name == ".canopy" }
             .toList()
     )
+}
+
+tasks.withType<JavaExec> {
+    jvmArgs("--enable-native-access=ALL-UNNAMED")
 }

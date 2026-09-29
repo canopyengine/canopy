@@ -4,11 +4,7 @@ import com.badlogic.gdx.files.FileHandle
 import io.canopy.engine.data.assets.AssetEntry
 import io.canopy.engine.data.assets.AssetsManager
 import io.canopy.engine.data.assets.FileSource
-import ktx.assets.toAbsoluteFile
-import ktx.assets.toClasspathFile
-import ktx.assets.toExternalFile
-import ktx.assets.toInternalFile
-import ktx.assets.toLocalFile
+import ktx.assets.*
 
 class GdxAssetsManager : AssetsManager {
 

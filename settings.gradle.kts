@@ -36,10 +36,15 @@ include(
 include(":engine")
 
 // Adapters
-include(":adapters:libgdx")
+include(
+    ":adapters:libgdx",
+    ":adapters:mordant"
+)
 
 // Tooling
 include(
     ":tooling:devtools",
     ":tooling:utils"
 )
+
+include("adapters:mordant")

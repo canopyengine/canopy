@@ -5,7 +5,7 @@ import io.canopy.engine.core.flows.Context
 import io.canopy.engine.core.managers.SceneManager
 import io.canopy.engine.core.managers.lazyManager
 import io.canopy.engine.core.managers.manager
-import io.canopy.engine.input.InputEvent
+import io.canopy.engine.input.events.InputEvent
 import io.canopy.engine.logging.EngineLogs
 import io.canopy.engine.logging.LogContext
 

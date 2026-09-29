@@ -2,6 +2,7 @@ package io.canopy.engine.app
 
 import kotlin.time.Duration
 import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicLong
 import java.util.concurrent.atomic.AtomicReference
 import io.canopy.engine.core.CanopyBuildInfo
 import io.canopy.engine.core.managers.InjectionManager
@@ -28,7 +29,26 @@ abstract class App<C : AppConfig> protected constructor() {
      * Runtime state
      * ============================================================ */
 
-    private var frame: Long = 0
+    private var updateSequence: Long = 0
+    private val gameplayFrames = AtomicLong(0)
+
+    @Volatile
+    var isPaused: Boolean = false
+        private set
+
+    /** Number of app updates processed while the app was not paused. */
+    val frameCount: Long
+        get() = gameplayFrames.get()
+
+    /** Pauses gameplay updates while allowing the app loop to continue handling input and rendering. */
+    fun pause() {
+        isPaused = true
+    }
+
+    /** Resumes gameplay updates. */
+    fun resume() {
+        isPaused = false
+    }
 
     private val onStarted = CompletableDeferred<Unit>()
     private val onStopped = CompletableDeferred<Unit>()
@@ -159,14 +179,17 @@ abstract class App<C : AppConfig> protected constructor() {
     }
 
     fun update(delta: Float) {
-        frame++
+        updateSequence++
+        val paused = isPaused
+        val gameplayDelta = if (paused) 0f else delta
+        if (!paused) gameplayFrames.incrementAndGet()
 
-        LogContext.with("frame" to frame) {
-            beforeUpdate(delta)
-            onUpdate(this@App, delta)
+        LogContext.with("frame" to updateSequence) {
+            beforeUpdate(gameplayDelta)
+            onUpdate(this@App, gameplayDelta)
         }
 
-        ManagersRegistry.update(delta)
+        ManagersRegistry.update(gameplayDelta)
     }
 
     fun resize(width: Int, height: Int) {

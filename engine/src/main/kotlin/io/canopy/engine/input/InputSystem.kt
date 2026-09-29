@@ -1,33 +1,36 @@
 package io.canopy.engine.input
 
+import io.canopy.engine.core.managers.SceneManager
 import io.canopy.engine.core.managers.lazyManager
+import io.canopy.engine.core.nodes.Node
 import io.canopy.engine.core.nodes.TreeSystem
+import io.canopy.engine.input.events.ButtonInputEvent
+import io.canopy.engine.input.events.InputState
 import io.canopy.tooling.utils.UnstableApi
 
 @UnstableApi
-class InputSystem : TreeSystem(UpdatePhase.PhysicsPre, 10) {
+class InputSystem : TreeSystem(UpdatePhase.FramePre, 10, Node::class) {
 
     private val input by lazyManager<InputManager>()
+    private val scenes by lazyManager<SceneManager>()
 
     override fun afterProcess(delta: Float) {
-        input.updateActions()
+        val sceneRoot = scenes.currScene ?: return
 
+        // Deliver raw events first so text typed in the same frame as Enter is available
+        // to action handlers before they submit the command.
+        input.consumeEventsThisFrame().forEach { event ->
+            sceneRoot.nodeInput(event)
+        }
+
+        // Dispatch named action states (e.g. ButtonInputEvent for "jump", "move_left", etc.)
         input.actionStates.forEach { (action, state) ->
             when (state) {
-                InputState.JustPressed -> dispatch(action, InputState.JustPressed)
-                InputState.Pressed -> dispatch(action, InputState.Pressed)
-                InputState.JustReleased -> dispatch(action, InputState.JustReleased)
-                InputState.Released -> Unit
+                InputState.JustPressed, InputState.Pressed,
+                InputState.JustReleased, InputState.Released,
+                -> sceneRoot.nodeInput(ButtonInputEvent(action, state))
                 else -> Unit
             }
-        }
-    }
-
-    private fun dispatch(action: String, state: InputState) {
-        val inputEvent = ButtonInputEvent(action, state)
-
-        matchingNodes.forEach { node ->
-            node.nodeInput(inputEvent)
         }
     }
 }

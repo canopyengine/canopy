@@ -2,7 +2,7 @@ plugins {
     alias(libs.plugins.kotlin.jvm)
     alias(libs.plugins.ktlint)
     alias(libs.plugins.kotlin.serialization)
-    `java`
+    `java-library`
     `maven-publish`
 }
 
@@ -15,16 +15,15 @@ val enableGraalNative: Boolean = providers
 
 dependencies {
     // Canopy
-    api(projects.tooling.utils)
+    implementation(projects.tooling.utils)
+    implementation(projects.engine)
 
     // Kotlin
     api(libs.coroutines.core)
-    api(libs.kotlin.reflect)
 
-    // Serialization
-    api(libs.kotlinx.serialization.core)
-    api(libs.kotlinx.serialization.json)
-    implementation(libs.tomlkt)
+    // Mordant
+    api(libs.mordant.core)
+    api(libs.mordant.coroutines)
 
     // Logging
     api(libs.slf4j.api)
