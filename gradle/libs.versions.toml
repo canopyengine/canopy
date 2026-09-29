@@ -4,12 +4,12 @@
 
 [versions]
 # Kotlin
-kotlin = "2.3.10"
+kotlin = "2.4.10"
 ktlint = "14.2.0"
-kotlinxSerialization = "1.10.0"
+kotlinxSerialization = "1.11.0"
 
 # Gdx
-gdx = "1.14.0"
+gdx = "1.14.2"
 universalTween = "6.3.3"
 gdxDialogs = "1.3.0"
 gdxControllers = "2.2.4"
@@ -18,22 +18,22 @@ gdxControllers = "2.2.4"
 ktx = "1.13.1-rc1"
 
 # Testing
-coroutines = "1.10.2"
-junit = "5.14.3"
+coroutines = "1.11.0"
+junit = "5.14.4"
 assertj = "3.27.7"
-mockk = "1.14.9"
+mockk = "1.14.11"
 mockitoKotlin = "5.4.0"
 
 # Logging
-slf4j = "2.0.17"
-logback = "1.5.32"
+slf4j = "2.0.19"
+logback = "1.6.3"
 logstash="9.0"
 
 # TOML
-tomlkt = "0.6.0"
+tomlkt = "0.6.1"
 
 # Mordant
-mordant = "3.0.2"
+mordant = "3.1.0"
 
 # Misc
 graalHelper = "2.0.1"
