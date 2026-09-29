@@ -1,6 +1,5 @@
 package io.canopy.adapters.mordant.input
 
-import com.github.ajalt.mordant.input.KeyboardEvent
 import com.github.ajalt.mordant.input.isCtrlC
 import io.canopy.engine.input.InputManager
 import io.canopy.engine.input.binds.InputBind
