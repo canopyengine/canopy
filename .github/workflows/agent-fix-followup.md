@@ -14,7 +14,9 @@ if: >-
   github.event.sender.type != 'Bot' &&
   (github.event_name != 'issue_comment' || github.event.issue.pull_request)
 
-engine: gemini
+engine:
+    id: gemini
+    version: "0.43.0"
 # model: gemini-2.5-pro
 max-turns: 40
 timeout-minutes: 30

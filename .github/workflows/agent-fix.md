@@ -7,7 +7,9 @@ on:
     types: [labeled]
     names: [agent-fix]
 
-engine: gemini
+engine:
+    id: gemini
+    version: "0.43.0"
 # model: gemini-2.5-pro        # optional: pin a model (top-level field, not engine.model)
 max-turns: 40
 timeout-minutes: 45
