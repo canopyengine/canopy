@@ -1,6 +1,6 @@
 ---
+name: Agent Fix Follow-up
 description: Address review feedback and comments on agent-fix pull requests by pushing follow-up commits.
-
 on:
   pull_request_review:
     types: [submitted]
@@ -73,9 +73,10 @@ safe-outputs:
     max: 2
 ---
 
-# Address feedback on PR #${{ github.event.pull_request.number || github.event.issue.number }}
+# Agent Fix Follow-up
 
 The triggering event is a review, review comment, or PR comment on an agent-authored pull request.
+Work on PR #${{ github.event.pull_request.number || github.event.issue.number }}.
 
 ## First, decide whether to act
 

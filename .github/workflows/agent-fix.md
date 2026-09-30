@@ -1,4 +1,5 @@
 ---
+name: Agent Fix
 description: Fix a bug from an issue labeled "agent-fix" and open a pull request.
 
 on:
@@ -70,7 +71,7 @@ safe-outputs:
     max: 2
 ---
 
-# Fix issue #${{ github.event.issue.number }}
+# Agent Fix
 
 You are fixing a bug in a Kotlin / Gradle project. Start by reading issue
 #${{ github.event.issue.number }} in full (title, body, all comments).
