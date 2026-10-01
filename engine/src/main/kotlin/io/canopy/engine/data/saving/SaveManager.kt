@@ -68,7 +68,8 @@ class SaveManager(vararg destinations: Pair<String, (slot: Int) -> WritableAsset
         val registry =
             dataRegistry[destination] ?: error("No registry for destination $destination")
 
-        return registry.values.first { it::class == clazz } as T
+        return registry.values.firstOrNull { it::class == clazz } as? T
+            ?: error("No loaded data of type ${clazz.simpleName} for destination $destination")
     }
 
     fun save(destination: String, slot: Int) {

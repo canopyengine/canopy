@@ -39,6 +39,7 @@ class Effect(private val block: () -> Unit) {
     private val disconnectHandlers: MutableMap<Signal<*>, EventDisconnectHandler> = mutableMapOf()
 
     @Volatile private var disposed = false
+    private var running = false
 
     init {
         run()
@@ -64,13 +65,15 @@ class Effect(private val block: () -> Unit) {
     // -------------------------------------------------------------------------
 
     private fun run() {
-        if (disposed) return
+        if (disposed || running) return
 
+        running = true
         val frame = TrackingContext.push()
         try {
             block()
         } finally {
             TrackingContext.pop()
+            running = false
             updateDependencies(frame)
         }
     }

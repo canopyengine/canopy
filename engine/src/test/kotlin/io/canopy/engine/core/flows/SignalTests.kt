@@ -92,6 +92,7 @@ class SignalTests {
             signal.flow.collect { collectedValues.add(it) }
         }
 
+        yield()
         signal.update { 42 }
         signal.update { 100 }
         signal.update { 100 } // duplicate -> should not be collected (distinctUntilChanged)
@@ -119,5 +120,14 @@ class SignalTests {
         signal.update { it + 5 }
 
         assertEquals(15, signal())
+    }
+
+    @Test
+    fun `update from coroutine does not block`() = runBlocking {
+        val value = signal(0)
+
+        value.update { 1 }
+
+        assertEquals(1, value())
     }
 }

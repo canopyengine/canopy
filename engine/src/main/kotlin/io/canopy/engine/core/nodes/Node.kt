@@ -114,6 +114,12 @@ abstract class Node<N : Node<N>> protected constructor(
 
     /** Optional behavior instance attached to this node. */
     internal var behavior: Behavior<N>? = null
+        set(value) {
+            if (field === value) return
+            if (enteredTree) field?.let { runBehavior("exit_tree") { it.onExitTree() } }
+            field = value
+            if (enteredTree) value?.let { runBehavior("enter_tree") { it.onEnterTree() } }
+        }
 
     /* ============================================================
      * Managers
@@ -462,6 +468,7 @@ abstract class Node<N : Node<N>> protected constructor(
     open fun nodeInit() {}
 
     private var built = false
+    private var enteredTree = false
 
     /**
      * Called when the node enters the tree.
@@ -496,6 +503,7 @@ abstract class Node<N : Node<N>> protected constructor(
         }
 
         groups.forEach { sceneManager.addToGroup(it, this) }
+        enteredTree = true
         behavior?.let { runBehavior("enter_tree") { it.onEnterTree() } }
         children.values.forEach { it.nodeEnterTree() }
     }
@@ -529,6 +537,7 @@ abstract class Node<N : Node<N>> protected constructor(
             log.trace("event" to "node.exit_tree") { "nodeExitTree()" }
         }
         children.values.forEach { it.nodeExitTree() }
+        enteredTree = false
         behavior?.let { runBehavior("exit_tree") { it.onExitTree() } }
     }
 

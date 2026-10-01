@@ -146,14 +146,12 @@ fun createTreeSystem(
     beforeProcess: TreeSystem.(delta: Float) -> Unit = {},
     afterProcess: TreeSystem.(delta: Float) -> Unit = {},
     processNode: TreeSystem.(node: Node<*>, delta: Float) -> Unit = { _, _ -> },
-) {
-    object : TreeSystem(phase, priority, *requiredTypes) {
-        override fun onRegister() = onRegister.invoke(this)
-        override fun onUnregister() = onUnregister.invoke(this)
-        override fun beforeProcess(delta: Float) = beforeProcess.invoke(this, delta)
-        override fun afterProcess(delta: Float) = afterProcess.invoke(this, delta)
-        override fun processNode(node: Node<*>, delta: Float) = processNode.invoke(this, node, delta)
-    }
+): TreeSystem = object : TreeSystem(phase, priority, *requiredTypes) {
+    override fun onRegister() = onRegister.invoke(this)
+    override fun onUnregister() = onUnregister.invoke(this)
+    override fun beforeProcess(delta: Float) = beforeProcess.invoke(this, delta)
+    override fun afterProcess(delta: Float) = afterProcess.invoke(this, delta)
+    override fun processNode(node: Node<*>, delta: Float) = processNode.invoke(this, node, delta)
 }
 
 inline fun <reified T : TreeSystem> treeSystem(): T = manager<SceneManager>().getSystem(T::class)
