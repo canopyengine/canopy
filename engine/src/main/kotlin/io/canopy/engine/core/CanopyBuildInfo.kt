@@ -44,8 +44,12 @@ object CanopyBuildInfo {
 
         // When running from a packaged JAR, read the manifest.
         if (path.endsWith(".jar")) {
-            JarFile(path).use { jar ->
-                jar.manifest?.mainAttributes
+            try {
+                JarFile(path).use { jar ->
+                    jar.manifest?.mainAttributes
+                }
+            } catch (_: Exception) {
+                null
             }
         } else {
             // When running from IDE/classes directory there is usually no manifest.

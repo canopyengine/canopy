@@ -1,7 +1,7 @@
 package io.canopy.engine.core.flows.events
 
+import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.flow.MutableSharedFlow
-import kotlinx.coroutines.runBlocking
 
 /**
  * A reactive value container that notifies observers when it changes.
@@ -32,8 +32,7 @@ import kotlinx.coroutines.runBlocking
  * ## Emission semantics
  * - Updates only emit when `old != new`.
  * - The event listeners are notified immediately.
- * - Flow emission uses `runBlocking { emit(...) }` which may block the calling thread if
- *   collectors are slow or the flow suspends.
+ * - Flow emission is non-blocking; slow collectors may skip intermediate values.
  *
  * @param initial Initial value of the signal.
  */
@@ -46,9 +45,13 @@ class Signal<T>(initial: T) {
      *
      * New collectors immediately receive the current value.
      */
-    val flow = MutableSharedFlow<T>(replay = 1)
+    val flow = MutableSharedFlow<T>(
+        replay = 1,
+        extraBufferCapacity = 64,
+        onBufferOverflow = BufferOverflow.DROP_OLDEST
+    )
 
-    private var value: T = initial
+    @Volatile private var value: T = initial
 
     init {
         flow.tryEmit(initial)
@@ -82,7 +85,7 @@ class Signal<T>(initial: T) {
         if (old != new) {
             value = new
             valueChanged.emit(new)
-            runBlocking { flow.emit(new) }
+            flow.tryEmit(new)
         }
     }
 

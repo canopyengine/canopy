@@ -193,4 +193,21 @@ class EffectTests {
 
         eB.dispose()
     }
+
+    @Test
+    fun `effect ignores synchronous reentrant notifications`() {
+        val counter = signal(0)
+        var runCount = 0
+        val e = effect {
+            counter()
+            runCount++
+            if (runCount > 1) counter.update { it + 1 }
+        }
+
+        counter.update { it + 1 }
+
+        assertEquals(2, runCount)
+        assertEquals(2, counter())
+        e.dispose()
+    }
 }

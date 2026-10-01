@@ -43,6 +43,9 @@ class SceneManager(private var physicsStep: Float = 1f / 60f, private val block:
     private val flatTree = mutableMapOf<String, Node<*>>()
 
     companion object {
+        private const val MAX_PHYSICS_STEPS_PER_FRAME = 5
+        private const val PHYSICS_STEP_EPSILON = 0.0000001f
+
         /**
          * Thread-local pointer to the "current" SceneManager.
          *
@@ -207,6 +210,10 @@ class SceneManager(private var physicsStep: Float = 1f / 60f, private val block:
 
         traverseNodes(root) { node ->
             flatTree.remove(node.path)
+            groupsByNode.remove(node)?.forEach { group ->
+                groups[group]?.remove(node)
+                if (groups[group].isNullOrEmpty()) groups.remove(group)
+            }
 
             systemsFor(node).forEach { sys ->
                 LogContext.with(
@@ -395,9 +402,7 @@ class SceneManager(private var physicsStep: Float = 1f / 60f, private val block:
             "delta" to delta,
             "physicsStep" to physicsStep
         ) {
-            val physicsFrame = isPhysicsFrame(delta)
-
-            if (physicsFrame) {
+            repeat(physicsStepsFor(delta)) {
                 log.trace("event" to "tick.physics") { "Physics tick" }
 
                 systems[TreeSystem.UpdatePhase.PhysicsPre]?.forEach { sys ->
@@ -440,16 +445,19 @@ class SceneManager(private var physicsStep: Float = 1f / 60f, private val block:
     }
 
     /**
-     * Fixed time-step accumulator.
-     * Returns true when we should run a physics step.
+     * Fixed time-step accumulator with a small tolerance for Float rounding.
      */
-    private fun isPhysicsFrame(delta: Float): Boolean {
+    private fun physicsStepsFor(delta: Float): Int {
         physicsAccumulator += delta
-        if (physicsAccumulator >= physicsStep) {
-            physicsAccumulator -= physicsStep
-            return true
+        var steps = 0
+        while (
+            physicsAccumulator + PHYSICS_STEP_EPSILON >= physicsStep &&
+            steps < MAX_PHYSICS_STEPS_PER_FRAME
+        ) {
+            physicsAccumulator = (physicsAccumulator - physicsStep).coerceAtLeast(0f)
+            steps++
         }
-        return false
+        return steps
     }
 
     /* ============================================================

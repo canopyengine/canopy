@@ -26,7 +26,7 @@ import io.canopy.engine.logging.EngineLogs
  * (Easy to extend if you need more arities.)
  */
 sealed class Event<T> {
-    val log = EngineLogs.subsystem("events")
+    protected val log = EngineLogs.subsystem("events")
 
     /** Removes all listeners. */
     abstract fun clear()

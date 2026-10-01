@@ -282,4 +282,94 @@ class NodeTests {
 
         assertTrue(wasCalled)
     }
+
+    @Test
+    fun `children can be added during update`() {
+        val root = EmptyNode("root")
+        val child = EmptyNode("child")
+        child.behavior = createBehavior<EmptyNode>(
+            onUpdate = { root.addChild(EmptyNode("added")) }
+        )(child)
+        root.addChild(child)
+        root.buildTree()
+
+        root.nodeUpdate(0.016f)
+        assertNotNull(root.children["added"])
+    }
+
+    @Test
+    fun `replacing behavior exits old and enters new behavior`() {
+        val calls = mutableListOf<String>()
+        val node = EmptyNode("root")
+        node.behavior = createBehavior<EmptyNode>(
+            onExitTree = { calls += "old-exit" }
+        )(node)
+        node.buildTree()
+
+        node.behavior = createBehavior<EmptyNode>(
+            onEnterTree = { calls += "new-enter" }
+        )(node)
+
+        assertEquals(listOf("old-exit", "new-enter"), calls)
+    }
+
+    @Test
+    fun `tree system helper creates a registerable system`() {
+        var ticks = 0
+        val system = createTreeSystem(
+            TreeSystem.UpdatePhase.FramePre,
+            beforeProcess = { ticks++ }
+        )
+        val scenes = io.canopy.engine.core.managers.manager<SceneManager>()
+
+        scenes.addSystem(system)
+        scenes.currScene = EmptyNode("system-root")
+        scenes.onUpdate(0f)
+
+        assertEquals(1, ticks)
+        scenes.currScene = null
+        scenes.removeSystem(system::class)
+    }
+
+    @Test
+    fun `physics accumulator runs multiple fixed steps per frame`() {
+        class PhysicsCounter : TreeSystem(UpdatePhase.PhysicsPre) {
+            var steps = 0
+            override fun beforeProcess(delta: Float) {
+                steps++
+            }
+        }
+
+        val scenes = io.canopy.engine.core.managers.manager<SceneManager>()
+        val system = PhysicsCounter()
+        scenes.addSystem(system)
+        scenes.currScene = EmptyNode("physics-root")
+
+        scenes.onUpdate(3f / 60f)
+
+        assertEquals(3, system.steps)
+        scenes.currScene = null
+        scenes.removeSystem(PhysicsCounter::class)
+    }
+
+    @Test
+    fun `scene replacement exits behaviors and clears old groups`() {
+        val scenes = io.canopy.engine.core.managers.manager<SceneManager>()
+        var exited = false
+        val oldScene = EmptyNode("old") {
+            EmptyNode("member") {
+                addGroup("old-members")
+                behavior(onExitTree = { exited = true })
+            }
+        }
+
+        scenes.currScene = oldScene
+        scenes.currScene = EmptyNode("new")
+
+        assertTrue(exited)
+        assertFailsWith<IllegalStateException> {
+            scenes.signalGroup("old-members") {}
+        }
+        scenes.currScene = null
+    }
 }

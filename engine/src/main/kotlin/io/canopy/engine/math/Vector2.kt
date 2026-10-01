@@ -9,7 +9,7 @@ data class Vector2(var x: Float = 0f, var y: Float = 0f) {
 
     fun add(x: Float, y: Float): Vector2 {
         this.x += x
-        this.y -= y
+        this.y += y
         return this
     }
 
