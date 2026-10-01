@@ -61,6 +61,18 @@ No tangled systems.
 
 👉 Just structure + behavior.
 
+## Test coverage
+
+Generate an aggregate JaCoCo report for all JVM modules:
+
+```shell
+./gradlew coverageReport
+```
+
+The task runs the module tests, prints the aggregate line coverage, and writes an HTML report to `build/reports/jacoco/coverageReport/html/index.html` and an XML report to `build/reports/jacoco/coverageReport/coverageReport.xml`.
+
+To display the XML report in IntelliJ IDEA, open **Run → Manage Coverage Reports**, choose **Add**, and select `build/reports/jacoco/coverageReport/coverageReport.xml`. Select the imported suite and choose **Show Selected**.
+
 ---
 
 ## 🔥 Why Canopy?
@@ -197,4 +209,3 @@ APACHE License - see [LICENSE-APACHE](/LICENSE-APACHE)
 <p align="center">
   Canopy Engine • 2026
 </p>
-

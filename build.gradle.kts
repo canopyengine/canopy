@@ -1,10 +1,14 @@
 import org.gradle.plugins.ide.eclipse.model.EclipseModel
 import org.gradle.plugins.ide.idea.model.IdeaModel
+import org.gradle.testing.jacoco.tasks.JacocoReport
+import org.gradle.api.tasks.SourceSetContainer
+import org.gradle.api.tasks.testing.Test
 
 val canopyVersion = project.property("canopyVersion") ?: ""
 
 plugins {
     base
+    jacoco
     alias(libs.plugins.kotlin.jvm) apply false
     alias(libs.plugins.kotlin.serialization) apply false
     alias(libs.plugins.ktlint) apply false
@@ -98,4 +102,50 @@ tasks.named("clean", Delete::class.java) {
 
 tasks.withType<JavaExec> {
     jvmArgs("--enable-native-access=ALL-UNNAMED")
+}
+
+val coverageReport = tasks.register<JacocoReport>("coverageReport") {
+    group = "verification"
+    description = "Runs all JVM tests and generates an aggregated JaCoCo coverage report."
+
+    reports {
+        html.required.set(true)
+        xml.required.set(true)
+        csv.required.set(false)
+    }
+
+    reports.xml.outputLocation.set(layout.buildDirectory.file("reports/jacoco/coverageReport/coverageReport.xml"))
+    reports.html.outputLocation.set(layout.buildDirectory.dir("reports/jacoco/coverageReport/html"))
+
+    doLast {
+        val xmlReport = reports.xml.outputLocation.get().asFile
+        val lineCounter = Regex("""<counter type="LINE" missed="(\d+)" covered="(\d+)"\s*/>""")
+            .findAll(xmlReport.readText())
+            .lastOrNull()
+            ?: error("Could not find aggregate LINE coverage in ${xmlReport.absolutePath}")
+        val missed = lineCounter.groupValues[1].toLong()
+        val covered = lineCounter.groupValues[2].toLong()
+        val total = missed + covered
+        val percentage = if (total == 0L) 0.0 else covered * 100.0 / total
+        println("Line coverage: $covered / $total lines (${"%.1f".format(percentage)}%)")
+        println("JaCoCo XML: ${xmlReport.absolutePath}")
+        println("JaCoCo HTML: ${reports.html.outputLocation.get().asFile.resolve("index.html").absolutePath}")
+    }
+}
+
+subprojects {
+    plugins.withId("java") {
+        pluginManager.apply("jacoco")
+
+        val sourceSets = extensions.getByType<SourceSetContainer>()
+        val mainSourceSet = sourceSets.named("main")
+        val testTasks = tasks.withType<Test>()
+
+        coverageReport.configure {
+            dependsOn(testTasks)
+            executionData(testTasks)
+            sourceDirectories.from(mainSourceSet.map { it.allSource.srcDirs })
+            classDirectories.from(mainSourceSet.map { it.output })
+        }
+    }
 }
