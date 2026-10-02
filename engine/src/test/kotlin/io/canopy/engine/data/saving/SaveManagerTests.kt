@@ -2,6 +2,7 @@ package io.canopy.engine.data.saving
 
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
 import io.canopy.engine.core.managers.ManagersRegistry
 import io.canopy.engine.core.managers.manager
@@ -75,5 +76,22 @@ class SaveManagerTests {
 
         assertEquals(5, intData)
         assertEquals("abc", stringData)
+    }
+
+    @Test
+    fun `loadData reports when a module has not loaded the requested data`() {
+        registerSaveModule(
+            destination = "player",
+            id = "test-int",
+            serializer = Int.serializer(),
+            onSave = { 5 },
+            onLoad = {}
+        )
+
+        val error = assertFailsWith<IllegalStateException> {
+            saveManager.loadData("player", Int::class)
+        }
+
+        assertEquals("No loaded data of type Int for destination player", error.message)
     }
 }
