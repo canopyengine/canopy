@@ -5,8 +5,8 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/version-0.0.1-red.svg">
-  <img src="https://img.shields.io/badge/kotlin-2.3.10+-blue.svg">
+  <img src="https://img.shields.io/badge/version-0.1.0--dev2-red.svg">
+  <img src="https://img.shields.io/badge/kotlin-2.4.10+-blue.svg">
   <img src="https://img.shields.io/badge/license-MIT-green.svg">
 </p>
 
@@ -192,7 +192,7 @@ This allows:
 
 ## 📦 Minimum Requirements
 
-* **Kotlin 2.3.10+**
+* **Kotlin 2.4.10+**
 
 Canopy tracks modern Kotlin releases closely.
 
