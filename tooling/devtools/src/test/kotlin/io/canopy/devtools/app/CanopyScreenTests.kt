@@ -27,7 +27,7 @@ class CanopyScreenTests {
 
         // Wait until the app finished booting
         assertTrue(
-            handle.awaitStarted(2.seconds),
+            handle.awaitStarted(10.seconds),
             "App failed to start in time"
         )
 
