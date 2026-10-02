@@ -89,7 +89,7 @@ abstract class TreeSystem(
             runHook("beforeProcess", delta = delta) { beforeProcess(delta) }
 
             // No automatic per-node logging (too spammy). Use subclass logging if needed.
-            matchingNodes.forEach { node ->
+            matchingNodes.toList().forEach { node ->
                 runHook("processNode", delta = delta, node = node) { processNode(node, delta) }
             }
 

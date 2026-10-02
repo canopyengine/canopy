@@ -364,6 +364,146 @@ class NodeTests {
     }
 
     @Test
+    fun `tree system snapshots matching nodes while processing`() {
+        val first = EmptyNode("first")
+        val removed = EmptyNode("removed")
+        val added = EmptyNode("added")
+        val processed = mutableListOf<String>()
+
+        class SnapshotSystem : TreeSystem(UpdatePhase.FramePre, 0, EmptyNode::class) {
+            var changedNodes = false
+
+            override fun processNode(node: Node<*>, delta: Float) {
+                processed += node.name
+                if (!changedNodes && node === first) {
+                    changedNodes = true
+                    unregister(removed)
+                    register(added)
+                }
+            }
+        }
+
+        val system = SnapshotSystem()
+        system.register(first)
+        system.register(removed)
+
+        system.tick(0f)
+        assertEquals(listOf("first", "removed"), processed)
+
+        processed.clear()
+        system.tick(0f)
+        assertEquals(listOf("first", "added"), processed)
+    }
+
+    @Test
+    fun `scene manager snapshots systems for frame and physics phases`() {
+        val scenes = io.canopy.engine.core.managers.manager<SceneManager>()
+
+        fun verifyPhase(phase: TreeSystem.UpdatePhase, tick: () -> Unit) {
+            val calls = mutableListOf<String>()
+            var changedSystems = false
+
+            class RemovedSystem : TreeSystem(phase) {
+                override fun beforeProcess(delta: Float) {
+                    calls += "removed"
+                }
+            }
+
+            class AddedSystem : TreeSystem(phase) {
+                override fun beforeProcess(delta: Float) {
+                    calls += "added"
+                }
+            }
+
+            class DriverSystem : TreeSystem(phase) {
+                override fun beforeProcess(delta: Float) {
+                    calls += "driver"
+                    if (!changedSystems) {
+                        changedSystems = true
+                        scenes.removeSystem(RemovedSystem::class)
+                        scenes.addSystem(AddedSystem())
+                    }
+                }
+            }
+
+            val driver = DriverSystem()
+            val removed = RemovedSystem()
+            val added = AddedSystem()
+            scenes.addSystem(driver)
+            scenes.addSystem(removed)
+            scenes.currScene = EmptyNode("system-snapshot-root")
+
+            tick()
+            assertEquals(listOf("driver", "removed"), calls)
+
+            calls.clear()
+            tick()
+            assertEquals(listOf("driver", "added"), calls)
+
+            scenes.currScene = null
+            scenes.removeSystem(DriverSystem::class)
+            scenes.removeSystem(AddedSystem::class)
+        }
+
+        verifyPhase(TreeSystem.UpdatePhase.FramePre) { scenes.onUpdate(0f) }
+        verifyPhase(TreeSystem.UpdatePhase.PhysicsPre) { scenes.onPhysicsUpdate(1f / 60f) }
+    }
+
+    @Test
+    fun `scene manager dispatches systems around node updates in phase order`() {
+        val scenes = io.canopy.engine.core.managers.manager<SceneManager>()
+        val calls = mutableListOf<String>()
+
+        class FramePreSystem : TreeSystem(TreeSystem.UpdatePhase.FramePre) {
+            override fun beforeProcess(delta: Float) {
+                calls += "frame-pre"
+            }
+        }
+
+        class FramePostSystem : TreeSystem(TreeSystem.UpdatePhase.FramePost) {
+            override fun beforeProcess(delta: Float) {
+                calls += "frame-post"
+            }
+        }
+
+        class PhysicsPreSystem : TreeSystem(TreeSystem.UpdatePhase.PhysicsPre) {
+            override fun beforeProcess(delta: Float) {
+                calls += "physics-pre"
+            }
+        }
+
+        class PhysicsPostSystem : TreeSystem(TreeSystem.UpdatePhase.PhysicsPost) {
+            override fun beforeProcess(delta: Float) {
+                calls += "physics-post"
+            }
+        }
+
+        scenes.addSystem(FramePostSystem())
+        scenes.addSystem(FramePreSystem())
+        scenes.addSystem(PhysicsPostSystem())
+        scenes.addSystem(PhysicsPreSystem())
+        scenes.currScene = EmptyNode("phase-root") {
+            behavior(
+                onUpdate = { calls += "node-frame" },
+                onPhysicsUpdate = { calls += "node-physics" }
+            )
+        }
+
+        scenes.onUpdate(0f)
+        assertEquals(listOf("frame-pre", "node-frame", "frame-post"), calls)
+
+        calls.clear()
+        scenes.onPhysicsUpdate(1f / 60f)
+        assertEquals(listOf("physics-pre", "node-physics", "physics-post"), calls)
+
+        scenes.currScene = null
+        scenes.removeSystem(FramePreSystem::class)
+        scenes.removeSystem(FramePostSystem::class)
+        scenes.removeSystem(PhysicsPreSystem::class)
+        scenes.removeSystem(PhysicsPostSystem::class)
+    }
+
+    @Test
     fun `physics system processes each explicit fixed step`() {
         class PhysicsCounter : TreeSystem(UpdatePhase.PhysicsPre) {
             var steps = 0
@@ -396,6 +536,10 @@ class NodeTests {
         }
 
         scenes.currScene = oldScene
+        var groupMemberReceivedSignal = false
+        scenes.signalGroup("old-members") { groupMemberReceivedSignal = true }
+        assertTrue(groupMemberReceivedSignal)
+
         scenes.currScene = EmptyNode("new")
 
         assertTrue(exited)

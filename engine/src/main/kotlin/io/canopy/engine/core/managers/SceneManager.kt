@@ -26,7 +26,8 @@ import io.canopy.engine.math.Vector2
  *
  * NOTE:
  * This class does not currently enforce thread-safety. Scene mutation is expected
- * to happen on the main/game thread.
+ * to happen on the main/game thread. The scene index, system indexes, and group
+ * maps follow the same thread-confinement rule.
  */
 class SceneManager(val physicsStep: Float = 1f / 60f, private val block: SceneManager.() -> Unit = {}) : Manager {
 
@@ -392,7 +393,7 @@ class SceneManager(val physicsStep: Float = 1f / 60f, private val block: SceneMa
             "delta" to delta,
             "physicsStep" to physicsStep
         ) {
-            systems[TreeSystem.UpdatePhase.FramePre]?.forEach { sys ->
+            systems[TreeSystem.UpdatePhase.FramePre]?.toList()?.forEach { sys ->
                 LogContext.with("system" to (sys::class.simpleName ?: "UnknownSystem"), "phase" to "FramePre") {
                     sys.tick(delta)
                 }
@@ -400,7 +401,7 @@ class SceneManager(val physicsStep: Float = 1f / 60f, private val block: SceneMa
 
             root.nodeUpdate(delta)
 
-            systems[TreeSystem.UpdatePhase.FramePost]?.forEach { sys ->
+            systems[TreeSystem.UpdatePhase.FramePost]?.toList()?.forEach { sys ->
                 LogContext.with("system" to (sys::class.simpleName ?: "UnknownSystem"), "phase" to "FramePost") {
                     sys.tick(delta)
                 }
@@ -414,7 +415,7 @@ class SceneManager(val physicsStep: Float = 1f / 60f, private val block: SceneMa
         LogContext.with("scene" to root.name, "delta" to delta) {
             log.trace("event" to "tick.physics") { "Physics tick" }
 
-            systems[TreeSystem.UpdatePhase.PhysicsPre]?.forEach { sys ->
+            systems[TreeSystem.UpdatePhase.PhysicsPre]?.toList()?.forEach { sys ->
                 LogContext.with("system" to (sys::class.simpleName ?: "UnknownSystem"), "phase" to "PhysicsPre") {
                     sys.tick(delta)
                 }
@@ -422,7 +423,7 @@ class SceneManager(val physicsStep: Float = 1f / 60f, private val block: SceneMa
 
             root.nodePhysicsUpdate(delta)
 
-            systems[TreeSystem.UpdatePhase.PhysicsPost]?.forEach { sys ->
+            systems[TreeSystem.UpdatePhase.PhysicsPost]?.toList()?.forEach { sys ->
                 LogContext.with("system" to (sys::class.simpleName ?: "UnknownSystem"), "phase" to "PhysicsPost") {
                     sys.tick(delta)
                 }

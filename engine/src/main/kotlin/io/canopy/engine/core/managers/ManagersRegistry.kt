@@ -5,6 +5,12 @@ import kotlin.reflect.full.superclasses
 import io.canopy.engine.logging.EngineLogs
 import io.canopy.engine.logging.LogContext
 
+/**
+ * Global registry for engine managers.
+ *
+ * Registration, lookup, lifecycle dispatch, and teardown are expected to run
+ * serially on the game thread. The registry's maps are not thread-safe.
+ */
 object ManagersRegistry {
 
     private val log = EngineLogs.managers
