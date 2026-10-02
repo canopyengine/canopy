@@ -111,6 +111,28 @@ object ManagersRegistry {
         }
     }
 
+    fun physicsUpdate(delta: Float) {
+        LogContext.with("delta" to delta, "registered" to managers.size) {
+            log.trace("event" to "managers.physics_update") { "Physics updating managers" }
+        }
+
+        managers.values.forEach { manager ->
+            val name = manager::class.simpleName ?: "UnknownManager"
+            try {
+                LogContext.with("manager" to name, "delta" to delta) {
+                    manager.onPhysicsUpdate(delta)
+                }
+            } catch (t: Throwable) {
+                log.error(
+                    t = t,
+                    "event" to "manager.physics_update.error",
+                    "manager" to name
+                ) { "Manager physics update failed" }
+                throw t
+            }
+        }
+    }
+
     fun resize(width: Int, height: Int) {
         LogContext.with("width" to width, "height" to height, "registered" to managers.size) {
             log.info("event" to "managers.resize") { "Resizing managers" }

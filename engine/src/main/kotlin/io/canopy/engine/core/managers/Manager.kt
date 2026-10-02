@@ -30,6 +30,9 @@ interface Manager {
      */
     fun onUpdate(delta: Float) = Unit
 
+    /** Called for each fixed-step physics tick. */
+    fun onPhysicsUpdate(delta: Float) = Unit
+
     /**
      * Called on screen resize
      */

@@ -21,15 +21,14 @@ import io.canopy.engine.math.Vector2
  * - Drive the update loop via [tick] with deterministic phase ordering
  *
  * Update flow:
- * - Physics ticks run at a fixed time step ([physicsStep]) using an accumulator
+ * - Physics ticks run at a fixed time step ([physicsStep]) supplied by [io.canopy.engine.app.EngineLoop]
  * - Frame ticks run every frame with variable delta
  *
  * NOTE:
  * This class does not currently enforce thread-safety. Scene mutation is expected
  * to happen on the main/game thread.
  */
-class SceneManager(private var physicsStep: Float = 1f / 60f, private val block: SceneManager.() -> Unit = {}) :
-    Manager {
+class SceneManager(val physicsStep: Float = 1f / 60f, private val block: SceneManager.() -> Unit = {}) : Manager {
 
     private var sceneManagerBuilder: SceneManager.() -> Unit = {}
 
@@ -43,9 +42,6 @@ class SceneManager(private var physicsStep: Float = 1f / 60f, private val block:
     private val flatTree = mutableMapOf<String, Node<*>>()
 
     companion object {
-        private const val MAX_PHYSICS_STEPS_PER_FRAME = 5
-        private const val PHYSICS_STEP_EPSILON = 0.0000001f
-
         /**
          * Thread-local pointer to the "current" SceneManager.
          *
@@ -87,9 +83,6 @@ class SceneManager(private var physicsStep: Float = 1f / 60f, private val block:
     var currScene: Node<*>?
         get() = _currScene
         set(value) = replaceScene(value)
-
-    /** Accumulator used to determine when to run fixed-step physics ticks. */
-    private var physicsAccumulator = 0f
 
     /* ============================================================
      * Systems
@@ -383,13 +376,10 @@ class SceneManager(private var physicsStep: Float = 1f / 60f, private val block:
      * ============================================================ */
 
     /**
-     * Drives the scene update loop.
+     * Drives one variable-step scene update. Fixed-step physics is dispatched
+     * separately by [io.canopy.engine.app.EngineLoop].
      *
-     * Order (per tick):
-     * - If a physics step is due:
-     *   - PhysicsPre systems
-     *   - nodePhysicsUpdate(physicsStep)
-     *   - PhysicsPost systems
+     * Frame order:
      * - FramePre systems
      * - nodeUpdate(delta)
      * - FramePost systems
@@ -402,24 +392,6 @@ class SceneManager(private var physicsStep: Float = 1f / 60f, private val block:
             "delta" to delta,
             "physicsStep" to physicsStep
         ) {
-            repeat(physicsStepsFor(delta)) {
-                log.trace("event" to "tick.physics") { "Physics tick" }
-
-                systems[TreeSystem.UpdatePhase.PhysicsPre]?.forEach { sys ->
-                    LogContext.with("system" to (sys::class.simpleName ?: "UnknownSystem"), "phase" to "PhysicsPre") {
-                        sys.tick(physicsStep)
-                    }
-                }
-
-                root.nodePhysicsUpdate(physicsStep)
-
-                systems[TreeSystem.UpdatePhase.PhysicsPost]?.forEach { sys ->
-                    LogContext.with("system" to (sys::class.simpleName ?: "UnknownSystem"), "phase" to "PhysicsPost") {
-                        sys.tick(physicsStep)
-                    }
-                }
-            }
-
             systems[TreeSystem.UpdatePhase.FramePre]?.forEach { sys ->
                 LogContext.with("system" to (sys::class.simpleName ?: "UnknownSystem"), "phase" to "FramePre") {
                     sys.tick(delta)
@@ -436,28 +408,34 @@ class SceneManager(private var physicsStep: Float = 1f / 60f, private val block:
         }
     }
 
+    override fun onPhysicsUpdate(delta: Float) {
+        val root = currScene ?: return
+
+        LogContext.with("scene" to root.name, "delta" to delta) {
+            log.trace("event" to "tick.physics") { "Physics tick" }
+
+            systems[TreeSystem.UpdatePhase.PhysicsPre]?.forEach { sys ->
+                LogContext.with("system" to (sys::class.simpleName ?: "UnknownSystem"), "phase" to "PhysicsPre") {
+                    sys.tick(delta)
+                }
+            }
+
+            root.nodePhysicsUpdate(delta)
+
+            systems[TreeSystem.UpdatePhase.PhysicsPost]?.forEach { sys ->
+                LogContext.with("system" to (sys::class.simpleName ?: "UnknownSystem"), "phase" to "PhysicsPost") {
+                    sys.tick(delta)
+                }
+            }
+        }
+    }
+
     /**
      * Emits resize event for listeners (UI/layout/camera systems).
      */
     override fun onResize(width: Int, height: Int) {
         onResize.emit(width, height)
         log.debug("event" to "scene.resize", "width" to width, "height" to height) { "Resize" }
-    }
-
-    /**
-     * Fixed time-step accumulator with a small tolerance for Float rounding.
-     */
-    private fun physicsStepsFor(delta: Float): Int {
-        physicsAccumulator += delta
-        var steps = 0
-        while (
-            physicsAccumulator + PHYSICS_STEP_EPSILON >= physicsStep &&
-            steps < MAX_PHYSICS_STEPS_PER_FRAME
-        ) {
-            physicsAccumulator = (physicsAccumulator - physicsStep).coerceAtLeast(0f)
-            steps++
-        }
-        return steps
     }
 
     /* ============================================================

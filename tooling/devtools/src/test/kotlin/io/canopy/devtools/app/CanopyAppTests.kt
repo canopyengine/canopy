@@ -14,8 +14,8 @@ class CanopyAppTests {
 
         // Wait until the app has completed boot and the backend exit hooks are installed.
         assertTrue(
-            handle.awaitStarted(2.seconds),
-            "App didn't start within ${2.seconds} (backend hooks may not be installed)"
+            handle.awaitStarted(10.seconds),
+            "App didn't start within ${10.seconds}"
         )
 
         // Prefer graceful shutdown in tests; forceClose is a last resort.

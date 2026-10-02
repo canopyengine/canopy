@@ -10,11 +10,13 @@ dependencies {
     // Canopy deps
     implementation(projects.engine)
     implementation(projects.adapters.libgdx)
+    implementation(projects.tooling.utils)
 
     // Gdx & Ktx
 
     // / Graphics
     api(libs.gdx.backend.headless)
+    implementation(libs.gdx.backend.lwjgl3)
     val gdxPlatform = libs.gdx.platform.get().module
     val gdxVer = libs.versions.gdx.get()
     api("$gdxPlatform:$gdxVer:natives-desktop")

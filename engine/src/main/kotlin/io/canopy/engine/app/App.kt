@@ -64,8 +64,19 @@ abstract class App<C : AppConfig> protected constructor() {
 
     protected var onEnter: (App<C>) -> Unit = {}
     protected var onUpdate: (App<C>, delta: Float) -> Unit = { _, _ -> }
+    protected var onPhysicsUpdate: (App<C>, delta: Float) -> Unit = { _, _ -> }
     protected var onResize: (App<C>, width: Int, height: Int) -> Unit = { _, _, _ -> }
     protected var onExit: (App<C>) -> Unit = {}
+
+    /** Shared lifecycle coordinator used by platform drivers. */
+    val engineLoop = EngineLoop(
+        onEnter = ::performEnter,
+        onUpdate = ::performUpdate,
+        onPhysicsUpdate = ::performPhysicsUpdate,
+        onResize = ::performResize,
+        onExit = ::performExit,
+        isPaused = { isPaused }
+    )
 
     /* ============================================================
      * Builder hooks
@@ -142,7 +153,18 @@ abstract class App<C : AppConfig> protected constructor() {
      * Lifecycle
      * ============================================================ */
 
-    fun enter() {
+    /** Compatibility wrapper; drivers should forward lifecycle events through [engineLoop]. */
+    fun enter() = engineLoop.enter()
+
+    fun update(delta: Float) = engineLoop.update(delta)
+
+    fun physicsUpdate(delta: Float) = engineLoop.physicsUpdate(delta)
+
+    fun resize(width: Int, height: Int) = engineLoop.resize(width, height)
+
+    fun exit() = engineLoop.exit()
+
+    private fun performEnter() {
         try {
             CanopyLogging.init(
                 CanopyLogging.Config(
@@ -154,13 +176,18 @@ abstract class App<C : AppConfig> protected constructor() {
             LogContext.with("backend" to backendName) {
                 EngineLogs.lifecycle.info { "Booting Canopy..." }
 
+                var sceneManager: SceneManager? = null
                 ManagersRegistry.withScope {
                     provideManagers().forEach(::register)
                     +InjectionManager()
                     +ScreenManager()
-                    +SceneManager().also { it.configureSceneManager() }
+                    +SceneManager().also {
+                        sceneManager = it
+                        it.configureSceneManager()
+                    }
                     managerBuilder()
                 }
+                sceneManager?.let { engineLoop.configurePhysicsStep(it.physicsStep) }
 
                 onEnter(this@App)
                 afterEnter()
@@ -178,21 +205,24 @@ abstract class App<C : AppConfig> protected constructor() {
         }
     }
 
-    fun update(delta: Float) {
+    private fun performUpdate(delta: Float) {
         updateSequence++
-        val paused = isPaused
-        val gameplayDelta = if (paused) 0f else delta
-        if (!paused) gameplayFrames.incrementAndGet()
+        if (!isPaused) gameplayFrames.incrementAndGet()
 
         LogContext.with("frame" to updateSequence) {
-            beforeUpdate(gameplayDelta)
-            onUpdate(this@App, gameplayDelta)
+            beforeUpdate(delta)
+            onUpdate(this@App, delta)
         }
 
-        ManagersRegistry.update(gameplayDelta)
+        ManagersRegistry.update(delta)
     }
 
-    fun resize(width: Int, height: Int) {
+    private fun performPhysicsUpdate(delta: Float) {
+        onPhysicsUpdate(this@App, delta)
+        ManagersRegistry.physicsUpdate(delta)
+    }
+
+    private fun performResize(width: Int, height: Int) {
         ManagersRegistry.resize(width, height)
 
         onResize(this, width, height)
@@ -205,7 +235,7 @@ abstract class App<C : AppConfig> protected constructor() {
         ) { "Screen resized." }
     }
 
-    fun exit() {
+    private fun performExit() {
         try {
             EngineLogs.lifecycle.info("event" to "app.dispose") { "Disposing app" }
 
@@ -272,6 +302,10 @@ abstract class App<C : AppConfig> protected constructor() {
 
     fun onUpdate(handler: App<C>.(Float) -> Unit) {
         onUpdate = handler
+    }
+
+    fun onPhysicsUpdate(handler: App<C>.(Float) -> Unit) {
+        onPhysicsUpdate = handler
     }
 
     fun onResize(handler: App<C>.(Int, Int) -> Unit) {

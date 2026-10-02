@@ -332,7 +332,7 @@ class NodeTests {
     }
 
     @Test
-    fun `physics accumulator runs multiple fixed steps per frame`() {
+    fun `physics system processes each explicit fixed step`() {
         class PhysicsCounter : TreeSystem(UpdatePhase.PhysicsPre) {
             var steps = 0
             override fun beforeProcess(delta: Float) {
@@ -345,7 +345,7 @@ class NodeTests {
         scenes.addSystem(system)
         scenes.currScene = EmptyNode("physics-root")
 
-        scenes.onUpdate(3f / 60f)
+        repeat(3) { scenes.onPhysicsUpdate(1f / 60f) }
 
         assertEquals(3, system.steps)
         scenes.currScene = null

@@ -63,6 +63,10 @@ class ScreenManager : Manager {
         current?.onUpdate(delta)
     }
 
+    override fun onPhysicsUpdate(delta: Float) {
+        current?.onPhysicsUpdate(delta)
+    }
+
     override fun onResize(width: Int, height: Int) {
         current?.onResize(width, height)
     }
