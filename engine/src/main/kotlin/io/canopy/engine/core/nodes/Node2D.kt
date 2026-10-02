@@ -3,7 +3,19 @@ package io.canopy.engine.core.nodes
 import io.canopy.engine.math.Vector2
 
 /**
- * Base 2D Node
+ * Base node for objects with a two-dimensional transform.
+ *
+ * Each node stores a local [position], [scale], and [rotation]. The
+ * [globalPosition], [globalScale], and [globalRotation] properties combine
+ * those local values with the corresponding values of 2D parents.
+ *
+ * [Vector2] values are immutable, so transform components are changed by
+ * assigning a new vector:
+ * ```
+ * position = Vector2(12f, 8f)
+ * ```
+ *
+ * @param N concrete node type, used to preserve the node DSL receiver type.
  */
 abstract class Node2D<N : Node2D<N>> protected constructor(name: String, block: N.() -> Unit = {}) :
     Node<N>(name, block = block) {
@@ -17,7 +29,7 @@ abstract class Node2D<N : Node2D<N>> protected constructor(name: String, block: 
      */
     val globalPosition: Vector2
         get() {
-            val p = parent as? Node2D ?: return position
+            val p = parent as? Node2D ?: return position.copy()
             return position + p.globalPosition
         }
 
@@ -26,7 +38,7 @@ abstract class Node2D<N : Node2D<N>> protected constructor(name: String, block: 
      */
     val globalScale: Vector2
         get() {
-            val p = parent as? Node2D ?: return scale
+            val p = parent as? Node2D ?: return scale.copy()
             return scale * p.globalScale
         }
 
@@ -46,7 +58,7 @@ abstract class Node2D<N : Node2D<N>> protected constructor(name: String, block: 
     /**
      * Local position in 2D space.
      */
-    open var position: Vector2 = Vector2.Zero
+    open var position: Vector2 = Vector2()
 
     /**
      * Local scale in 2D space.

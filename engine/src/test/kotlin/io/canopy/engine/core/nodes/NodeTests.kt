@@ -266,6 +266,38 @@ class NodeTests {
     }
 
     @Test
+    fun `2D nodes have independent positions and global transforms are defensive copies`() {
+        val first = EmptyNode2D("first")
+        val second = EmptyNode2D("second")
+        first.position = Vector2(3f, 4f)
+
+        assertEquals(Vector2(), second.position)
+        assertTrue(first.position !== second.position)
+
+        val rootPosition = first.globalPosition
+        assertEquals(Vector2(3f, 4f), first.globalPosition)
+
+        first.scale = Vector2(2f, 3f)
+        val rootScale = first.globalScale
+        assertEquals(Vector2(2f, 3f), first.globalScale)
+
+        val child = EmptyNode2D("child")
+        child.position = Vector2(5f, 6f)
+        child.scale = Vector2(4f, 5f)
+        first.addChild(child)
+
+        val childGlobalPosition = child.globalPosition
+        assertEquals(Vector2(8f, 10f), childGlobalPosition)
+        assertEquals(Vector2(8f, 10f), child.globalPosition)
+        assertEquals(Vector2(5f, 6f), child.position)
+
+        val childGlobalScale = child.globalScale
+        assertEquals(Vector2(8f, 15f), childGlobalScale)
+        assertEquals(Vector2(8f, 15f), child.globalScale)
+        assertEquals(Vector2(4f, 5f), child.scale)
+    }
+
+    @Test
     fun `custom node class with internal script should work`() {
         // Verifies a node can attach behavior from within create().
         var wasCalled = false
