@@ -40,6 +40,9 @@ abstract class Screen {
      */
     open fun onUpdate(delta: Float) {}
 
+    /** Called at each fixed-step physics tick while this screen is active. */
+    open fun onPhysicsUpdate(delta: Float) {}
+
     /**
      * Called when the screen is resized.
      */

@@ -15,6 +15,23 @@ import kotlinx.coroutines.runBlocking
 class TerminalIntegrationTest {
 
     @Test
+    fun `engine loop dispatches physics before the frame update`() = runBlocking {
+        val events = mutableListOf<String>()
+        val driver = appTestDriver(
+            testTerminalApp {
+                onPhysicsUpdate { events += "physics" }
+                onUpdate { events += "update" }
+            }
+        )
+
+        driver.start()
+        driver.frame(2f / 60f)
+        driver.stop()
+
+        assertEquals(listOf("physics", "physics", "update"), events)
+    }
+
+    @Test
     fun `terminal app with reactive node should process frames`() = runBlocking {
         var updateCount = 0
         var lastDelta = 0f

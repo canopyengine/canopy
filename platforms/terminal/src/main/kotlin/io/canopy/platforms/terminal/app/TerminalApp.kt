@@ -84,7 +84,7 @@ class TerminalApp internal constructor() : App<AppConfig>() {
             forceClose = { running.set(false) }
         )
 
-        enter()
+        engineLoop.enter()
 
         // 🔹 Start async input handling
         val inputJob = appScope.launch {
@@ -146,7 +146,7 @@ class TerminalApp internal constructor() : App<AppConfig>() {
             inputManager.processEvents()
 
             // Process frame
-            update(delta)
+            engineLoop.update(delta)
 
             // Frame limiting
             val elapsed = System.nanoTime() - now
@@ -163,7 +163,7 @@ class TerminalApp internal constructor() : App<AppConfig>() {
         inputJob.cancel()
         appScope.cancel()
 
-        exit()
+        engineLoop.exit()
     }
 }
 

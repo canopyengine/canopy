@@ -13,16 +13,20 @@ object HeadlessHost {
         val host = object : KtxGame<KtxScreen>() {
             override fun create() {
                 super.create()
-                app.enter()
+                app.engineLoop.enter()
             }
 
             override fun render() {
-                app.update(Gdx.graphics.deltaTime)
+                app.engineLoop.update(Gdx.graphics.deltaTime)
+            }
+
+            override fun resize(width: Int, height: Int) {
+                app.engineLoop.resize(width, height)
             }
 
             override fun dispose() {
                 try {
-                    app.exit()
+                    app.engineLoop.exit()
                 } finally {
                     super.dispose()
                 }
