@@ -5,6 +5,7 @@ import com.badlogic.gdx.Input
 import io.canopy.engine.input.InputManager
 import io.canopy.engine.input.binds.InputBind
 
+/** Polls keyboard and mouse bindings through the active LibGDX input service. */
 class GdxInputManager : InputManager() {
 
     override fun pollPressed(bind: InputBind): Boolean = when (bind.type) {

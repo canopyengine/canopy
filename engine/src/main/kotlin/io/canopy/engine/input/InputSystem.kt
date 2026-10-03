@@ -8,6 +8,7 @@ import io.canopy.engine.input.events.ButtonInputEvent
 import io.canopy.engine.input.events.InputState
 import io.canopy.tooling.utils.UnstableApi
 
+/** Dispatches raw events once per frame before mapped action states, during the FramePre phase. */
 @UnstableApi
 class InputSystem : TreeSystem(UpdatePhase.FramePre, 10, Node::class) {
 

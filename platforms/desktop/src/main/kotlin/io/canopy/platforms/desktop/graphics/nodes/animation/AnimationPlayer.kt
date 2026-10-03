@@ -6,6 +6,7 @@ import io.canopy.engine.core.nodes.Node
 import io.canopy.engine.utils.UnstableApi
 import io.canopy.platforms.desktop.graphics.systems.AnimationSystem
 
+/** Tracks animation playback position and emits change and completion events. */
 @UnstableApi
 class AnimationPlayer(name: String, block: AnimationPlayer.() -> Unit = {}) :
     Node<AnimationPlayer>(

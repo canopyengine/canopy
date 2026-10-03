@@ -1,5 +1,6 @@
 package io.canopy.platforms.desktop.graphics.nodes.animation.tracks
 
+/** Animation track collecting callbacks whose key times fall within the forward playback interval. */
 class ActionTrack(
     block: ActionTrack.() -> Unit = {
     },

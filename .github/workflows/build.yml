@@ -1,10 +1,11 @@
 name: Build
 
 on:
+  workflow_dispatch:
   push:
-    branches: [ "main" ]
+    branches: [ "main", "dependency-updates" ]
   pull_request:
-    branches: [ "main" ]
+    branches: [ "main", "dependency-updates" ]
 
 permissions:
   contents: read
@@ -18,23 +19,24 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v7
 
-      - name: Set up JDK 17
+      - name: Set up JDK 25
         uses: actions/setup-java@v6
         with:
           distribution: temurin
-          java-version: "17"
+          java-version: "25"
 
       - name: Setup Gradle
-        uses: gradle/actions/setup-gradle@v6.3.0
+        uses: gradle/actions/setup-gradle@v6.4.0
 
       - name: Make Gradle wrapper executable
         run: chmod +x ./gradlew
 
       - name: Build with Gradle Wrapper
-        run: ./gradlew build --no-daemon --stacktrace
+        run: ./gradlew test ktlintCheck build coverageReport --no-daemon --stacktrace
 
   dependency-submission:
     name: Dependency submission
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -43,17 +45,17 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v7
 
-      - name: Set up JDK 17
+      - name: Set up JDK 25
         uses: actions/setup-java@v6
         with:
           distribution: temurin
-          java-version: "17"
+          java-version: "25"
 
       - name: Setup Gradle
-        uses: gradle/actions/setup-gradle@v6.3.0
+        uses: gradle/actions/setup-gradle@v6.4.0
 
       - name: Make Gradle wrapper executable
         run: chmod +x ./gradlew
 
       - name: Generate and submit dependency graph
-        uses: gradle/actions/dependency-submission@v6.3.0
+        uses: gradle/actions/dependency-submission@v6.4.0

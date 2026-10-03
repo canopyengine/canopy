@@ -6,6 +6,7 @@ import io.canopy.engine.utils.UnstableApi
 import io.canopy.platforms.desktop.graphics.nodes.animation.AnimationPlayer
 import ktx.log.logger
 
+/** Advances animation players, then applies their collected track updates after node processing. */
 @UnstableApi
 class AnimationSystem :
     TreeSystem(

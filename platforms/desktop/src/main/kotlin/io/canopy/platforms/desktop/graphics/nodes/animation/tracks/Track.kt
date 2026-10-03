@@ -4,6 +4,7 @@ import io.canopy.engine.graphics.nodes.animation.Animation
 import io.canopy.engine.graphics.nodes.animation.Key
 import io.canopy.engine.utils.interpolate
 
+/** Animation key collection that computes deferred updates for a playback interval. */
 abstract class Track<T> {
     protected val keys: MutableList<Key<T>> = mutableListOf()
     val maxLength: Float = keys.maxOfOrNull { it.time } ?: 0f

@@ -9,8 +9,10 @@ import io.canopy.engine.app.App
 import ktx.app.KtxGame
 import ktx.app.KtxScreen
 
+/** Connects LibGDX headless backend callbacks and shutdown controls to the shared application loop. */
 object HeadlessHost {
 
+    /** Creates the headless backend; its callbacks drive the application lifecycle. */
     fun launch(app: App<*>) {
         val host = object : KtxGame<KtxScreen>() {
             override fun create() {

@@ -1,5 +1,6 @@
 package io.canopy.engine.input.binds
 
+/** Logical keys carried by raw keyboard events, including UNKNOWN for unsupported mappings. */
 enum class Key {
     W,
     A,

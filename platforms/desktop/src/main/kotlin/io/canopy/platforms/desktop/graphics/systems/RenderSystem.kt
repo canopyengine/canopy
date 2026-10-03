@@ -11,6 +11,7 @@ import io.canopy.platforms.desktop.graphics.nodes.visual.Sprite2D
 import ktx.graphics.use
 import ktx.log.logger
 
+/** Draws tracked sprites using the active camera, ordered by descending global vertical position. */
 class RenderSystem(worldWidth: Int, worldHeight: Int) :
     TreeSystem(
         TreeSystem.UpdatePhase.FramePost,

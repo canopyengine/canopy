@@ -4,7 +4,7 @@ import io.canopy.engine.input.binds.Key
 import io.canopy.engine.math.Vector2
 
 /**
- * Represents an input event detected by GDX and mapped by the Input Dispatcher
+ * Backend-independent raw or mapped input event dispatched to nodes.
  */
 sealed class InputEvent(open val action: String, open val state: InputState) {
     /**
@@ -13,7 +13,7 @@ sealed class InputEvent(open val action: String, open val state: InputState) {
     internal var isHandled = false
 
     /**
-     * Helper method
+     * Marks the event handled; dispatch code decides whether to honor the flag.
      */
     fun consume() {
         isHandled = true
@@ -40,6 +40,7 @@ sealed class InputEvent(open val action: String, open val state: InputState) {
     protected fun isReleasedEvent() = state in listOf(InputState.Released, InputState.JustReleased)
 }
 
+/** Raw keyboard event with modifier flags and the key name as its action. */
 data class KeyInputEvent(
     val key: Key,
     val ctrl: Boolean = false,
@@ -57,12 +58,17 @@ data class KeyInputEvent(
     fun isCtrlC(): Boolean = isCtrlCombo(Key.C_KEY)
 }
 
+/** Held, released, transition, or non-button state. Transition states describe the latest input update. */
 enum class InputState { Pressed, Released, JustPressed, JustReleased, Other }
 
+/** Mapped action event carrying its current button state. */
 class ButtonInputEvent(action: String, state: InputState) : InputEvent(action, state)
 
+/** Mouse button action with its backend-provided screen position. */
 class MouseButtonEvent(val screenPos: Vector2, action: String, state: InputState) : InputEvent(action, state)
 
+/** Pointer movement with a backend-provided screen position and Other state. */
 class MouseMoveEvent(val screenPos: Vector2, action: String) : InputEvent(action, InputState.Other)
 
+/** Text submitted by a backend, dispatched as the text_input action with JustPressed state. */
 data class TextInputEvent(val text: String) : InputEvent("text_input", InputState.JustPressed)
