@@ -73,6 +73,11 @@ class SceneManager(val physicsStep: Float = 1f / 60f, private val block: SceneMa
      * Scene state
      * ============================================================ */
 
+    internal var pauseState: () -> Boolean = { false }
+
+    /** Application pause state. Standalone scene managers default to running. */
+    val isPaused: Boolean get() = pauseState()
+
     private var _currScene: Node<*>? = null
 
     /**
@@ -457,7 +462,7 @@ class SceneManager(val physicsStep: Float = 1f / 60f, private val block: SceneMa
                 }
             }
 
-            root.nodeUpdate(delta)
+            root.dispatchUpdate(delta)
 
             systems[TreeSystem.UpdatePhase.FramePost]?.toList()?.forEach { sys ->
                 LogContext.with("system" to (sys::class.simpleName ?: "UnknownSystem"), "phase" to "FramePost") {
@@ -479,7 +484,7 @@ class SceneManager(val physicsStep: Float = 1f / 60f, private val block: SceneMa
                 }
             }
 
-            root.nodePhysicsUpdate(delta)
+            root.dispatchPhysicsUpdate(delta)
 
             systems[TreeSystem.UpdatePhase.PhysicsPost]?.toList()?.forEach { sys ->
                 LogContext.with("system" to (sys::class.simpleName ?: "UnknownSystem"), "phase" to "PhysicsPost") {

@@ -44,7 +44,7 @@ class EngineLoopTests {
     }
 
     @Test
-    fun `paused updates skip physics and pass zero delta`() {
+    fun `paused updates retain real time and reset physics remainder on transitions`() {
         val events = mutableListOf<String>()
         var paused = true
         val loop = EngineLoop(
@@ -58,11 +58,15 @@ class EngineLoopTests {
         )
 
         loop.enter()
-        loop.update(0.3f)
+        loop.update(0.15f)
         paused = false
-        loop.update(0.1f)
+        loop.update(0.05f)
+        loop.update(0.05f)
 
-        assertEquals(listOf("update:0.0", "physics:0.1", "update:0.1"), events)
+        assertEquals(
+            listOf("physics:0.1", "update:0.15", "update:0.05", "physics:0.1", "update:0.05"),
+            events
+        )
     }
 
     @Test

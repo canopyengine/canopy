@@ -186,6 +186,7 @@ abstract class App<C : AppConfig> protected constructor() {
                     +ScreenManager()
                     +SceneManager().also {
                         sceneManager = it
+                        it.pauseState = { isPaused }
                         it.configureSceneManager()
                     }
                     managerBuilder()
@@ -213,16 +214,17 @@ abstract class App<C : AppConfig> protected constructor() {
         if (!isPaused) gameplayFrames.incrementAndGet()
 
         LogContext.with("frame" to updateSequence) {
-            beforeUpdate(delta)
-            onUpdate(this@App, delta)
+            val gameplayDelta = if (isPaused) 0f else delta
+            beforeUpdate(gameplayDelta)
+            onUpdate(this@App, gameplayDelta)
         }
 
-        ManagersRegistry.update(delta)
+        ManagersRegistry.update(delta, isPaused)
     }
 
     private fun performPhysicsUpdate(delta: Float) {
-        onPhysicsUpdate(this@App, delta)
-        ManagersRegistry.physicsUpdate(delta)
+        if (!isPaused) onPhysicsUpdate(this@App, delta)
+        ManagersRegistry.physicsUpdate(delta, isPaused)
     }
 
     private fun performResize(width: Int, height: Int) {
@@ -313,7 +315,7 @@ abstract class App<C : AppConfig> protected constructor() {
         onUpdate = handler
     }
 
-    /** Replaces the callback invoked for each fixed physics step, with delta in seconds. */
+    /** Replaces the callback invoked for each unpaused fixed physics step, with delta in seconds. */
     fun onPhysicsUpdate(handler: App<C>.(Float) -> Unit) {
         onPhysicsUpdate = handler
     }

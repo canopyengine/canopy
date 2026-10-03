@@ -96,6 +96,12 @@ abstract class TreeSystem(
     //           TICK PROCESSING
     // ===============================
 
+    /**
+     * Runs per-node processing only for eligible [Node.processMode] values.
+     * Before/after hooks still run, including while paused, so input and rendering remain available.
+     * [matchingNodes] retains inactive nodes; hooks that process that list directly must apply
+     * [Node.canProcess] themselves when implementing gameplay logic.
+     */
     fun tick(delta: Float) {
         LogContext.with(
             "system" to systemName,
@@ -111,7 +117,9 @@ abstract class TreeSystem(
 
             // No automatic per-node logging (too spammy). Use subclass logging if needed.
             matchingNodes.toList().forEach { node ->
-                runHook("processNode", delta = delta, node = node) { processNode(node, delta) }
+                if (node.canProcess()) {
+                    runHook("processNode", delta = delta, node = node) { processNode(node, delta) }
+                }
             }
 
             runHook("afterProcess", delta = delta) { afterProcess(delta) }
