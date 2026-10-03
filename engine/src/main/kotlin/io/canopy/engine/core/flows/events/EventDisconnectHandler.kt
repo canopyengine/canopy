@@ -1,9 +1,26 @@
 package io.canopy.engine.core.flows.events
 
-/** Subscription handle that delegates removal to the event connection callback. */
-class EventDisconnectHandler(private val disconnectHandler: () -> Unit) {
-    /** Invokes the removal callback; repeated calls are delegated without additional guarding. */
+import io.canopy.engine.core.nodes.NodeLifetime
+
+/** Subscription handle that retains its callback until disconnection or node removal. */
+class EventDisconnectHandler(disconnectHandler: () -> Unit) {
+    private var disconnectHandler: (() -> Unit)? = disconnectHandler
+    private var cancelOwnership: (() -> Unit)? = null
+
+    internal fun owned(): EventDisconnectHandler {
+        cancelOwnership = NodeLifetime.own(::disconnect)
+        return this
+    }
+
+    /** Removes the connection once and releases any node ownership registration. */
     fun disconnect() {
-        disconnectHandler()
+        val cleanup = disconnectHandler ?: return
+        disconnectHandler = null
+        try {
+            cleanup()
+        } finally {
+            cancelOwnership?.invoke()
+            cancelOwnership = null
+        }
     }
 }

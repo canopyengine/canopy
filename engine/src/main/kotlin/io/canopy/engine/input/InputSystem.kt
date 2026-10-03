@@ -3,6 +3,7 @@ package io.canopy.engine.input
 import io.canopy.engine.core.managers.SceneManager
 import io.canopy.engine.core.managers.lazyManager
 import io.canopy.engine.core.nodes.Node
+import io.canopy.engine.core.nodes.NodeLifetime
 import io.canopy.engine.core.nodes.TreeSystem
 import io.canopy.engine.input.events.ButtonInputEvent
 import io.canopy.engine.input.events.InputState
@@ -21,7 +22,7 @@ class InputSystem : TreeSystem(UpdatePhase.FramePre, 10, Node::class) {
         // Deliver raw events first so text typed in the same frame as Enter is available
         // to action handlers before they submit the command.
         input.consumeEventsThisFrame().forEach { event ->
-            sceneRoot.nodeInput(event)
+            NodeLifetime.withOwner(sceneRoot) { sceneRoot.nodeInput(event) }
         }
 
         // Dispatch named action states (e.g. ButtonInputEvent for "jump", "move_left", etc.)
@@ -29,7 +30,7 @@ class InputSystem : TreeSystem(UpdatePhase.FramePre, 10, Node::class) {
             when (state) {
                 InputState.JustPressed, InputState.Pressed,
                 InputState.JustReleased, InputState.Released,
-                -> sceneRoot.nodeInput(ButtonInputEvent(action, state))
+                -> NodeLifetime.withOwner(sceneRoot) { sceneRoot.nodeInput(ButtonInputEvent(action, state)) }
                 else -> Unit
             }
         }

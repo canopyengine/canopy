@@ -218,6 +218,8 @@ class NodeTests {
 
         child.queueFree()
 
+        assertEquals(1, tree.children.size)
+        io.canopy.engine.core.managers.manager<SceneManager>().onUpdate(0f)
         assertEquals(0, tree.children.size)
     }
 

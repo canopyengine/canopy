@@ -228,7 +228,7 @@ class SceneManagerContractTests {
         scenes.onExit()
 
         // Assert
-        assertEquals(listOf("system:remove:root", "system:remove:child", "system:unregister"), calls)
+        assertEquals(listOf("system:remove:child", "system:remove:root", "system:unregister"), calls)
         assertEquals(emptyList(), system.nodes)
         calls.clear()
         scenes.onEnter()

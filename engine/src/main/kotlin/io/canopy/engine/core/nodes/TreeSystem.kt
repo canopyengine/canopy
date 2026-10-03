@@ -20,6 +20,8 @@ abstract class TreeSystem(
     /** Nodes currently matching the system's type requirements */
     protected val matchingNodes = mutableListOf<Node<*>>()
 
+    private val removalRegistrations = mutableMapOf<Node<*>, () -> Unit>()
+
     private val systemName: String = this::class.simpleName ?: "AnonymousTreeSystem"
 
     // ===============================
@@ -38,9 +40,10 @@ abstract class TreeSystem(
 
     /** Adds an accepted node once; repeat registrations do not repeat [onNodeAdded]. */
     fun register(node: Node<*>) {
-        if (matchingNodes.any { it === node } || !acceptsNode(node)) return
+        if (node.isFreed || matchingNodes.any { it === node } || !acceptsNode(node)) return
 
         matchingNodes += node
+        removalRegistrations[node] = node.onRemoval { unregister(node) }
 
         LogContext.with(
             "system" to systemName,
@@ -53,8 +56,10 @@ abstract class TreeSystem(
         runHook("onNodeAdded", node = node) { onNodeAdded(node) }
     }
 
+    /** Releases a match and its lifetime registration before invoking [onNodeRemoved]. */
     fun unregister(node: Node<*>) {
         if (!matchingNodes.remove(node)) return
+        removalRegistrations.remove(node)?.invoke()
 
         LogContext.with(
             "system" to systemName,
@@ -126,9 +131,9 @@ abstract class TreeSystem(
     //           SAFE HOOK RUNNER
     // ===============================
 
-    private inline fun runHook(hook: String, delta: Float? = null, node: Node<*>? = null, block: () -> Unit) {
+    private fun runHook(hook: String, delta: Float? = null, node: Node<*>? = null, block: () -> Unit) {
         try {
-            block()
+            NodeLifetime.withOwner(node, block)
         } catch (t: Throwable) {
             val fields = buildMap<String, Any?> {
                 put("event", "system.hook_error")

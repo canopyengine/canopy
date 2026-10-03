@@ -1,5 +1,6 @@
 package io.canopy.engine.core.flows.events
 
+import io.canopy.engine.core.nodes.Node
 import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.flow.MutableSharedFlow
 
@@ -98,6 +99,9 @@ class Signal<T>(initial: T) {
 
     /** Subscribes a listener to value changes (weak reference). */
     infix fun connect(listener: (T) -> Unit) = valueChanged connect listener
+
+    /** Subscribes with automatic disconnection when [owner] exits or is removed. */
+    fun connect(owner: Node<*>, listener: (T) -> Unit) = valueChanged.connect(owner, listener)
 
     /** Unsubscribes a previously registered listener. */
     infix fun disconnect(listener: (T) -> Unit) = valueChanged disconnect listener
