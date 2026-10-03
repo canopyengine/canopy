@@ -29,7 +29,8 @@ enableFeaturePreview("TYPESAFE_PROJECT_ACCESSORS")
 include(
     ":platforms:headless",
     ":platforms:terminal",
-   //":platforms:desktop"
+    // Keep disabled until stale platform/adapters references are repaired.
+    // ":platforms:desktop"
 )
 
 // Engine
@@ -46,5 +47,3 @@ include(
     ":tooling:devtools",
     ":tooling:utils"
 )
-
-include("adapters:mordant")
