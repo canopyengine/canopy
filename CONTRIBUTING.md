@@ -23,7 +23,8 @@ Report bugs [here](https://github.com/canopyengine/canopy/issues/new?assignees=&
 Please follow the instructions in the template when you do.
 
 > [!CAUTION]
-> Make sure that the bug you are experiencing is reproducible in the latest Canopy releases.
+> Check whether the bug is reproducible on current `main` (0.1.0-dev2).
+> This development snapshot is not a stable release.
 
 If you run into a bug which wasn't present in an earlier Canopy version (what we call a _regression_), please mention it 
 and clarify which versions you tested(both the one(s) working and the one(s) exhibiting the bug).

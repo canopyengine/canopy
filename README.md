@@ -1,211 +1,116 @@
 # Canopy Engine
 
-<p align="center">
-  <img src="logo.png" width="420" alt="Canopy Engine logo">
-</p>
+<p align="center"><img src="logo.png" width="420" alt="Canopy Engine logo"></p>
 
-<p align="center">
-  <img src="https://img.shields.io/badge/version-0.1.0--dev2-red.svg">
-  <img src="https://img.shields.io/badge/kotlin-2.4.10+-blue.svg">
-  <img src="https://img.shields.io/badge/license-MIT-green.svg">
-</p>
+**Canopy 0.1.0-dev2** is an experimental Kotlin/JVM engine built around node
+trees, composable behaviors and reactive state. This is a development snapshot;
+public APIs may change before stable 0.1.0.
 
----
+## Current capabilities
 
-## ✨ What is Canopy?
+- Node hierarchy, paths, groups, scene replacement and phase-ordered tree systems.
+- Node behaviors, context providers, typed managers and application injection.
+- Events, signals, computed values and synchronous effects.
+- Immutable Vector2 values and 2D transforms.
+- Shared frame/physics lifecycle, pause/resume and shutdown handles.
+- Interactive terminal hosting with queued keyboard input, plus a separate
+  LibGDX headless host.
+- Backend-neutral file handles, JSON/TOML codecs, ID registries and modular saves.
+- Structured logging, ktlint, CodeQL and aggregate coverage reporting.
 
-**Canopy is a declarative 2D game engine built for Kotlin developers.**
+Desktop sources are present but excluded from the build. The enabled platforms
+do not currently provide a supported graphical sprite/UI/collision workflow.
+Fixed physics callbacks do not themselves supply a physics simulation.
+There is no supported `canopy new` CLI. The ecosystem demo remains a scaffold.
 
-It rethinks how games are structured by combining:
+## Build from source
 
-* 🌲 **Declarative structure** → declare how your game is structured via node-based DSL
-* ⚡ **Reactive state** → changes propagate automatically
-* 🧩 **Composable behaviors** → logic is modular and reusable
+Use **JDK25**, the checked-in **Gradle9.8.0** wrapper and **Kotlin2.4.10**.
 
-Instead of manually orchestrating update loops and state syncing, you **describe your game**, and Canopy handles the flow.
+```sh
+./gradlew assemble
+./gradlew ktlintCheck
+./gradlew publishToMavenLocal
+```
 
----
+On Windows use `gradlew.bat`. For contributors, the full verification commands
+are `./gradlew test ktlintCheck build coverageReport`. The aggregate coverage
+gate is 60%. Desktop is excluded from these commands.
 
-## 🧠 The Core Idea
+Enabled modules are `:engine`, `:adapters:libgdx`, `:adapters:mordant`,
+`:platforms:headless`, `:platforms:terminal`, `:tooling:utils`, and
+`:tooling:devtools`. Core, data and input are packages in `:engine`.
 
-Traditional engines revolve around:
+## Use the snapshot
 
-> “What runs every frame?”
-
-Canopy flips that into:
-
-> **“What is the structure of my world, and how does it react to change?”**
-
----
-
-## 🚀 Example
-
-Build your game using a clean Kotlin DSL:
+Publish locally first, then configure a terminal application:
 
 ```kotlin
-EmptyNode("level") {
-
-    Player("player") {
-        behavior(PlayerController())
-    }
-
-    Enemy("enemy")
-
-    UI("ui")
-
-}.asSceneRoot()
+repositories {
+    mavenLocal()
+    mavenCentral()
+}
+dependencies {
+    implementation("io.canopy:engine:0.1.0-dev2")
+    implementation("io.canopy:platforms-terminal:0.1.0-dev2")
+}
+kotlin { jvmToolchain(25) }
 ```
 
-No manual update loops.
-No tangled systems.
+For headless hosting use `io.canopy:platforms-headless:0.1.0-dev2` instead.
+The headless host does not supply terminal input or filesystem asset services.
+These instructions do not assume the snapshot is published to Maven Central.
 
-👉 Just structure + behavior.
+```kotlin
+import io.canopy.engine.app.Screen
+import io.canopy.engine.app.screens
+import io.canopy.engine.core.nodes.behavior
+import io.canopy.engine.core.nodes.types.empty.EmptyNode2D
+import io.canopy.engine.math.Vector2
+import io.canopy.platforms.terminal.app.terminalApp
 
-## Test coverage
+class ExampleScreen : Screen() {
+    override fun onEnter() {
+        EmptyNode2D("Root") {
+            EmptyNode2D("Moving") {
+                behavior(onUpdate = { delta ->
+                    position = position + Vector2(delta, 0f)
+                })
+            }
+        }.asSceneRoot()
+    }
+}
 
-Generate an aggregate JaCoCo report for all JVM modules:
-
-```shell
-./gradlew coverageReport
+fun main() = terminalApp {
+    screens { start(ExampleScreen()) }
+}.launch()
 ```
 
-The task runs the module tests, prints the aggregate line coverage, and writes an HTML report to `build/reports/jacoco/coverageReport/html/index.html` and an XML report to `build/reports/jacoco/coverageReport/coverageReport.xml`.
+This updates a transform; it does not render a sprite. Use TerminalApp's
+`renderFrame(lines)` for text output. Terminal input is installed by the host.
+The [first-project manual](https://github.com/canopyengine/canopy-docs/blob/main/markdown/manuals/getting-started/first-project.md)
+includes the application plugin, entry point and JVM options.
 
-To display the XML report in IntelliJ IDEA, open **Run → Manage Coverage Reports**, choose **Add**, and select `build/reports/jacoco/coverageReport/coverageReport.xml`. Select the imported suite and choose **Show Selected**.
+Vector arithmetic returns immutable values; assign results back to node
+properties. Signal reads use `state()` and writes use `state.update { ... }`.
+Scene trees, manager registries and reactive updates expect serialized engine
+thread access. Event callbacks are weakly referenced; retain ownership and
+disconnect subscriptions/dispose effects during cleanup.
 
----
+## Documentation and contributions
 
-## 🔥 Why Canopy?
+- [Documentation index](https://github.com/canopyengine/canopy-docs/blob/main/markdown/index.md)
+- [Architecture](https://github.com/canopyengine/canopy-docs/blob/main/markdown/engine-details/engine-architecture.md)
+- [Snapshot notes](https://github.com/canopyengine/canopy-docs/blob/main/markdown/misc/releases/0.1.0.md)
+- [Roadmap](https://github.com/canopyengine/canopy-docs/blob/main/markdown/misc/roadmap.md)
+- [Demos](https://github.com/canopyengine/canopy-demos)
+- [Contribution guidelines](CONTRIBUTING.md) and [agent rules](AGENTS.md)
 
-### 1. Declarative, not imperative
+Main requires a PR, one approving review, required checks and squash merging.
+Dependency updates are staged on `dependency-updates`; integration PRs to main
+remain human-reviewed. See the workflows under `.github/workflows` for details.
+Agent contributions disclose origin in branches, commits, PR titles and labels.
 
-You describe *what exists*, not *how to update it*. You do it via our ``node-based`` system
+## License
 
-**Example**
-
-````kotlin
-EmptyNode("level"){
-    
-    Player()
-    
-    Enemy{
-        at(200f, 100f)
-        behavior(EnemyController())
-        
-        Weapon("gun")
-    }
-    
-    UI()
-}
-````
-
----
-
-### 2. Reactive by default
-
-State changes automatically propagate through your game.
-
-No manual wiring. No hidden dependencies.
-
-````kotlin
-val onKilled = event()
-// Stateful events
-val health = signal(100)
-// Derived signals
-val healthPercentage = computed{ "${health() / 100}%" }
-
-// Derived callbacks
-effect{
-    log.info{ "Life: ${healthPercentage()}" }
-    if(health() <= 0)
-        onKilled.emit()
-}
-````
-
----
-
-### 3. Structured, but flexible
-
-* Organized like a tree
-* Extensible like a framework
-* Not locked into rigid engine patterns
-
----
-
-### 4. Kotlin-first design
-
-Built from the ground up for Kotlin:
-
-* Modern language features
-* DSL-driven APIs
-* No Java-first compromises
-
----
-
-## 🧭 Design Goals
-
-Canopy is built with a few strong principles:
-
-* **Clarity over cleverness**
-  → Code should be readable and predictable
-
-* **Composition over inheritance**
-  → Build systems by combining behaviors
-
-* **Reactivity over manual syncing**
-  → State drives behavior automatically
-
-* **Structure over chaos**
-  → Your game should scale without becoming messy
-
-* **Freedom without fragmentation**
-  → Flexible, but still coherent
-
----
-
-## ⚠️ Current Status
-
-Canopy is **work in progress** and not yet production-ready.
-
-### Current focus:
-
-* 🧪 Headless runtime (terminal-based execution)
-* ⚡ Reactive system foundations
-* 🌲 Core node architecture
-
-This allows:
-
-* fast iteration
-* simulation-driven development
-* debugging without rendering overhead
-
-👉 See the roadmap:
-[Roadmap](https://github.com/canopyengine/canopy-docs/blob/main/markdown/misc/roadmap.md)
-
----
-
-## 📚 Documentation
-
-👉 [Canopy Docs](https://github.com/canopyengine/canopy-docs)
-
----
-
-## 📦 Minimum Requirements
-
-* **Kotlin 2.4.10+**
-
-Canopy tracks modern Kotlin releases closely.
-
----
-
-## 📜 License
-
-MIT License — see [LICENSE-MIT](/LICENSE-MIT)
-
-APACHE License - see [LICENSE-APACHE](/LICENSE-APACHE)
-
----
-
-<p align="center">
-  Canopy Engine • 2026
-</p>
+Dual-licensed under [MIT](LICENSE-MIT) or [Apache 2.0](LICENSE-APACHE), at your option.

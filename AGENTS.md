@@ -62,7 +62,7 @@ instead of silently changing the architecture to match an old example.
 
 ## Logging
 
-- Use Canopy's logging APIs and the appropriate subsystem under `canopy.engine.*`.
+- Use Canopy's logging APIs and the appropriate subsystem under `io.canopy.engine.*`.
 - Choose the correct level and useful structured context. Avoid routine logging
   in hot frame, physics, and per-node loops.
 - Do not use `println` for engine diagnostics. Follow existing output mechanisms
