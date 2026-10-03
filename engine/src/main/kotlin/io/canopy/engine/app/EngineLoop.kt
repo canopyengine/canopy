@@ -19,6 +19,7 @@ class EngineLoop(
     private var entered = false
     private var exited = false
     private var physicsAccumulator = 0f
+    private var wasPaused = false
 
     var physicsStep: Float = physicsStep
         private set
@@ -34,17 +35,18 @@ class EngineLoop(
         entered = true
     }
 
-    /** Runs due fixed-step physics ticks followed by one frame update. */
+    /**
+     * Runs fixed-step ticks and a frame update even while paused, with real deltas in seconds.
+     * Callers decide which work remains eligible. Pause transitions discard the fractional physics
+     * remainder so gameplay and paused processing do not share accumulated time.
+     */
     fun update(delta: Float) {
         checkActive()
         require(delta.isFinite() && delta >= 0f) { "delta must be finite and non-negative" }
 
         val paused = isPaused()
-        if (paused) {
-            physicsAccumulator = 0f
-            onUpdate(0f)
-            return
-        }
+        if (paused != wasPaused) physicsAccumulator = 0f
+        wasPaused = paused
 
         physicsAccumulator += delta
         var steps = 0
