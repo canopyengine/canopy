@@ -170,11 +170,9 @@ explicit user-specified branch names while retaining provenance in commits and P
 | Relevant platform | `platform:desktop`, `platform:headless`, `platform:terminal` |
 | Verification still required | `needs testing` |
 
-`agent-originated` is the general provenance label proposed by these rules; it
-was absent from the repository at review time and must be provisioned before
-these rules are fully operational. Report a missing required label as a setup
-gap. `agent-fix` triggers automation and is reserved for that workflow; do not
-use it as a substitute provenance label.
+`agent-originated` is the general provenance label. Report a missing required
+label as a setup gap. The former `agent-fix` automation has been removed; its
+legacy label is not a substitute for the general provenance label.
 
 For authorized issue creation, use `<Type>: <Description>` with the documented
 types, relevant labels, and the actual project/milestone/branch associations.
