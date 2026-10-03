@@ -1,35 +1,29 @@
 package io.canopy.engine.app
 
 /**
- * Base screen abstraction for Canopy applications.
+ * Application state whose callbacks run on the serialized lifecycle thread.
  *
- * This class is platform-agnostic and defines a simple lifecycle:
- *
- * - [onActive] → called when the screen becomes active
- * - [onUpdate] → called every frame
- * - [onResize] → called when the surface changes size
- * - [onExit] → called when the screen is no longer active
- * - [dispose] → called when the screen is destroyed
- *
- * Additionally, [onEnter] is guaranteed to run only once,
- * the first time the screen is entered.
+ * Each visit calls [onEnter], then [onActive] if that visit is still current. Leaving calls [onInactive],
+ * then [onExit].
+ * Returning to a registered screen starts another visit; initialization is not restricted to the first visit.
+ * Only the current screen receives frame, physics and resize callbacks.
+ * A screen does not own automatic scene teardown; replace the scene explicitly when appropriate.
+ * Navigation may be requested from [onEnter] or [onActive], but not from [onInactive] or [onExit].
  */
 abstract class Screen {
 
-    private var setupCalled = false
-
     /**
-     * Called once when the screen is first entered.
+     * Called at the start of each visit, before [onActive].
      */
     open fun onEnter() {}
 
     /**
-     * Called when the screen becomes active.
+     * Called after [onEnter] when this screen becomes active.
      */
     open fun onActive() {}
 
     /**
-     * Called when the screen is no longer active.
+     * Called when this screen stops being current, before [onExit].
      */
     open fun onInactive() {}
 
@@ -49,7 +43,7 @@ abstract class Screen {
     open fun onResize(width: Int, height: Int) {}
 
     /**
-     * Called when the screen is destroyed.
+     * Called once when each visit ends, including navigation, active replacement and shutdown.
      */
     open fun onExit() {}
 }
