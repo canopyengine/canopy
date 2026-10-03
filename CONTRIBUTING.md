@@ -82,7 +82,7 @@ includes fixing build issues or typos, adding documentation, etc.
 See our [PR workflow](https://github.com/canopyengine/canopy-docs/blob/main/markdown/contributing/contributing.md)
 documentation for tips on using Git, amending commits and rebasing branches.
 
-See our [Git naming conventions](https://github.com/canopyengine/canopy-docs/blob/main/markdown/contributing/git-naming-conventions.md) file for conventions on branch, issues and PR naming for coherence across all the 
+See our [GitHub guidelines](https://github.com/canopyengine/canopy-docs/blob/main/markdown/contributing/github-guidelines.md) file for conventions on branch, issues and PR naming for coherence across all the
 contributors.
 
 This [Git style guide](https://github.com/agis-/git-style-guide) also has some
@@ -171,7 +171,7 @@ applicable.
 Feel free to contribute standalone pull requests to add new tests or improve
 existing tests as well.
 
-See [Unit testing](https://github.com/canopyengine/canopy-docs/blob/main/markdown/contributing/unit-testing.md)
+See [Unit testing](https://github.com/canopyengine/canopy-docs/blob/main/markdown/contributing/testing-guidelines.md)
 for information on writing tests for the codebase.
 
 Thanks for your interest in contributing!
