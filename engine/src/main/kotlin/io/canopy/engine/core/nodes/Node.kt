@@ -41,6 +41,32 @@ abstract class Node<N : Node<N>> protected constructor(
     private val block: N.() -> Unit = {},
 ) {
 
+    /**
+     * Controls frame, physics, input and tree-system processing on the engine thread.
+     * Inheritance follows actual parents, including context wrappers. Explicit descendant modes
+     * override inactive ancestors; changing a mode or parent takes effect at the next dispatch.
+     * Tree entry, ready, exit and signal delivery are unaffected.
+     */
+    var processMode: ProcessMode = ProcessMode.Inherit
+
+    /**
+     * Whether this node processes for [paused]. An inherited root defaults to [ProcessMode.Pausable].
+     * This query does not require membership in the active scene.
+     */
+    fun canProcess(paused: Boolean = sceneManager.isPaused): Boolean {
+        var node: Node<*>? = this
+        while (node != null) {
+            when (node.processMode) {
+                ProcessMode.Inherit -> node = node.parent
+                ProcessMode.Pausable -> return !paused
+                ProcessMode.WhenPaused -> return paused
+                ProcessMode.Always -> return true
+                ProcessMode.Disabled -> return false
+            }
+        }
+        return !paused
+    }
+
     /* ============================================================
      * Identity
      * ============================================================ */
@@ -545,29 +571,45 @@ abstract class Node<N : Node<N>> protected constructor(
      * Updates
      * ============================================================ */
 
+    /** Runs child updates before this behavior. Engine dispatch skips inactive node overrides. */
     open fun nodeUpdate(delta: Float) {
         LogContext.with("nodePath" to path, "delta" to delta) {
             log.trace("event" to "node.update") { "nodeUpdate()" }
         }
-        children.values.forEach { it.nodeUpdate(delta) }
-        behavior?.let { runBehavior("update") { it.onUpdate(delta) } }
+        children.values.forEach { it.dispatchUpdate(delta) }
+        if (canProcess()) behavior?.let { runBehavior("update") { it.onUpdate(delta) } }
     }
 
+    /** Runs child physics updates before this behavior, with delta in seconds. */
     open fun nodePhysicsUpdate(delta: Float) {
         LogContext.with("nodePath" to path, "delta" to delta) {
             log.trace("event" to "node.physics_update") { "nodePhysicsUpdate()" }
         }
-        children.values.forEach { it.nodePhysicsUpdate(delta) }
-        behavior?.let { runBehavior("physics_update") { it.onPhysicsUpdate(delta) } }
+        children.values.forEach { it.dispatchPhysicsUpdate(delta) }
+        if (canProcess()) behavior?.let { runBehavior("physics_update") { it.onPhysicsUpdate(delta) } }
     }
 
     /* ============================================================
      * Input
      * ============================================================ */
 
+    /** Delivers input to eligible descendants before this behavior. */
     open fun nodeInput(event: InputEvent) {
-        children.values.forEach { it.nodeInput(event) }
-        behavior?.let { runBehavior("input") { it.onInput(event) } }
+        children.values.forEach { it.dispatchInput(event) }
+        if (canProcess()) behavior?.let { runBehavior("input") { it.onInput(event) } }
+    }
+
+    // Traverse inactive ancestors without invoking their overridable gameplay hooks.
+    internal fun dispatchUpdate(delta: Float) {
+        if (canProcess()) nodeUpdate(delta) else children.values.forEach { it.dispatchUpdate(delta) }
+    }
+
+    internal fun dispatchPhysicsUpdate(delta: Float) {
+        if (canProcess()) nodePhysicsUpdate(delta) else children.values.forEach { it.dispatchPhysicsUpdate(delta) }
+    }
+
+    internal fun dispatchInput(event: InputEvent) {
+        if (canProcess()) nodeInput(event) else children.values.forEach { it.dispatchInput(event) }
     }
 
     /* ============================================================

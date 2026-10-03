@@ -64,20 +64,21 @@ abstract class Behavior<N : Node<N>>(protected open val node: N? = null) {
     // ===============================
 
     /**
-     * Called every frame.
+     * Called on frames when [Node.processMode] permits processing, with delta in seconds.
      *
      * Intended for general gameplay logic, animations, and rendering-related updates.
      */
     open fun onUpdate(delta: Float) = Unit
 
     /**
-     * Called on each physics tick.
+     * Called on physics ticks when [Node.processMode] permits processing.
      *
      * Physics ticks run at a fixed step (defined by the SceneManager).
      * Use this for deterministic physics calculations.
      */
     open fun onPhysicsUpdate(delta: Float) = Unit
 
+    /** Receives input when [Node.processMode] permits processing. */
     open fun onInput(event: InputEvent) = Unit
 }
 

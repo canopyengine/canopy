@@ -21,7 +21,7 @@ class InputSystem : TreeSystem(UpdatePhase.FramePre, 10, Node::class) {
         // Deliver raw events first so text typed in the same frame as Enter is available
         // to action handlers before they submit the command.
         input.consumeEventsThisFrame().forEach { event ->
-            sceneRoot.nodeInput(event)
+            sceneRoot.dispatchInput(event)
         }
 
         // Dispatch named action states (e.g. ButtonInputEvent for "jump", "move_left", etc.)
@@ -29,7 +29,7 @@ class InputSystem : TreeSystem(UpdatePhase.FramePre, 10, Node::class) {
             when (state) {
                 InputState.JustPressed, InputState.Pressed,
                 InputState.JustReleased, InputState.Released,
-                -> sceneRoot.nodeInput(ButtonInputEvent(action, state))
+                -> sceneRoot.dispatchInput(ButtonInputEvent(action, state))
                 else -> Unit
             }
         }
