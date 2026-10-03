@@ -77,6 +77,10 @@ class SceneManager(val physicsStep: Float = 1f / 60f, private val block: SceneMa
 
     private val deletionQueue = linkedSetOf<Node<*>>()
     private var updateDepth = 0
+    internal var pauseState: () -> Boolean = { false }
+
+    /** Application pause state. Standalone scene managers default to running. */
+    val isPaused: Boolean get() = pauseState()
 
     private var _currScene: Node<*>? = null
 
@@ -476,7 +480,7 @@ class SceneManager(val physicsStep: Float = 1f / 60f, private val block: SceneMa
                 }
             }
 
-            NodeLifetime.withOwner(root) { root.nodeUpdate(delta) }
+            NodeLifetime.withOwner(root) { root.dispatchUpdate(delta) }
 
             systems[TreeSystem.UpdatePhase.FramePost]?.toList()?.forEach { sys ->
                 LogContext.with("system" to (sys::class.simpleName ?: "UnknownSystem"), "phase" to "FramePost") {
@@ -499,7 +503,7 @@ class SceneManager(val physicsStep: Float = 1f / 60f, private val block: SceneMa
                 }
             }
 
-            NodeLifetime.withOwner(root) { root.nodePhysicsUpdate(delta) }
+            NodeLifetime.withOwner(root) { root.dispatchPhysicsUpdate(delta) }
 
             systems[TreeSystem.UpdatePhase.PhysicsPost]?.toList()?.forEach { sys ->
                 LogContext.with("system" to (sys::class.simpleName ?: "UnknownSystem"), "phase" to "PhysicsPost") {

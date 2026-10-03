@@ -94,7 +94,8 @@ object ManagersRegistry {
         log.info("event" to "managers.setup.done") { "Finished bootstrapping managers" }
     }
 
-    fun update(delta: Float) {
+    /** Dispatches frames; while [paused], scenes receive real time and other managers receive zero. */
+    fun update(delta: Float, paused: Boolean = false) {
         LogContext.with("delta" to delta, "registered" to managers.size) {
             log.trace("event" to "managers.update") { "Updating managers" }
         }
@@ -104,7 +105,7 @@ object ManagersRegistry {
 
             try {
                 LogContext.with("manager" to name, "delta" to delta) {
-                    manager.onUpdate(delta)
+                    manager.onUpdate(if (paused && manager !is SceneManager) 0f else delta)
                 }
             } catch (t: Throwable) {
                 log.error(
@@ -117,12 +118,14 @@ object ManagersRegistry {
         }
     }
 
-    fun physicsUpdate(delta: Float) {
+    /** Dispatches physics; while [paused], only scene managers process eligible nodes. */
+    fun physicsUpdate(delta: Float, paused: Boolean = false) {
         LogContext.with("delta" to delta, "registered" to managers.size) {
             log.trace("event" to "managers.physics_update") { "Physics updating managers" }
         }
 
         managers.values.forEach { manager ->
+            if (paused && manager !is SceneManager) return@forEach
             val name = manager::class.simpleName ?: "UnknownManager"
             try {
                 LogContext.with("manager" to name, "delta" to delta) {
