@@ -4,6 +4,7 @@ import io.canopy.engine.graphics.nodes.animation.tracks.Track
 
 typealias PlayMode = com.badlogic.gdx.graphics.g2d.Animation.PlayMode
 
+/** Named collection of animation tracks with explicit or track-derived length and a playback mode. */
 @Suppress("UNCHECKED_CAST")
 open class Animation(
     val name: String,

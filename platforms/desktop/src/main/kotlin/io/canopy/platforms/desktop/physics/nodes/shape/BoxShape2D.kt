@@ -6,6 +6,7 @@ import com.badlogic.gdx.physics.box2d.Filter
 import io.canopy.engine.core.nodes.core.Node
 import ktx.box2d.box
 
+/** Rectangular fixture description; geometry values are passed directly to Box2D without unit conversion. */
 class BoxShape2D(
     /** Width in pixels */
     val width: Float = 1f,

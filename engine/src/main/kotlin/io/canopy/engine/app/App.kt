@@ -15,6 +15,7 @@ import io.canopy.engine.logging.LogContext
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.withTimeout
 
+/** Shared application lifecycle and configuration, driven by a platform through [engineLoop]. */
 abstract class App<C : AppConfig> protected constructor() {
     /* ============================================================
      * Configuration
@@ -23,6 +24,7 @@ abstract class App<C : AppConfig> protected constructor() {
     protected val config: C
         get() = _config ?: defaultConfig()
 
+    /** Returns the platform configuration used when no configuration has been supplied. */
     abstract fun defaultConfig(): C
 
     /* ============================================================
@@ -87,6 +89,7 @@ abstract class App<C : AppConfig> protected constructor() {
      * Public handle
      * ============================================================ */
 
+    /** Shutdown controls and lifecycle completion signals for this application. */
     val handle: AppHandle = object : AppHandle {
 
         override fun requestExit() {
@@ -260,10 +263,12 @@ abstract class App<C : AppConfig> protected constructor() {
      * Launch
      * ============================================================ */
 
+    /** Launches the platform on the calling thread; blocking behavior depends on the backend. */
     fun launch(vararg args: String) {
         internalLaunch(config, *args)
     }
 
+    /** Launches the platform on a non-daemon thread and returns lifecycle controls. */
     fun launchAsync(threadName: String = "canopy-app", vararg args: String): AppHandle {
         val thread = Thread({
             try {
@@ -283,6 +288,7 @@ abstract class App<C : AppConfig> protected constructor() {
         return handle
     }
 
+    /** Installs backend shutdown callbacks; a missing force-close callback uses requestExit. */
     fun installBackendHandle(requestExit: () -> Unit, forceClose: (() -> Unit)? = null) {
         backendExitRef.set(requestExit)
         backendForceRef.set(forceClose ?: requestExit)
@@ -292,30 +298,37 @@ abstract class App<C : AppConfig> protected constructor() {
      * DSL
      * ============================================================ */
 
+    /** Replaces the configuration used for subsequent launch and lifecycle setup. */
     fun config(newConfig: C) {
         _config = newConfig
     }
 
+    /** Replaces the callback invoked after manager initialization. */
     fun onEnter(handler: App<C>.() -> Unit) {
         onEnter = handler
     }
 
+    /** Replaces the frame callback; delta is in seconds and is zero while paused. */
     fun onUpdate(handler: App<C>.(Float) -> Unit) {
         onUpdate = handler
     }
 
+    /** Replaces the callback invoked for each fixed physics step, with delta in seconds. */
     fun onPhysicsUpdate(handler: App<C>.(Float) -> Unit) {
         onPhysicsUpdate = handler
     }
 
+    /** Replaces the callback invoked after managers receive the new width and height. */
     fun onResize(handler: App<C>.(Int, Int) -> Unit) {
         onResize = handler
     }
 
+    /** Replaces the callback invoked during final application teardown. */
     fun onExit(handler: App<C>.() -> Unit) {
         onExit = handler
     }
 
+    /** Replaces the manager registration block run during application initialization. */
     fun managers(handler: ManagersRegistry.() -> Unit) {
         managerBuilder = handler
     }

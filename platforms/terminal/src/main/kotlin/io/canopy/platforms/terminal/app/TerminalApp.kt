@@ -21,6 +21,7 @@ import io.canopy.tooling.utils.UnstableApi
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.takeWhile
 
+/** Application hosted by the terminal runtime, with queued keyboard input and a synchronous frame loop. */
 class TerminalApp internal constructor() : App<AppConfig>() {
 
     private val log = EngineLogs.app
@@ -167,4 +168,5 @@ class TerminalApp internal constructor() : App<AppConfig>() {
     }
 }
 
+/** Constructs and configures an application without launching it. */
 fun terminalApp(builder: TerminalApp.() -> Unit = {}): TerminalApp = TerminalApp().apply(builder)

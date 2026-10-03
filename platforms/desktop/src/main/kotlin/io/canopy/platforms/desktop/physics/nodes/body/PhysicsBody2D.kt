@@ -9,6 +9,7 @@ import ktx.box2d.body
 import ktx.log.logger
 import ktx.math.minus
 
+/** Node backed by an injected Box2D world. Its transform is read from the body; direct assignment is rejected. */
 abstract class PhysicsBody2D<T : PhysicsBody2D<T>>(
     name: String,
     // Specific props

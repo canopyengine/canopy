@@ -3,6 +3,7 @@ package io.canopy.platforms.desktop.graphics.nodes.animation.tracks
 import com.badlogic.gdx.graphics.g2d.TextureRegion
 import io.canopy.engine.graphics.nodes.visual.AnimatedSprite2D
 
+/** Animation track assigning interpolated texture-region values to a sprite frame. */
 class SpriteTrack<T : TextureRegion>(
     val sprite: AnimatedSprite2D<T>,
     val frames: Array<T>,

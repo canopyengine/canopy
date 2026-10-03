@@ -5,11 +5,13 @@ import io.canopy.engine.input.binds.InputData
 import io.canopy.engine.input.binds.asData
 import io.canopy.engine.logging.logger
 
+/** Owns action-to-binding mappings and their serializable representation. Use on the engine thread. */
 class InputMapper {
     private val logger = logger<InputMapper>()
 
     private val mappings: MutableMap<String, MutableList<InputBind>> = mutableMapOf()
 
+    /** Returns a mapping copy with copied binding lists. */
     val actions: Map<String, List<InputBind>>
         get() = mappings.mapValues { it.value.toList() }
 
@@ -17,8 +19,10 @@ class InputMapper {
         clearMappings()
     }
 
+    /** Creates a serializable snapshot of the mappings. */
     fun toData(): InputData = asData()
 
+    /** Replaces all mappings with the supplied data, copying its binding lists. */
     fun loadData(data: InputData) {
         mappings.clear()
         mappings.putAll(
@@ -28,10 +32,12 @@ class InputMapper {
         )
     }
 
+    /** Removes every action mapping. */
     fun clearMappings() {
         mappings.clear()
     }
 
+    /** Replaces or appends bindings for the supplied actions; other mappings are retained. */
     fun mapActions(vararg newMappings: Pair<String, List<InputBind>>, replace: Boolean = true) {
         newMappings.forEach { (action, newBinds) ->
             logger.info {
@@ -46,6 +52,7 @@ class InputMapper {
         }
     }
 
+    /** Removes the named action, if present. */
     fun unmapAction(action: String) {
         mappings.remove(action)
     }

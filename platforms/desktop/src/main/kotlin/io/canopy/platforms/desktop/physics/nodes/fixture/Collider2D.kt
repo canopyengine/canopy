@@ -7,6 +7,7 @@ import io.canopy.engine.core.reactive.event
 import io.canopy.engine.physics.nodes.body.PhysicsBody2D
 import io.canopy.engine.physics.nodes.shape.PhysicsShape2D
 
+/** Creates a collision fixture on its parent physics body and emits body contact events. */
 class Collider2D(
     name: String,
     // Specific props
