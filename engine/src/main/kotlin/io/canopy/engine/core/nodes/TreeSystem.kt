@@ -26,16 +26,19 @@ abstract class TreeSystem(
     //         LIFECYCLE HOOKS
     // ===============================
 
+    /** Called once when the owning scene manager enters, or immediately when added to an entered manager. */
     open fun onRegister() = Unit
 
+    /** Called after matching nodes are removed when this system is removed or its manager exits. */
     open fun onUnregister() = Unit
 
     // ===============================
     //         NODE REGISTRATION
     // ===============================
 
+    /** Adds an accepted node once; repeat registrations do not repeat [onNodeAdded]. */
     fun register(node: Node<*>) {
-        if (!acceptsNode(node)) return
+        if (matchingNodes.any { it === node } || !acceptsNode(node)) return
 
         matchingNodes += node
 
@@ -62,6 +65,24 @@ abstract class TreeSystem(
         }
 
         runHook("onNodeRemoved", node = node) { onNodeRemoved(node) }
+    }
+
+    /** Releases current matches through the normal removal hook, leaving this system reusable. */
+    internal fun clearNodes() {
+        var failure: Throwable? = null
+        matchingNodes.toList().forEach { node ->
+            try {
+                unregister(node)
+            } catch (error: Throwable) {
+                val previous = failure
+                if (previous == null) {
+                    failure = error
+                } else if (previous !== error) {
+                    previous.addSuppressed(error)
+                }
+            }
+        }
+        failure?.let { throw it }
     }
 
     protected open fun onNodeAdded(node: Node<*>) {}

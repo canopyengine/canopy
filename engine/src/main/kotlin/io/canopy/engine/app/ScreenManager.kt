@@ -5,7 +5,7 @@ import io.canopy.engine.core.managers.Manager
 
 /**
  * Registers screens by concrete type and forwards frame callbacks to the current screen. Use on the lifecycle
- * thread.
+ * thread. Navigation and registration are rejected inside onInactive/onExit to prevent nested teardown.
  */
 class ScreenManager : Manager {
 
@@ -15,6 +15,8 @@ class ScreenManager : Manager {
     internal val screenRegistry = ScreenRegistry()
 
     private val screens = linkedMapOf<KClass<out Screen>, Screen>()
+    private var leaving = false
+    private var visitVersion = 0L
 
     /* ============================================================
      * State
@@ -28,35 +30,47 @@ class ScreenManager : Manager {
      * Registration
      * ============================================================ */
 
-    /** Registers a screen, replacing any previous registration for its concrete type. */
+    /**
+     * Registers a screen by concrete type. Replacing the active instance ends its visit and clears [current].
+     * Registering the same instance is a no-op; the replacement is started explicitly.
+     */
     fun register(screen: Screen) {
+        check(!leaving) { "Cannot register screens from onInactive or onExit" }
+        val previous = screens[screen::class]
+        if (previous === screen) return
+        if (previous != null && current === previous) leaveCurrent()
         screens[screen::class] = screen
     }
 
     /** Removes a registration and exits it if it is the current screen. */
     fun <T : Screen> remove(type: KClass<T>) {
+        check(!leaving) { "Cannot remove screens from onInactive or onExit" }
         val removed = screens.remove(type)
 
-        if (current === removed) {
-            current?.onExit()
-            current = null
-        }
+        if (removed != null && current === removed) leaveCurrent()
     }
 
     /* ============================================================
      * Navigation
      * ============================================================ */
 
-    /** Exits the current screen and enters the registered target; fails if the type is unregistered. */
+    /**
+     * Ends the current visit, then calls the target's [Screen.onEnter] and [Screen.onActive].
+     * Starting the current instance is a no-op; an unregistered type fails before any callbacks.
+     */
     fun <T : Screen> start(type: KClass<T>) {
+        check(!leaving) { "Cannot navigate from onInactive or onExit" }
         val next = screens[type]
             ?: error("Screen not registered: ${type.qualifiedName}")
 
         if (current === next) return
 
-        current?.onExit()
+        leaveCurrent()
         current = next
-        current?.onEnter()
+        val visit = ++visitVersion
+        next.onEnter()
+        // onEnter may navigate to another screen; do not activate a screen that already left.
+        if (current === next && visitVersion == visit) next.onActive()
     }
 
     /* ============================================================
@@ -83,12 +97,42 @@ class ScreenManager : Manager {
      * Teardown
      * ============================================================ */
 
+    /** Ends only the active visit and clears registrations. Repeated teardown is a no-op. */
     override fun onExit() {
-        current?.onExit()
-        current = null
+        try {
+            leaveCurrent()
+        } finally {
+            screens.clear()
+        }
+    }
 
-        screens.values.forEach { it.onExit() }
-        screens.clear()
+    private fun leaveCurrent() {
+        val previous = current ?: return
+        // Clear first so repeated teardown cannot exit the same visit again.
+        current = null
+        visitVersion++
+        leaving = true
+        var failure: Throwable? = null
+        try {
+            try {
+                previous.onInactive()
+            } catch (error: Throwable) {
+                failure = error
+            }
+            try {
+                previous.onExit()
+            } catch (error: Throwable) {
+                val inactiveFailure = failure
+                if (inactiveFailure == null) {
+                    failure = error
+                } else if (inactiveFailure !== error) {
+                    inactiveFailure.addSuppressed(error)
+                }
+            }
+        } finally {
+            leaving = false
+        }
+        failure?.let { throw it }
     }
 
     companion object {

@@ -60,10 +60,10 @@ class SceneManager(val physicsStep: Float = 1f / 60f, private val block: SceneMa
      * Signals / events
      * ============================================================ */
 
-    /** Current scene size signal (e.g., for UI/layout systems). */
+    /** Latest host dimensions; updated before [onResize] listeners run. Initially zero. */
     val sceneSize = Vector2.Zero.asSignal()
 
-    /** Emitted when the window/viewport is resized. */
+    /** Emitted for every host resize, after [sceneSize] has been updated. */
     val onResize = event<Int, Int>()
 
     /** Emitted after the scene root is replaced. Payload is the new root (or null). */
@@ -94,9 +94,11 @@ class SceneManager(val physicsStep: Float = 1f / 60f, private val block: SceneMa
      */
     private val systems: MutableMap<TreeSystem.UpdatePhase, MutableList<TreeSystem>> = mutableMapOf()
 
-    /**
-     * Direct lookup by system class (useful for get/remove).
-     */
+    private var entered = false
+    private var configured = false
+    private val initializedSystems = linkedSetOf<TreeSystem>()
+
+    /** Direct lookup by system class (useful for get/remove). */
     private val systemsByClass = mutableMapOf<KClass<out TreeSystem>, TreeSystem>()
 
     /**
@@ -175,7 +177,7 @@ class SceneManager(val physicsStep: Float = 1f / 60f, private val block: SceneMa
             flatTree[node.path] = node
 
             // Register node into systems interested in its type.
-            systemsFor(node).forEach { sys ->
+            systemsFor(node).toList().forEach { sys ->
                 LogContext.with(
                     "scene" to root.name,
                     "nodePath" to node.path,
@@ -183,7 +185,9 @@ class SceneManager(val physicsStep: Float = 1f / 60f, private val block: SceneMa
                 ) {
                     log.trace("event" to "system.register_node") { "Registering node in system" }
                 }
-                sys.register(node)
+                if (entered && sys in initializedSystems && systemsByClass[sys::class] === sys) {
+                    sys.register(node)
+                }
             }
         }
 
@@ -253,6 +257,9 @@ class SceneManager(val physicsStep: Float = 1f / 60f, private val block: SceneMa
      * Also indexes the system by:
      * - phase ([TreeSystem.phase]) and priority
      * - required node types ([TreeSystem.requiredTypes]) for fast node registration
+     *
+     * When this manager has entered, [TreeSystem.onRegister] runs before existing indexed nodes are added.
+     * Otherwise initialization and node backfilling are deferred until [onEnter].
      */
     fun <T : TreeSystem> addSystem(system: T) {
         require(!hasSystem(system::class)) {
@@ -270,6 +277,11 @@ class SceneManager(val physicsStep: Float = 1f / 60f, private val block: SceneMa
             systemsByNodeTypes.computeIfAbsent(type) { mutableListOf() }.add(system)
         }
 
+        if (entered) {
+            initializeSystem(system)
+            backfillSystem(system)
+        }
+
         log.info(
             "event" to "system.register",
             "system" to system::class.simpleName,
@@ -283,7 +295,8 @@ class SceneManager(val physicsStep: Float = 1f / 60f, private val block: SceneMa
     inline operator fun <reified T : TreeSystem> T.unaryPlus() = addSystem(this)
 
     /**
-     * Unregisters a system type and removes it from all internal indexes.
+     * Removes a system from all indexes, releases matching nodes, then calls [TreeSystem.onUnregister]
+     * if it was initialized. The same instance can subsequently be registered again.
      */
     fun <T : TreeSystem> removeSystem(kClass: KClass<T>) {
         val systemName = kClass.simpleName ?: "UnknownSystem"
@@ -297,12 +310,57 @@ class SceneManager(val physicsStep: Float = 1f / 60f, private val block: SceneMa
             sortBy(TreeSystem::priority)
         }
         systemsByClass.remove(kClass)
+        releaseSystem(system)
 
         log.info(
             "event" to "system.unregister",
             "system" to systemName,
             "phase" to system.phase.name
         ) { "Unregistered system" }
+    }
+
+    private fun initializeSystem(system: TreeSystem) {
+        if (systemsByClass[system::class] === system && initializedSystems.add(system)) {
+            system.onRegister()
+        }
+    }
+
+    private fun backfillSystem(system: TreeSystem) {
+        // Hooks may change scene membership or remove the system while registration is in progress.
+        flatTree.values.toList().forEach { node ->
+            if (
+                entered &&
+                system in initializedSystems &&
+                systemsByClass[system::class] === system &&
+                flatTree[node.path] === node &&
+                system.requiredTypes.any { it.isInstance(node) }
+            ) {
+                system.register(node)
+            }
+        }
+    }
+
+    private fun releaseSystem(system: TreeSystem) {
+        val initialized = initializedSystems.remove(system)
+        var failure: Throwable? = null
+        try {
+            system.clearNodes()
+        } catch (error: Throwable) {
+            failure = error
+        }
+        if (initialized) {
+            try {
+                system.onUnregister()
+            } catch (error: Throwable) {
+                val previous = failure
+                if (previous == null) {
+                    failure = error
+                } else if (previous !== error) {
+                    previous.addSuppressed(error)
+                }
+            }
+        }
+        failure?.let { throw it }
     }
 
     /** DSL helper: `-MySystem::class` */
@@ -432,9 +490,11 @@ class SceneManager(val physicsStep: Float = 1f / 60f, private val block: SceneMa
     }
 
     /**
-     * Emits resize event for listeners (UI/layout/camera systems).
+     * Stores host dimensions before emitting the resize event. Equal dimensions do not emit a signal change,
+     * but every call still emits [onResize].
      */
     override fun onResize(width: Int, height: Int) {
+        sceneSize.update { Vector2(width.toFloat(), height.toFloat()) }
         onResize.emit(width, height)
         log.debug("event" to "scene.resize", "width" to width, "height" to height) { "Resize" }
     }
@@ -443,20 +503,45 @@ class SceneManager(val physicsStep: Float = 1f / 60f, private val block: SceneMa
      * Manager lifecycle
      * ============================================================ */
 
+    /** Initializes systems before matching nodes. Configuration blocks run only on the first entry. */
     override fun onEnter() {
+        if (entered) return
+        entered = true
+        systemsByClass.values.toList().forEach { system ->
+            initializeSystem(system)
+            backfillSystem(system)
+        }
+
         log.info("event" to "sceneManager.setup", "physicsStep" to physicsStep) { "Setup" }
 
         // Allow callers to register systems, groups, initial scene, etc.
-        sceneManagerBuilder()
-        this.block()
-
-        // Notify systems that they've been registered with the scene manager.
-        systems.values.flatten().forEach(TreeSystem::onRegister)
+        if (!configured) {
+            configured = true
+            sceneManagerBuilder()
+            this.block()
+        }
     }
 
+    /** Releases matches and initialized systems once; retains the scene and system configuration for re-entry. */
     override fun onExit() {
+        if (!entered) return
+        entered = false
         log.info("event" to "sceneManager.teardown") { "Teardown" }
-        systems.values.flatten().forEach(TreeSystem::onUnregister)
+        // One failing cleanup hook must not leave the other systems holding scene nodes.
+        var failure: Throwable? = null
+        systemsByClass.values.toList().forEach { system ->
+            try {
+                releaseSystem(system)
+            } catch (error: Throwable) {
+                val previous = failure
+                if (previous == null) {
+                    failure = error
+                } else if (previous !== error) {
+                    previous.addSuppressed(error)
+                }
+            }
+        }
+        failure?.let { throw it }
     }
 
     fun App<*>.sceneManager(handler: SceneManager.() -> Unit) {
