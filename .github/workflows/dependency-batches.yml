@@ -1,0 +1,43 @@
+name: Dependency batches
+
+on:
+  schedule:
+    # Monday 08:00 UTC (08:00 Lisbon in winter, 09:00 in summer).
+    - cron: '0 8 * * 1'
+    # Detect critical fixes without waiting for the weekly batch.
+    - cron: '17 * * * *'
+  workflow_dispatch:
+  workflow_run:
+    workflows: [ "Build", "CodeQL" ]
+    types: [ completed ]
+
+permissions:
+  contents: write
+  pull-requests: write
+  checks: read
+  statuses: read
+  actions: write
+
+concurrency:
+  # Serialize dependency merges with main-to-dependency synchronization.
+  group: sync-dependency-updates
+  cancel-in-progress: false
+
+jobs:
+  batch:
+    runs-on: ubuntu-latest
+    steps:
+      # Never execute code from a Dependabot PR or workflow_run head.
+      - name: Checkout trusted automation
+        uses: actions/checkout@v7
+        with:
+          ref: main
+          persist-credentials: false
+
+      - name: Review dependency updates and prepare human integration
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          EVENT_NAME: ${{ github.event_name }}
+          EVENT_SCHEDULE: ${{ github.event.schedule }}
+        run: python3 .github/scripts/dependency_batches.py
