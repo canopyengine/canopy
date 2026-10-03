@@ -3,6 +3,7 @@ package io.canopy.adapters.libgdx.data.assets
 import com.badlogic.gdx.files.FileHandle
 import io.canopy.engine.data.assets.WritableAssetEntry
 
+/** Writable asset adapter retaining the file type and I/O semantics of a LibGDX FileHandle. */
 class GdxAssetEntry(private val fileHandle: FileHandle) : WritableAssetEntry {
 
     override val path: String
@@ -33,5 +34,6 @@ class GdxAssetEntry(private val fileHandle: FileHandle) : WritableAssetEntry {
 
     override fun list(): List<WritableAssetEntry> = fileHandle.list().map(::GdxAssetEntry)
 
+    /** Returns the underlying FileHandle without copying or transferring ownership. */
     fun unwrap(): FileHandle = fileHandle
 }

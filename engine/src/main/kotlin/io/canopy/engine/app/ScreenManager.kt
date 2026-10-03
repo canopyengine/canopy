@@ -3,6 +3,10 @@ package io.canopy.engine.app
 import kotlin.reflect.KClass
 import io.canopy.engine.core.managers.Manager
 
+/**
+ * Registers screens by concrete type and forwards frame callbacks to the current screen. Use on the lifecycle
+ * thread.
+ */
 class ScreenManager : Manager {
 
     /* ============================================================
@@ -16,6 +20,7 @@ class ScreenManager : Manager {
      * State
      * ============================================================ */
 
+    /** The active screen, or null before navigation and after teardown. */
     var current: Screen? = null
         private set
 
@@ -23,10 +28,12 @@ class ScreenManager : Manager {
      * Registration
      * ============================================================ */
 
+    /** Registers a screen, replacing any previous registration for its concrete type. */
     fun register(screen: Screen) {
         screens[screen::class] = screen
     }
 
+    /** Removes a registration and exits it if it is the current screen. */
     fun <T : Screen> remove(type: KClass<T>) {
         val removed = screens.remove(type)
 
@@ -40,6 +47,7 @@ class ScreenManager : Manager {
      * Navigation
      * ============================================================ */
 
+    /** Exits the current screen and enters the registered target; fails if the type is unregistered. */
     fun <T : Screen> start(type: KClass<T>) {
         val next = screens[type]
             ?: error("Screen not registered: ${type.qualifiedName}")
@@ -88,6 +96,7 @@ class ScreenManager : Manager {
     }
 }
 
+/** Installs the screen registration block used by ScreenManager during application initialization. */
 fun App<*>.screens(handler: ScreenRegistry.() -> Unit) {
     ScreenManager.screenManagerBuilder = { screenRegistry.apply(handler) }
 }

@@ -9,6 +9,7 @@ import io.canopy.engine.core.nodes.core.NodeRef
 import io.canopy.engine.core.reactive.asSignal
 import io.canopy.engine.graphics.managers.CameraManager
 
+/** Orthographic camera node with optional target following, smoothing, zoom, and position limits. */
 class Camera2D(
     name: String = "Camera2D",
     // Specific props

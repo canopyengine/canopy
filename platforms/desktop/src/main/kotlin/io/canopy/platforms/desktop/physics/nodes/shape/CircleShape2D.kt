@@ -7,6 +7,7 @@ import com.badlogic.gdx.physics.box2d.Fixture
 import io.canopy.engine.core.nodes.core.Node
 import ktx.box2d.circle
 
+/** Circular fixture description; geometry values are passed directly to Box2D without unit conversion. */
 class CircleShape2D(
     /** Radius in pixels */
     val radius: Float = 1f,

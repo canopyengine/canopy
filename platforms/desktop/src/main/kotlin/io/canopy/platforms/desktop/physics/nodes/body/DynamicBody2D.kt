@@ -5,6 +5,7 @@ import com.badlogic.gdx.physics.box2d.BodyDef
 import io.canopy.engine.physics.systems.PhysicsSystem
 import ktx.log.logger
 
+/** Node backed by a dynamic Box2D body; force and impulse movement helpers are currently unimplemented. */
 open class DynamicBody2D<T : DynamicBody2D<T>>(name: String, block: T.() -> Unit = {}) :
     PhysicsBody2D<T>(
         name,

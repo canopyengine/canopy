@@ -8,6 +8,7 @@ import io.canopy.adapters.libgdx.backends.desktop.physics.nodes.fixture.Area2D
 import io.canopy.adapters.libgdx.backends.desktop.physics.nodes.fixture.Collider2D
 import io.canopy.engine.core.nodes.Node
 
+/** Translates fixture contacts into collider and area enter/exit events using fixture user data. */
 class PhysicsContactListener : ContactListener {
     override fun beginContact(contact: Contact) {
         val fixtureA = contact.fixtureA

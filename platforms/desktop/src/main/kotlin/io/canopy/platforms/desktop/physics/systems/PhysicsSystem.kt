@@ -12,6 +12,7 @@ import io.canopy.engine.core.nodes.TreeSystem
 import ktx.box2d.createWorld
 import ktx.log.logger
 
+/** Steps a Box2D world in PhysicsPre and destroys bodies when tracked physics nodes are removed. */
 class PhysicsSystem(gravity: Vector2 = Vector2.Zero) :
     TreeSystem(
         phase = TreeSystem.UpdatePhase.PhysicsPre,

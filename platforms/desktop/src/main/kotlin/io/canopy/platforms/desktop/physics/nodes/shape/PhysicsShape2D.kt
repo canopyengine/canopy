@@ -6,6 +6,7 @@ import com.badlogic.gdx.physics.box2d.Filter
 import com.badlogic.gdx.physics.box2d.Fixture
 import io.canopy.engine.core.nodes.core.Node
 
+/** Creates a Box2D fixture on the supplied body, with material, filter, sensor, and node metadata. */
 interface PhysicsShape2D {
     fun shapeFactory(
         fixtureNode: Node<*>,

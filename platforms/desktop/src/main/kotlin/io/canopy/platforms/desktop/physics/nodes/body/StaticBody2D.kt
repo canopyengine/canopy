@@ -4,6 +4,7 @@ import com.badlogic.gdx.physics.box2d.BodyDef
 import io.canopy.engine.physics.systems.PhysicsSystem
 import ktx.log.logger
 
+/** Node backed by a static Box2D body, synchronized during physics callbacks. */
 class StaticBody2D(
     // Base props
     name: String,
