@@ -3,6 +3,7 @@ version: 2
 updates:
   - package-ecosystem: "gradle"
     directory: "/"
+    target-branch: "dependency-updates"
     schedule:
       interval: "weekly"
       day: "monday"
@@ -47,6 +48,7 @@ updates:
 
   - package-ecosystem: "github-actions"
     directory: "/"
+    target-branch: "dependency-updates"
     schedule:
       interval: "weekly"
       day: "monday"
