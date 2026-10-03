@@ -34,6 +34,13 @@ import kotlinx.coroutines.flow.MutableSharedFlow
  * - The event listeners are notified immediately.
  * - Flow emission is non-blocking; slow collectors may skip intermediate values.
  *
+ * ## Threading
+ *
+ * Signals are intended to be read and updated from one serialized thread, usually
+ * the game thread. The current value is volatile for visibility, but concurrent
+ * read-modify-write calls to [update] are not atomic. Listener callbacks run
+ * synchronously on the thread that calls [update].
+ *
  * @param initial Initial value of the signal.
  */
 class Signal<T>(initial: T) {

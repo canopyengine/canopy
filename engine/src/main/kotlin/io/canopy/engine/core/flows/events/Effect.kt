@@ -22,6 +22,10 @@ import io.canopy.engine.logging.EngineLogs
  * need it to remain active. If the only reference is dropped, the effect and its
  * subscriptions become eligible for GC.
  *
+ * If a dependency changes while the effect is running, one rerun is queued after
+ * the current run. Multiple changes during the same run are coalesced; the rerun
+ * observes the latest values.
+ *
  * Example:
  * ```kotlin
  * val hp = signal(100)
@@ -40,6 +44,7 @@ class Effect(private val block: () -> Unit) {
 
     @Volatile private var disposed = false
     private var running = false
+    private var rerunRequested = false
 
     init {
         run()
@@ -65,17 +70,24 @@ class Effect(private val block: () -> Unit) {
     // -------------------------------------------------------------------------
 
     private fun run() {
-        if (disposed || running) return
-
-        running = true
-        val frame = TrackingContext.push()
-        try {
-            block()
-        } finally {
-            TrackingContext.pop()
-            running = false
-            updateDependencies(frame)
+        if (disposed) return
+        if (running) {
+            rerunRequested = true
+            return
         }
+
+        do {
+            rerunRequested = false
+            running = true
+            val frame = TrackingContext.push()
+            try {
+                block()
+            } finally {
+                TrackingContext.pop()
+                running = false
+                updateDependencies(frame)
+            }
+        } while (!disposed && rerunRequested)
     }
 
     private fun updateDependencies(newDeps: Set<Signal<*>>) {
@@ -110,7 +122,7 @@ class Effect(private val block: () -> Unit) {
  * ```kotlin
  * val score = signal(0)
  * val e = effect { println("Score: ${score()}") }
- * score.value = 10  // prints "Score: 10"
+ * score.update { 10 }  // prints "Score: 10"
  * e.dispose()
  * ```
  */

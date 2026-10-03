@@ -195,19 +195,22 @@ class EffectTests {
     }
 
     @Test
-    fun `effect ignores synchronous reentrant notifications`() {
+    fun `effect queues one coalesced rerun for synchronous reentrant notifications`() {
         val counter = signal(0)
         var runCount = 0
         val e = effect {
-            counter()
+            val current = counter()
             runCount++
-            if (runCount > 1) counter.update { it + 1 }
+            if (current == 1) {
+                counter.update { 2 }
+                counter.update { 3 }
+            }
         }
 
         counter.update { it + 1 }
 
-        assertEquals(2, runCount)
-        assertEquals(2, counter())
+        assertEquals(3, runCount)
+        assertEquals(3, counter())
         e.dispose()
     }
 }
