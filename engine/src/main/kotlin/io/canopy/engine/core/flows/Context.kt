@@ -56,6 +56,23 @@ class Context(
     block: Context.() -> Unit = {},
 ) : Node<Context>(name, skipOnSearch = true, block) {
 
+    /** Releases providers on permanent destruction. Reusable detachment and manager re-entry retain them. */
+    override fun nodeExitTree() {
+        try {
+            super.nodeExitTree()
+        } finally {
+            if (isFreed) provided.clear()
+        }
+    }
+
+    internal override fun releaseResources() {
+        try {
+            super.releaseResources()
+        } finally {
+            if (isFreed) provided.clear()
+        }
+    }
+
     /**
      * Provides a value under a raw string key.
      */

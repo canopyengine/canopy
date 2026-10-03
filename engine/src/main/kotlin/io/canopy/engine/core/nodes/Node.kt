@@ -20,6 +20,9 @@ import io.canopy.engine.logging.LogContext
  *   - run updates (frame + physics)
  *   - register nodes into systems and groups
  *
+ * Overridden lifecycle/update methods must delegate to super to retain normal subtree traversal.
+ * The manager still releases generic owned resources if an exit override throws before delegating.
+ *
  * Construction vs initialization:
  * - `init { ... }` attaches this node to the current DSL parent (if any).
  * - `nodeEnterTree()` runs `create()` and the user-provided DSL [block] exactly once
@@ -40,6 +43,8 @@ abstract class Node<N : Node<N>> protected constructor(
      */
     private val block: N.() -> Unit = {},
 ) {
+
+    private val removalCallbacks = linkedSetOf<() -> Unit>()
 
     /* ============================================================
      * Identity
@@ -202,6 +207,7 @@ abstract class Node<N : Node<N>> protected constructor(
      * - runtime attach via [addChild] (then lifecycle is applied unless prefab)
      */
     private fun addChildInternal(child: Node<*>) {
+        check(!isFreed && !child.isFreed) { "Freed nodes cannot be attached" }
         check(child.name !in children) {
             "Child with name '${child.name}' already exists under '${this.name}'"
         }
@@ -243,9 +249,9 @@ abstract class Node<N : Node<N>> protected constructor(
 
         LogContext.with("nodePath" to child.path) {
             log.trace("event" to "node.lifecycle.enter_tree") { "enterTree()" }
-            child.nodeEnterTree()
+            NodeLifetime.withOwner(child) { child.nodeEnterTree() }
             log.trace("event" to "node.lifecycle.ready") { "ready()" }
-            child.nodeReady()
+            NodeLifetime.withOwner(child) { child.nodeReady() }
         }
     }
 
@@ -260,29 +266,20 @@ abstract class Node<N : Node<N>> protected constructor(
      *
      * Order:
      * - exitTree on subtree
-     * - detach from parent
      * - unregister subtree from SceneManager
+     * - detach from parent
+     *
+     * Preserves the detached subtree structure. Cleanup and detachment complete even if an exit hook throws.
      */
     fun removeChild(child: Node<*>) {
         check(child.parent == this) { "Node '${child.name}' is not a child of '$name'!" }
 
-        LogContext.with("nodePath" to this.path, "childPath" to child.path) {
-            log.debug("event" to "node.remove_child") { "Removing child" }
-        }
-
-        LogContext.with("nodePath" to child.path) {
-            log.trace("event" to "node.lifecycle.exit_tree") { "exitTree()" }
-            child.nodeExitTree()
-        }
-
-        _children.remove(child.name)
-        child._parent = null
-        child.recomputePathRecursively()
-
-        sceneManager.unregisterSubtree(child)
-
-        // Remove remaining descendants by detaching them from the child.
-        child.children.values.toList().forEach { child.removeChild(it) }
+        val failures = CleanupFailures()
+        failures.attempt { NodeLifetime.withOwner(child) { child.nodeExitTree() } }
+        failures.attempt { child.releaseResources() }
+        failures.attempt { sceneManager.unregisterSubtree(child) }
+        child.detachFromParent()
+        failures.rethrow()
     }
 
     /** DSL: `-childNode` */
@@ -412,26 +409,40 @@ abstract class Node<N : Node<N>> protected constructor(
     }
 
     /**
-     * Removes this node from its parent.
+     * Queues permanent destruction of this node and its current subtree.
      *
-     * TODO: Improve this method so that it properly frees the node/queues it for removal
+     * The owning SceneManager drains requests after a complete frame or physics update, including
+     * failed updates. Until that boundary nodes remain attached and eligible for callbacks. Repeated
+     * requests are harmless. Detached nodes and active roots are supported. Use [removeChild] for
+     * immediate, reusable detachment. All operations must run on the serialized game thread.
      */
     fun queueFree() {
-        LogContext.with("nodePath" to path) {
-            log.debug("event" to "node.queue_free") { "Queue free" }
-        }
-        parent?.removeChild(this)
+        if (isQueuedForDeletion || isFreed) return
+        sceneManager.queueFree(this)
     }
 
     /**
-     * Moves an existing child from this parent to [newParent].
+     * Moves an existing child and its subtree without repeating lifecycle or cleaning up resources.
+     * Context values and node-owned subscriptions remain active; paths and manager indexes change.
      */
     fun reparent(child: Node<*>, newParent: Node<*>) {
-        LogContext.with("childPath" to child.path, "fromParent" to this.path, "toParent" to newParent.path) {
-            log.info("event" to "node.reparent") { "Reparenting child" }
+        check(child.parent === this) { "Node '${child.name}' is not a child of '$name'!" }
+        check(!newParent.isFreed && !child.isFreed) { "Freed nodes cannot be reparented" }
+        if (newParent === this) return
+        check(child.name !in newParent.children) { "Child '${child.name}' already exists under '${newParent.name}'" }
+        var ancestor: Node<*>? = newParent
+        while (ancestor != null) {
+            require(ancestor !== child) { "Cannot reparent a node beneath itself" }
+            ancestor = ancestor.parent
         }
-        removeChild(child)
-        newParent.addChild(child)
+        sceneManager.unregisterSubtree(child)
+        child.detachFromParent()
+        newParent.addChildInternal(child)
+        fun registerGroups(node: Node<*>) {
+            node.groups.forEach { sceneManager.addToGroup(it, node) }
+            node.children.values.forEach(::registerGroups)
+        }
+        registerGroups(child)
     }
 
     fun hasChildType(type: KClass<out Node<*>>) = children.values.any { it::class == type }
@@ -449,8 +460,8 @@ abstract class Node<N : Node<N>> protected constructor(
         LogContext.with("nodePath" to path) {
             log.debug("event" to "node.build_tree") { "Building tree" }
         }
-        nodeEnterTree()
-        nodeReady()
+        NodeLifetime.withOwner(this) { nodeEnterTree() }
+        NodeLifetime.withOwner(this) { nodeReady() }
     }
 
     /* ============================================================
@@ -470,6 +481,60 @@ abstract class Node<N : Node<N>> protected constructor(
     private var built = false
     private var enteredTree = false
 
+    /** Whether destruction has been requested but has not yet reached a safe update boundary. */
+    var isQueuedForDeletion: Boolean = false
+        private set
+
+    /** Whether this node was permanently destroyed by [queueFree]. */
+    var isFreed: Boolean = false
+        private set
+
+    /**
+     * Registers resource cleanup for the next removal or scene exit, on the serialized game thread.
+     * Cleanup runs after exit callbacks, including when they throw. Each registration runs once;
+     * callbacks registered during cleanup are also drained. A freed node cleans up immediately.
+     * Resources can use this hook without requiring Node to know their implementation.
+     * The returned callback cancels the registration without executing cleanup.
+     */
+    fun onRemoval(cleanup: () -> Unit): () -> Unit {
+        if (isFreed) {
+            cleanup()
+            return {}
+        }
+        val registration = { cleanup() }
+        removalCallbacks += registration
+        return { removalCallbacks.remove(registration) }
+    }
+
+    internal fun markQueued() {
+        isQueuedForDeletion = true
+    }
+
+    internal fun markFreed() {
+        isQueuedForDeletion = false
+        isFreed = true
+        children.values.forEach { it.markFreed() }
+    }
+
+    /** Final safety net for resources when an overriding exit method fails before calling super. */
+    internal open fun releaseResources() {
+        val failures = CleanupFailures()
+        children.values.forEach { child -> failures.attempt { child.releaseResources() } }
+        enteredTree = false
+        while (removalCallbacks.isNotEmpty()) {
+            val callbacks = removalCallbacks.toList()
+            removalCallbacks.clear()
+            callbacks.forEach { failures.attempt(it) }
+        }
+        failures.rethrow()
+    }
+
+    internal fun detachFromParent() {
+        _parent?._children?.remove(name)
+        _parent = null
+        recomputePathRecursively()
+    }
+
     /**
      * Called when the node enters the tree.
      *
@@ -485,7 +550,9 @@ abstract class Node<N : Node<N>> protected constructor(
         }
 
         // Avoid executing DSL/build twice (e.g., if nodeEnterTree is triggered again).
-        if (built) return
+        check(!isFreed) { "Freed nodes cannot enter the tree" }
+        if (enteredTree) return
+        val needsBuild = !built
         built = true
 
         // Build subtree via DSL after full construction.
@@ -493,8 +560,12 @@ abstract class Node<N : Node<N>> protected constructor(
         currentParent.set(this)
 
         try {
-            nodeInit()
-            block(this as N)
+            if (needsBuild) {
+                NodeLifetime.withOwner(this) {
+                    nodeInit()
+                    block(this as N)
+                }
+            }
         } finally {
             currentParent.set(oldParent)
             LogContext.with("nodePath" to path) {
@@ -505,7 +576,7 @@ abstract class Node<N : Node<N>> protected constructor(
         groups.forEach { sceneManager.addToGroup(it, this) }
         enteredTree = true
         behavior?.let { runBehavior("enter_tree") { it.onEnterTree() } }
-        children.values.forEach { it.nodeEnterTree() }
+        children.values.forEach { child -> NodeLifetime.withOwner(child) { child.nodeEnterTree() } }
     }
 
     /**
@@ -521,7 +592,7 @@ abstract class Node<N : Node<N>> protected constructor(
         }
 
         // Children were attached during their init; now recurse.
-        children.values.forEach { it.nodeReady() }
+        children.values.forEach { child -> NodeLifetime.withOwner(child) { child.nodeReady() } }
         behavior?.let { runBehavior("ready") { it.onReady() } }
     }
 
@@ -530,15 +601,24 @@ abstract class Node<N : Node<N>> protected constructor(
      *
      * Order:
      * - recurse into children
-     * - behavior.onExitTree()
+     * - behavior.onExitTree() once per entry
+     * - release node-owned resources, even when exit callbacks fail
      */
     open fun nodeExitTree() {
         LogContext.with("nodePath" to path) {
             log.trace("event" to "node.exit_tree") { "nodeExitTree()" }
         }
-        children.values.forEach { it.nodeExitTree() }
+        val failures = CleanupFailures()
+        children.values.forEach { child -> failures.attempt { NodeLifetime.withOwner(child) { child.nodeExitTree() } } }
+        val wasEntered = enteredTree
         enteredTree = false
-        behavior?.let { runBehavior("exit_tree") { it.onExitTree() } }
+        if (wasEntered) failures.attempt { behavior?.let { runBehavior("exit_tree") { it.onExitTree() } } }
+        while (removalCallbacks.isNotEmpty()) {
+            val callbacks = removalCallbacks.toList()
+            removalCallbacks.clear()
+            callbacks.forEach { failures.attempt(it) }
+        }
+        failures.rethrow()
     }
 
     /* ============================================================
@@ -549,7 +629,7 @@ abstract class Node<N : Node<N>> protected constructor(
         LogContext.with("nodePath" to path, "delta" to delta) {
             log.trace("event" to "node.update") { "nodeUpdate()" }
         }
-        children.values.forEach { it.nodeUpdate(delta) }
+        children.values.forEach { child -> NodeLifetime.withOwner(child) { child.nodeUpdate(delta) } }
         behavior?.let { runBehavior("update") { it.onUpdate(delta) } }
     }
 
@@ -557,7 +637,7 @@ abstract class Node<N : Node<N>> protected constructor(
         LogContext.with("nodePath" to path, "delta" to delta) {
             log.trace("event" to "node.physics_update") { "nodePhysicsUpdate()" }
         }
-        children.values.forEach { it.nodePhysicsUpdate(delta) }
+        children.values.forEach { child -> NodeLifetime.withOwner(child) { child.nodePhysicsUpdate(delta) } }
         behavior?.let { runBehavior("physics_update") { it.onPhysicsUpdate(delta) } }
     }
 
@@ -566,7 +646,7 @@ abstract class Node<N : Node<N>> protected constructor(
      * ============================================================ */
 
     open fun nodeInput(event: InputEvent) {
-        children.values.forEach { it.nodeInput(event) }
+        children.values.forEach { child -> NodeLifetime.withOwner(child) { child.nodeInput(event) } }
         behavior?.let { runBehavior("input") { it.onInput(event) } }
     }
 
@@ -578,9 +658,9 @@ abstract class Node<N : Node<N>> protected constructor(
      * Executes a behavior callback and logs/rethrows exceptions with useful context.
      * This is intentionally fail-fast: behavior errors should be surfaced quickly.
      */
-    private inline fun runBehavior(phase: String, delta: Float? = null, block: () -> Unit) {
+    private fun runBehavior(phase: String, delta: Float? = null, block: () -> Unit) {
         try {
-            block()
+            NodeLifetime.withOwner(this, block)
         } catch (t: Throwable) {
             val fields = buildMap {
                 put("event", "behavior.error")

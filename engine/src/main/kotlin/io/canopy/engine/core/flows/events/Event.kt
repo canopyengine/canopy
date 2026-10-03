@@ -1,6 +1,8 @@
 package io.canopy.engine.core.flows.events
 
 import java.util.concurrent.CopyOnWriteArrayList
+import io.canopy.engine.core.nodes.Node
+import io.canopy.engine.core.nodes.NodeLifetime
 import io.canopy.engine.logging.EngineLogs
 
 /**
@@ -36,8 +38,17 @@ sealed class Event<T> {
 
     fun isEmpty(): Boolean = size() == 0
 
-    /** Adds a listener. */
+    /**
+     * Adds a weak listener. Connections created during managed node lifecycle, behavior or system
+     * node callbacks are retained by that node and disconnected on exit. Connections created outside
+     * those callbacks require explicit ownership or a retained handle. Later listener invocations do
+     * not inherit the ownership scope; use [connect] with an explicit owner for nested connections.
+     */
     abstract infix fun connect(listener: T): EventDisconnectHandler
+
+    /** Connects a listener owned by [owner], disconnecting it when that node exits or is removed. */
+    fun connect(owner: Node<*>, listener: T): EventDisconnectHandler =
+        NodeLifetime.withOwner(owner) { connect(listener) }
 
     /** Removes a listener. */
     abstract infix fun disconnect(listener: T)
@@ -53,7 +64,7 @@ class NoArgEvent : Event<() -> Unit>() {
 
     override infix fun connect(listener: () -> Unit): EventDisconnectHandler {
         callbacks.add(listener)
-        return EventDisconnectHandler { disconnect(listener) }
+        return EventDisconnectHandler { disconnect(listener) }.owned()
     }
     override infix fun disconnect(listener: () -> Unit) = callbacks.remove(listener)
 
@@ -78,7 +89,7 @@ class OneArgEvent<A> : Event<(A) -> Unit>() {
 
     override infix fun connect(listener: (A) -> Unit): EventDisconnectHandler {
         callbacks.add(listener)
-        return EventDisconnectHandler { disconnect(listener) }
+        return EventDisconnectHandler { disconnect(listener) }.owned()
     }
     override infix fun disconnect(listener: (A) -> Unit) = callbacks.remove(listener)
 
@@ -103,7 +114,7 @@ class TwoArgsEvent<A, B> : Event<(A, B) -> Unit>() {
 
     override infix fun connect(listener: (A, B) -> Unit): EventDisconnectHandler {
         callbacks.add(listener)
-        return EventDisconnectHandler { disconnect(listener) }
+        return EventDisconnectHandler { disconnect(listener) }.owned()
     }
     override infix fun disconnect(listener: (A, B) -> Unit) = callbacks.remove(listener)
 

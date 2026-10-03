@@ -1,5 +1,6 @@
 package io.canopy.engine.core.flows.events
 
+import io.canopy.engine.core.nodes.NodeLifetime
 import io.canopy.engine.logging.EngineLogs
 
 /**
@@ -99,7 +100,7 @@ class Computed<T>(private val block: () -> T) {
             disconnectHandlers.remove(dep)?.disconnect()
         }
         for (dep in added) {
-            val handler = dep connect { _ -> recompute() }
+            val handler = NodeLifetime.withOwner(null) { dep connect { _ -> recompute() } }
             disconnectHandlers[dep] = handler
         }
         dependencies = newDeps
