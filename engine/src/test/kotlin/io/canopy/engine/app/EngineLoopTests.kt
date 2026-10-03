@@ -66,6 +66,24 @@ class EngineLoopTests {
     }
 
     @Test
+    fun `slow frame caps physics steps per update`() {
+        var physicsSteps = 0
+        val loop = EngineLoop(
+            onEnter = {},
+            onUpdate = {},
+            onPhysicsUpdate = { physicsSteps++ },
+            onResize = { _, _ -> },
+            onExit = {},
+            physicsStep = 0.1f
+        )
+
+        loop.enter()
+        loop.update(1f)
+
+        assertEquals(5, physicsSteps)
+    }
+
+    @Test
     fun `updates require an entered active loop`() {
         val loop = EngineLoop({}, {}, {}, { _, _ -> }, {})
 

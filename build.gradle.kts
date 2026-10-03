@@ -128,6 +128,9 @@ val coverageReport = tasks.register<JacocoReport>("coverageReport") {
         val total = missed + covered
         val percentage = if (total == 0L) 0.0 else covered * 100.0 / total
         println("Line coverage: $covered / $total lines (${"%.1f".format(percentage)}%)")
+        check(percentage >= 60.0) {
+            "Aggregate line coverage ${"%.1f".format(percentage)}% is below the 60% target."
+        }
         println("JaCoCo XML: ${xmlReport.absolutePath}")
         println("JaCoCo HTML: ${reports.html.outputLocation.get().asFile.resolve("index.html").absolutePath}")
     }
