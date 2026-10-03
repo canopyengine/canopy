@@ -2,6 +2,12 @@
 
 <p align="center"><img src="logo.png" width="420" alt="Canopy Engine logo"></p>
 
+<p align="center">
+  <img src="https://img.shields.io/badge/version-0.1.0--dev2-red.svg" alt="Canopy version 0.1.0-dev2">
+  <img src="https://img.shields.io/badge/kotlin-2.4.10-blue.svg" alt="Kotlin version 2.4.10">
+  <img src="https://img.shields.io/badge/license-MIT%20OR%20Apache--2.0-green.svg" alt="License: MIT or Apache 2.0">
+</p>
+
 **Canopy 0.1.0-dev2** is an experimental Kotlin/JVM engine built around node
 trees, composable behaviors and reactive state. This is a development snapshot;
 public APIs may change before stable 0.1.0.
