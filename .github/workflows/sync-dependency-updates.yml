@@ -1,0 +1,67 @@
+name: Sync dependency branch
+
+on:
+  push:
+    branches: [ "main" ]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  actions: write
+
+concurrency:
+  group: sync-dependency-updates
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          ref: main
+
+      - name: Merge main into dependency-updates
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+
+          # Refetch both tips on retry so concurrent dependency updates are preserved.
+          for attempt in 1 2 3; do
+            git fetch origin main dependency-updates
+            git checkout -B dependency-updates origin/dependency-updates
+            if git merge-base --is-ancestor origin/main HEAD; then
+              echo 'dependency-updates already contains main.'
+              exit 0
+            fi
+
+            if ! git merge --no-edit origin/main \
+              -m '[Agent] Sync main into dependency-updates' \
+              -m 'Agent-Originated: true' -m 'Agent: GitHub Actions'; then
+              git merge --abort
+              echo '::error::Merge conflict. Resolve main into dependency-updates manually, then rerun this workflow.'
+              exit 1
+            fi
+
+            # A normal push rejects races and never overwrites branch history.
+            if git push origin HEAD:refs/heads/dependency-updates; then
+              echo 'Merged main into dependency-updates.'
+              exit 0
+            fi
+          done
+          echo '::error::Unable to push after three attempts. Check branch protections and rerun the workflow.'
+          exit 1
+
+      # GITHUB_TOKEN pushes do not trigger push workflows, so dispatch CI explicitly.
+      - name: Validate dependency branch
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          gh workflow run build.yml --ref dependency-updates
+          gh workflow run codeql.yml --ref dependency-updates
