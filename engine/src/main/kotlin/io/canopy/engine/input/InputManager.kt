@@ -11,11 +11,17 @@ import io.canopy.engine.input.events.InputEvent
 import io.canopy.engine.input.events.InputState
 import io.canopy.engine.math.Vector2
 
+/**
+ * Bridges backend events to frame input states. Only enqueue supports concurrent producers; other access belongs
+ * to the engine thread.
+ */
 abstract class InputManager : Manager {
 
     private val mapper = InputMapper()
 
     private val _actionStates = mutableMapOf<String, InputState>()
+
+    /** Returns a copy of the current mapped action states. */
     val actionStates get() = _actionStates.toMap()
 
     /**
@@ -31,6 +37,8 @@ abstract class InputManager : Manager {
      */
     private val _eventsThisFrame = mutableListOf<InputEvent>()
     private var eventsConsumedThisFrame = false
+
+    /** Read-only view of raw events, cleared and repopulated by the next processEvents call. */
     val eventsThisFrame: List<InputEvent> get() = _eventsThisFrame
 
     /** Returns raw events once per frame, even if a system ticks multiple times. */
@@ -93,24 +101,31 @@ abstract class InputManager : Manager {
         }
     }
 
+    /** Returns the current action state, defaulting to Released for an unknown action. */
     fun getActionState(action: String): InputState = _actionStates[action] ?: InputState.Released
 
+    /** Returns whether the action is held or was just pressed. */
     fun isActionPressed(action: String): Boolean {
         val state = getActionState(action)
         return state == InputState.Pressed || state == InputState.JustPressed
     }
 
+    /** Returns whether the action transitioned to pressed on the last state update. */
     fun isActionJustPressed(action: String): Boolean = getActionState(action) == InputState.JustPressed
 
+    /** Returns whether the action transitioned to released on the last state update. */
     fun isActionJustReleased(action: String): Boolean = getActionState(action) == InputState.JustReleased
 
+    /** Returns whether the action is released or was just released. */
     fun isActionReleased(action: String): Boolean {
         val state = getActionState(action)
         return state == InputState.Released || state == InputState.JustReleased
     }
 
+    /** Polls the backend directly for a physical binding. */
     fun isPressed(bind: InputBind): Boolean = pollPressed(bind)
 
+    /** Returns -1 or 1 when only one action is pressed, otherwise zero. */
     fun getAxis(negativeAction: String, positiveAction: String): Float {
         val negativePressed = isActionPressed(negativeAction)
         val positivePressed = isActionPressed(positiveAction)
@@ -122,11 +137,13 @@ abstract class InputManager : Manager {
         }
     }
 
+    /** Combines two digital axes without normalizing diagonal input. */
     fun getInputVector(negativeX: String, positiveX: String, negativeY: String, positiveY: String): Vector2 = Vector2(
         getAxis(negativeX, positiveX),
         getAxis(negativeY, positiveY)
     )
 
+    /** Replaces or appends the supplied bindings; replacement also clears all cached action states. */
     fun mapActions(vararg actions: Pair<String, List<InputBind>>, replace: Boolean = true) {
         mapper.mapActions(*actions, replace = replace)
 
@@ -137,15 +154,18 @@ abstract class InputManager : Manager {
         }
     }
 
+    /** Registers one action mapping using replacement behavior. */
     operator fun Pair<String, List<InputBind>>.unaryPlus() {
         mapActions(this)
     }
 
+    /** Removes the named mapping and its cached state. */
     fun unmapAction(action: String) {
         mapper.unmapAction(action)
         _actionStates.remove(action)
     }
 
+    /** Removes all mappings and cached action states. */
     fun clearMappings() {
         mapper.clearMappings()
         _actionStates.clear()
@@ -158,6 +178,7 @@ abstract class InputManager : Manager {
         eventQueue.add(event)
     }
 
+    /** Registers input mapping serialization with the current SaveManager; loading resets states to Released. */
     fun registerPersistence(destination: String = "input", moduleId: String = "input") {
         registerSaveModule(
             destination = destination,

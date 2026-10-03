@@ -4,6 +4,7 @@ import com.badlogic.gdx.graphics.Texture
 import io.canopy.adapters.libgdx.data.assets.LibGdxAssetsManager
 import io.canopy.engine.data.assets.FileSource
 
+/** Owns a LibGDX texture; closing the asset disposes the underlying GPU resource. */
 class LibGdxTextureAsset(private val texture: Texture) : AutoCloseable {
     override fun close() {
         texture.dispose()

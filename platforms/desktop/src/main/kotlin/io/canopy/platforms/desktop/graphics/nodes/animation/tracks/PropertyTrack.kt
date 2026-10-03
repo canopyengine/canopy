@@ -2,6 +2,7 @@ package io.canopy.platforms.desktop.graphics.nodes.animation.tracks
 
 import kotlin.reflect.KMutableProperty0
 
+/** Animation track assigning interpolated values to a mutable property reference. */
 class PropertyTrack<P>(
     val property: KMutableProperty0<P>,
     block: PropertyTrack<P>.() -> Unit = {

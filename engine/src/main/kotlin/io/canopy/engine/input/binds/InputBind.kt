@@ -2,6 +2,7 @@ package io.canopy.engine.input.binds
 
 import kotlinx.serialization.Serializable
 
+/** Backend-independent physical bindings; code values are Canopy identifiers, not native backend key codes. */
 @Serializable
 enum class InputBind(val type: Type, val code: Int) {
     // Letters
@@ -131,6 +132,7 @@ enum class InputBind(val type: Type, val code: Int) {
     FORWARD_MOUSE(Type.Mouse, 1004),
     ;
 
+    /** The physical device category used when polling a binding. */
     @Serializable
     enum class Type {
         Keyboard,
@@ -138,6 +140,7 @@ enum class InputBind(val type: Type, val code: Int) {
     }
 
     companion object {
+        /** Looks up a binding name ignoring case; throws when no binding matches. */
         fun from(code: String) = entries.first { it.name.equals(code, true) }
     }
 }

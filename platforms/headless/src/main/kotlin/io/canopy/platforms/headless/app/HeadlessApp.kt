@@ -4,6 +4,7 @@ import io.canopy.adapters.libgdx.app.headless.HeadlessHost
 import io.canopy.engine.app.App
 import io.canopy.engine.app.AppConfig
 
+/** Application hosted by the LibGDX headless backend. */
 class HeadlessApp internal constructor() : App<AppConfig>() {
 
     override fun defaultConfig(): AppConfig = AppConfig(
@@ -15,4 +16,5 @@ class HeadlessApp internal constructor() : App<AppConfig>() {
     }
 }
 
+/** Constructs and configures an application without launching it. */
 fun headlessApp(builder: HeadlessApp.() -> Unit = {}): HeadlessApp = HeadlessApp().apply(builder)
