@@ -33,4 +33,8 @@ dependencies {
 
     // Logging
     runtimeOnly(libs.logback.classic)
+
+    // Testing
+    testImplementation(libs.kotlin.test.junit5)
+    testImplementation(libs.junit.jupiter)
 }

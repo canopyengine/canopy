@@ -133,9 +133,31 @@ the agent marker; separate the explanatory body with a blank line and wrap it
 around 80 characters.
 
 Keep the configured Git author identity. Do not invent a human review, signature,
-co-author, agent identity, or email address. Do not rewrite published history or
-rename another contributor's branch merely to retrofit this convention. Follow
-explicit user-specified branch names while retaining provenance in commits and PRs.
+co-author, agent identity, or email address. Agent co-author attribution is permitted
+under the rules below. Do not rewrite published history or rename another
+contributor's branch merely to retrofit this convention. Follow explicit
+user-specified branch names while retaining provenance in commits and PRs.
+
+| Tool | Approved commit trailer |
+| --- | --- |
+| Codex | `Co-authored-by: Codex <noreply@openai.com>` |
+| Claude Code | `Co-authored-by: Claude Code <noreply@anthropic.com>` |
+
+The Codex identity appears in [OpenAI's attribution implementation](https://github.com/openai/codex/pull/11617).
+Claude Code documents the Anthropic email and configurable attribution names in its
+[attribution reference](https://code.claude.com/docs/en/settings-reference#attribution-commit).
+Use `Claude Code` as this repository's stable tool name.
+
+Coding agents may use the approved co-author identities above on commits they
+contributed to. Other tools may use an identity documented by their publisher or
+explicitly approved by a maintainer; record the exact name, email, and supporting
+source in this table before use. Never borrow another tool's identity or invent an
+attribution email. If no approved identity exists, omit the co-author trailer and
+retain the required agent-provenance disclosure.
+
+Co-author attribution applies to future commits only and does not imply human
+review or approval. Preserve the configured Git author, `[Agent]` subjects,
+required agent-provenance trailers, PR origin statements, and labels.
 
 ## GitHub workflow and labels
 
