@@ -1,7 +1,11 @@
 package io.canopy.engine.core.flows.events
 
+import io.canopy.engine.core.nodes.Node
+import io.canopy.engine.core.nodes.NodeLifetime
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.asSharedFlow
 
 /**
  * A reactive value container that notifies observers when it changes.
@@ -43,25 +47,31 @@ import kotlinx.coroutines.flow.MutableSharedFlow
  *
  * @param initial Initial value of the signal.
  */
-class Signal<T>(initial: T) {
+@OptIn(ExperimentalCoroutinesApi::class)
+class Signal<T>(initial: T, owner: Node<*>? = NodeLifetime.current()) {
+    private val lifetime = SourceLifetime(owner)
 
-    private val valueChanged = event<T>()
+    private val valueChanged = event<T>(owner = null)
 
     /**
      * Kotlin Flow of value changes (replay = 1).
      *
      * New collectors immediately receive the current value.
      */
-    val flow = MutableSharedFlow<T>(
+    private val changes = MutableSharedFlow<T>(
         replay = 1,
         extraBufferCapacity = 64,
         onBufferOverflow = BufferOverflow.DROP_OLDEST
     )
 
-    @Volatile private var value: T = initial
+    /** Read-only stream; owned collectors must register their job for cancellation. */
+    val flow get() = changes.asSharedFlow().also { lifetime.check("read signal flow") }
+
+    @Volatile private var value: Any? = initial
 
     init {
-        flow.tryEmit(initial)
+        changes.tryEmit(initial)
+        lifetime.bind(::dispose)
     }
 
     /**
@@ -72,8 +82,10 @@ class Signal<T>(initial: T) {
      * Use [untrack] to read the current value without registering a dependency.
      */
     operator fun invoke(): T {
+        lifetime.check("read signal")
         TrackingContext.register(this)
-        return value
+        @Suppress("UNCHECKED_CAST")
+        return value as T
     }
 
     /**
@@ -87,23 +99,46 @@ class Signal<T>(initial: T) {
      * ```
      */
     fun update(handler: (T) -> T) {
-        val new = handler(value)
+        lifetime.check("update signal")
+        @Suppress("UNCHECKED_CAST")
+        val new = handler(value as T)
+        lifetime.check("update signal")
         val old = value
         if (old != new) {
             value = new
             valueChanged.emit(new)
-            flow.tryEmit(new)
+            if (!lifetime.disposed) changes.tryEmit(new)
         }
     }
 
     /** Subscribes a listener to value changes (weak reference). */
-    infix fun connect(listener: (T) -> Unit) = valueChanged connect listener
+    infix fun connect(listener: (T) -> Unit): EventDisconnectHandler {
+        lifetime.check("connect signal")
+        return valueChanged connect listener
+    }
+
+    /** Subscribes with automatic disconnection when [owner] exits or is removed. */
+    fun connect(owner: Node<*>?, listener: (T) -> Unit): EventDisconnectHandler {
+        lifetime.check("connect signal")
+        return valueChanged.connect(owner, listener)
+    }
 
     /** Unsubscribes a previously registered listener. */
     infix fun disconnect(listener: (T) -> Unit) = valueChanged disconnect listener
 
     /** Removes all listeners registered via [connect]. */
-    fun clear() = valueChanged.clear()
+    fun clear() {
+        lifetime.check("clear signal")
+        valueChanged.clear()
+    }
+
+    /** Permanently releases listeners, cached value and replay contents. Shared signals require explicit disposal. */
+    fun dispose() {
+        if (!lifetime.dispose()) return
+        valueChanged.dispose()
+        value = null
+        changes.resetReplayCache()
+    }
 }
 
 /* ------------------------------------------------------------------
@@ -118,3 +153,6 @@ fun <T> signal(value: T) = Signal(value)
 
 /** Convenience for nullable signals starting as null. */
 fun <T> Nothing?.asSignal() = signal<T?>(null)
+
+/** Creates a signal with explicit ownership; null preserves a shared lifetime. */
+fun <T> signal(owner: Node<*>?, value: T) = Signal(value, owner)

@@ -1,126 +1,89 @@
 package io.canopy.engine.core.flows.events
 
-import io.canopy.engine.logging.EngineLogs
+import io.canopy.engine.core.nodes.Node
+import io.canopy.engine.core.nodes.NodeLifetime
 
 /**
- * A read-only reactive value derived from one or more [Signal]s.
- *
- * The derivation [block] is run eagerly on construction and re-run automatically
- * whenever any dependency (a signal read via `signal()` inside the block) changes.
- * The result is cached — [value] is only recomputed on dependency change, not on
- * every read.
- *
- * ## Dependency tracking
- *
- * Dependencies are discovered automatically. Any [Signal] (or [Computed]) invoked via
- * `signal()` / `computed()` inside [block] registers itself as a dependency for that
- * run. Dynamic dependencies are supported: only the signals accessed in the most recent
- * run are subscribed.
- *
- * ## Observation
- *
- * [Computed] exposes a read surface that mirrors [Signal]:
- * - [value] — current derived value (also tracks as a dependency when read)
- * - `computed()` — invoke operator, equivalent to [value]
- * - [flow] — Kotlin Flow (replay=1, distinctUntilChanged)
- * - [connect] / [disconnect] — weak-reference callback listeners
- *
- * ## Lifecycle
- *
- * A [Computed] stays active as long as it is reachable. To stop it reacting, drop all
- * references to it; its dependency subscriptions become eligible for GC along with it.
- *
- * @param block The derivation function. Should be pure — avoid side effects here; use
- *              [effect] for side effects instead.
+ * Lazily evaluated cached computation. Creation ownership is independent of the first reader.
+ * Node-local computations dispose on tree exit; shared computations require explicit disposal.
+ * Derivations suppress ambient ownership and should be pure. All operations are game-thread confined.
  */
-class Computed<T>(private val block: () -> T) {
+class Computed<T>(block: () -> T, owner: Node<*>? = NodeLifetime.current()) {
+    private val lifetime = SourceLifetime(owner)
+    private var action: (() -> T)? = block
+    private var output: Signal<T>? = null
+    private var dependencies = emptySet<Signal<*>>()
+    private val handlers = mutableMapOf<Signal<*>, EventDisconnectHandler>()
+    private var recomputing = false
+    private var cancelRemoval: (() -> Unit)? = null
+    init {
+        lifetime.bind(::dispose)
+        cancelRemoval = owner?.onRemoval(::dispose)
+    }
 
-    private val log = EngineLogs.subsystem("computed")
+    private fun signal(): Signal<T> {
+        lifetime.check("read computed")
+        return output ?: Signal(runBlock(), owner = null).also { output = it }
+    }
 
-    private val signal by lazy { Signal(runBlock()) }
-    private var dependencies: Set<Signal<*>> = emptySet()
-    private val disconnectHandlers: MutableMap<Signal<*>, EventDisconnectHandler> = mutableMapOf()
+    /** Read-only changes stream; cancel owned collector jobs on removal. */
+    val flow get() = signal().flow
 
-    @Volatile private var recomputing = false
+    /** Reads the cached value and participates in dependency tracking. */
+    operator fun invoke(): T = signal()()
 
-    // -------------------------------------------------------------------------
-    // Public read surface
-    // -------------------------------------------------------------------------
+    /** Connects using the caller's explicit or ambient tree lifetime. */
+    infix fun connect(listener: (T) -> Unit) = signal().connect(listener)
 
-    /** Flow of derived values (flowreplay = 1, distinctUntilChanged). */
-    val flow get() = signal.flow
+    /** Connects using explicit tree-lifetime ownership. */
+    fun connect(owner: Node<*>?, listener: (T) -> Unit) = signal().connect(owner, listener)
 
-    /** Subscribes a listener to derived-value changes (weak reference). */
-    infix fun connect(listener: (T) -> Unit) = signal connect listener
-
-    /** Unsubscribes a previously registered listener. */
-    infix fun disconnect(listener: (T) -> Unit) = signal disconnect listener
-
-    /**
-     * Reads the current derived value, registering this computed as a dependency in
-     * the enclosing [computed] or [effect] block (if any). Equivalent to [signal()].
-     */
-    operator fun invoke(): T = signal()
-
-    // -------------------------------------------------------------------------
-    // Internal recomputation
-    // -------------------------------------------------------------------------
-
+    /** Disconnects callback storage and ownership registrations. */
+    infix fun disconnect(listener: (T) -> Unit) = signal().disconnect(listener)
     private fun recompute() {
-        if (recomputing) {
-            log.warn(
-                "event" to "computed.circular"
-            ) { "Circular computed dependency detected — skipping recomputation" }
-            return
-        }
+        if (lifetime.disposed || recomputing) return
         recomputing = true
         try {
-            signal.update { runBlock() }
+            output?.update { runBlock() }
         } finally {
             recomputing = false
         }
     }
-
     private fun runBlock(): T {
+        lifetime.check("compute")
         val frame = TrackingContext.push()
-        return try {
-            block()
+        try {
+            return NodeLifetime.withOwner(null) { action!!.invoke() }
         } finally {
             TrackingContext.pop()
             updateDependencies(frame)
         }
     }
-
-    private fun updateDependencies(newDeps: Set<Signal<*>>) {
-        val added = newDeps - dependencies
-        val removed = dependencies - newDeps
-
-        for (dep in removed) {
-            disconnectHandlers.remove(dep)?.disconnect()
+    private fun updateDependencies(next: Set<Signal<*>>) {
+        if (lifetime.disposed) return
+        for (dep in dependencies - next) handlers.remove(dep)?.disconnect()
+        for (dep in next - dependencies) {
+            handlers[dep] = NodeLifetime.withOwner(null) { dep.connect { _ -> recompute() } }
         }
-        for (dep in added) {
-            val handler = dep connect { _ -> recompute() }
-            disconnectHandlers[dep] = handler
-        }
-        dependencies = newDeps
+        dependencies = next
+    }
+
+    /** Idempotently releases dependency callbacks, cached output and captured calculation closure. */
+    fun dispose() {
+        if (!lifetime.dispose()) return
+        cancelRemoval?.invoke()
+        cancelRemoval = null
+        handlers.values.forEach { it.disconnect() }
+        handlers.clear()
+        dependencies = emptySet()
+        output?.dispose()
+        output = null
+        action = null
     }
 }
 
-/* ------------------------------------------------------------------
- * Factory
- * ------------------------------------------------------------------ */
+/** Creates a computation capturing its creation owner. */
+fun <T> computed(block: () -> T) = Computed(block)
 
-/**
- * Creates a [Computed] whose value is derived by [block].
- *
- * Any [Signal] (or [Computed]) invoked via `signal()` / `computed()` inside [block]
- * becomes a reactive dependency — the computed value updates automatically whenever a
- * dependency changes.
- *
- * Example:
- * ```kotlin
- * val hp = signal(100)
- * val isDead = computed { hp() <= 0 }
- * ```
- */
-fun <T> computed(block: () -> T): Computed<T> = Computed(block)
+/** Creates a computation with explicit ownership; null means shared. */
+fun <T> computed(owner: Node<*>?, block: () -> T) = Computed(block, owner)

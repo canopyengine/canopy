@@ -1,131 +1,101 @@
 package io.canopy.engine.core.flows.events
 
-import java.util.concurrent.CopyOnWriteArrayList
-import io.canopy.engine.logging.EngineLogs
+import io.canopy.engine.core.nodes.Node
+import io.canopy.engine.core.nodes.NodeLifetime
 
 /**
- * Simple event abstraction with weakly referenced listeners.
- *
- * Why weak references?
- * - Event subscriptions are easy to forget to unsubscribe.
- * - Weak listeners allow subscribers to be garbage-collected without leaks.
- *
- * Trade-offs:
- * - A listener can disappear if nothing else strongly references it.
- *   (This is desirable for many UI/game objects, but surprising if you're not expecting it.)
- *
- * Threading:
- * - Backed by [CopyOnWriteArrayList], which is safe to iterate while mutating.
- * - This favors read-heavy patterns (many emits, few connects/disconnects).
- *
- * This file provides 0..2 argument event types:
- * - [NoArgEvent]
- * - [OneArgEvent]
- * - [TwoArgsEvent]
- *
- * (Easy to extend if you need more arities.)
+ * Synchronous, game-thread-confined event. Unowned listeners remain weak; retain a handle to retain a callback.
+ * Managed connections are tree-owned. Sources capture creation ownership and dispose on permanent destruction.
+ * Listener calls suppress ambient ownership; nested resources require explicit owners.
  */
-sealed class Event<T> {
-    protected val log = EngineLogs.subsystem("events")
+sealed class Event<T : Any>(owner: Node<*>?) {
+    private val lifetime = SourceLifetime(owner)
+    internal val connections = EventConnections<T>()
+    init {
+        lifetime.bind(::dispose)
+    }
+    protected fun requireOpen(operation: String) {
+        lifetime.check(operation)
+    }
 
-    /** Removes all listeners. */
-    abstract fun clear()
+    /** Removes every listener and its ownership registration. */
+    fun clear() {
+        requireOpen("clear event")
+        connections.clear()
+    }
 
-    /** Number of currently tracked listeners (dead weak refs are cleaned up opportunistically). */
-    abstract fun size(): Int
+    /** Number of live callbacks, pruning dead weak references. */
+    fun size(): Int {
+        requireOpen("event size")
+        return connections.size()
+    }
 
+    /** Whether there are no live listeners. */
     fun isEmpty(): Boolean = size() == 0
 
-    /** Adds a listener. */
-    abstract infix fun connect(listener: T): EventDisconnectHandler
+    /** Connects under the current managed scope, or returns an unowned retained handle. */
+    infix fun connect(listener: T): EventDisconnectHandler {
+        requireOpen("connect event")
+        return connections.connect(listener)
+    }
 
-    /** Removes a listener. */
-    abstract infix fun disconnect(listener: T)
+    /** Connects with explicit tree-lifetime ownership. */
+    fun connect(owner: Node<*>?, listener: T): EventDisconnectHandler =
+        NodeLifetime.withOwner(owner) { connect(listener) }
+
+    /** Disconnects all registrations of the same listener identity, including owned handles. */
+    infix fun disconnect(listener: T) {
+        requireOpen("disconnect event")
+        connections.disconnect(listener)
+    }
+
+    /** Idempotent permanent disposal; callable during destruction. */
+    fun dispose() {
+        if (lifetime.dispose()) connections.clear()
+    }
 }
 
-/* ============================================================
- * Type of Events
- * ============================================================ */
-
-/** 0-argument event. */
-class NoArgEvent : Event<() -> Unit>() {
-    private val callbacks = EventWeakListeners<() -> Unit>(kind = "0-arg")
-
-    override infix fun connect(listener: () -> Unit): EventDisconnectHandler {
-        callbacks.add(listener)
-        return EventDisconnectHandler { disconnect(listener) }
-    }
-    override infix fun disconnect(listener: () -> Unit) = callbacks.remove(listener)
-
+/** Zero-argument source, node-local unless constructed with an explicit null owner. */
+class NoArgEvent(owner: Node<*>? = NodeLifetime.current()) : Event<() -> Unit>(owner) {
+    /** Synchronously invokes live listeners in registration order. */
     fun emit() {
-        if (log.isTraceEnabled()) {
-            log.trace(
-                "event" to "event.emit",
-                "kind" to "0-arg",
-                "listeners" to callbacks.size()
-            ) { "Emit" }
-        }
-        callbacks.forEach { it() }
+        requireOpen("emit event")
+        connections.emit { it() }
     }
-
-    override fun clear() = callbacks.clear()
-    override fun size(): Int = callbacks.size()
 }
 
-/** 1-argument event. */
-class OneArgEvent<A> : Event<(A) -> Unit>() {
-    private val callbacks = EventWeakListeners<(A) -> Unit>(kind = "1-arg")
-
-    override infix fun connect(listener: (A) -> Unit): EventDisconnectHandler {
-        callbacks.add(listener)
-        return EventDisconnectHandler { disconnect(listener) }
+/** One-argument source. */
+class OneArgEvent<A>(owner: Node<*>? = NodeLifetime.current()) : Event<(A) -> Unit>(owner) {
+    /** Synchronously invokes live listeners; disconnections take effect during emission. */
+    fun emit(value: A) {
+        requireOpen("emit event")
+        connections.emit { it(value) }
     }
-    override infix fun disconnect(listener: (A) -> Unit) = callbacks.remove(listener)
-
-    fun emit(a: A) {
-        if (log.isTraceEnabled()) {
-            log.trace(
-                "event" to "event.emit",
-                "kind" to "1-arg",
-                "listeners" to callbacks.size()
-            ) { "Emit" }
-        }
-        callbacks.forEach { it(a) }
-    }
-
-    override fun clear() = callbacks.clear()
-    override fun size(): Int = callbacks.size()
 }
 
-/** 2-argument event. */
-class TwoArgsEvent<A, B> : Event<(A, B) -> Unit>() {
-    private val callbacks = EventWeakListeners<(A, B) -> Unit>(kind = "2-arg")
-
-    override infix fun connect(listener: (A, B) -> Unit): EventDisconnectHandler {
-        callbacks.add(listener)
-        return EventDisconnectHandler { disconnect(listener) }
+/** Two-argument source. */
+class TwoArgsEvent<A, B>(owner: Node<*>? = NodeLifetime.current()) : Event<(A, B) -> Unit>(owner) {
+    /** Synchronously invokes live listeners. */
+    fun emit(first: A, second: B) {
+        requireOpen("emit event")
+        connections.emit { it(first, second) }
     }
-    override infix fun disconnect(listener: (A, B) -> Unit) = callbacks.remove(listener)
-
-    fun emit(a: A, b: B) {
-        if (log.isTraceEnabled()) {
-            log.trace(
-                "event" to "event.emit",
-                "kind" to "2-arg",
-                "listeners" to callbacks.size()
-            ) { "Emit" }
-        }
-        callbacks.forEach { it(a, b) }
-    }
-
-    override fun clear() = callbacks.clear()
-    override fun size(): Int = callbacks.size()
 }
 
-/* ============================================================
- * Factory functions
- * ============================================================ */
-
+/** Creates a node-local source in a managed callback, otherwise a shared source. */
 fun event() = NoArgEvent()
+
+/** Creates a source with explicit ownership; null means shared. */
+fun event(owner: Node<*>?) = NoArgEvent(owner)
+
+/** Creates a one-argument source using creation ownership. */
 fun <A> event() = OneArgEvent<A>()
+
+/** Creates a one-argument source with explicit ownership. */
+fun <A> event(owner: Node<*>?) = OneArgEvent<A>(owner)
+
+/** Creates a two-argument source using creation ownership. */
 fun <A, B> event() = TwoArgsEvent<A, B>()
+
+/** Creates a two-argument source with explicit ownership. */
+fun <A, B> event(owner: Node<*>?) = TwoArgsEvent<A, B>(owner)

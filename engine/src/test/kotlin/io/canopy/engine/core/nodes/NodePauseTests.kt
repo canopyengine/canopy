@@ -17,20 +17,21 @@ class NodePauseTests {
     private var paused = false
     private val calls = mutableListOf<String>()
 
-    private class RecordingNode(name: String, private val calls: MutableList<String>) : Node<RecordingNode>(name) {
-        override fun nodeUpdate(delta: Float) {
+    private class RecordingNode(name: String, calls: MutableList<String>) : Node<RecordingNode>(name) {
+        private val calls by nodeProperty(calls)
+        override fun onUpdate(delta: Float) {
             calls += "frame:$name:$delta"
-            super.nodeUpdate(delta)
+            super.onUpdate(delta)
         }
 
-        override fun nodePhysicsUpdate(delta: Float) {
+        override fun onPhysicsUpdate(delta: Float) {
             calls += "physics:$name:$delta"
-            super.nodePhysicsUpdate(delta)
+            super.onPhysicsUpdate(delta)
         }
 
-        override fun nodeInput(event: InputEvent) {
+        override fun onInput(event: InputEvent) {
             calls += "input:$name"
-            super.nodeInput(event)
+            super.onInput(event)
         }
     }
 

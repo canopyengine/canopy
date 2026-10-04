@@ -1,5 +1,7 @@
 package io.canopy.engine.core.flows.events
 
+import io.canopy.engine.core.nodes.Node
+import io.canopy.engine.core.nodes.NodeLifetime
 import io.canopy.engine.logging.EngineLogs
 
 /**
@@ -18,7 +20,11 @@ import io.canopy.engine.logging.EngineLogs
  * the effect. After disposal, no further runs occur and all dependency subscriptions
  * are removed.
  *
- * **Important:** Hold a strong reference to the returned [Effect] for as long as you
+ * Effects created during managed node callbacks are retained until that node exits, then disposed.
+ * Ownership is captured at construction; later reruns do not open a node ownership scope. Use
+ * explicit owners for resources created during those reruns.
+ *
+ * **Important:** Outside a node ownership scope, hold a strong reference to the returned [Effect] for as long as you
  * need it to remain active. If the only reference is dropped, the effect and its
  * subscriptions become eligible for GC.
  *
@@ -35,8 +41,9 @@ import io.canopy.engine.logging.EngineLogs
  * e.dispose() // stops reacting
  * ```
  */
-class Effect(private val block: () -> Unit) {
+class Effect(block: () -> Unit) {
 
+    private var action: (() -> Unit)? = block
     private val log = EngineLogs.subsystem("effect")
 
     private var dependencies: Set<Signal<*>> = emptySet()
@@ -46,8 +53,16 @@ class Effect(private val block: () -> Unit) {
     private var running = false
     private var rerunRequested = false
 
+    private var cancelOwnership: (() -> Unit)? = null
+
     init {
-        run()
+        cancelOwnership = NodeLifetime.own(::dispose)
+        try {
+            run()
+        } catch (error: Throwable) {
+            dispose()
+            throw error
+        }
     }
 
     // -------------------------------------------------------------------------
@@ -59,7 +74,11 @@ class Effect(private val block: () -> Unit) {
      * All dependency subscriptions are removed. Safe to call multiple times.
      */
     fun dispose() {
+        if (disposed) return
         disposed = true
+        action = null
+        cancelOwnership?.invoke()
+        cancelOwnership = null
         disconnectHandlers.values.forEach { it.disconnect() }
         disconnectHandlers.clear()
         dependencies = emptySet()
@@ -81,7 +100,7 @@ class Effect(private val block: () -> Unit) {
             running = true
             val frame = TrackingContext.push()
             try {
-                block()
+                NodeLifetime.withOwner(null) { action?.invoke() }
             } finally {
                 TrackingContext.pop()
                 running = false
@@ -91,6 +110,7 @@ class Effect(private val block: () -> Unit) {
     }
 
     private fun updateDependencies(newDeps: Set<Signal<*>>) {
+        if (disposed) return
         val added = newDeps - dependencies
         val removed = dependencies - newDeps
 
@@ -98,8 +118,8 @@ class Effect(private val block: () -> Unit) {
             disconnectHandlers.remove(dep)?.disconnect()
         }
         for (dep in added) {
-            val handler = dep connect { _ ->
-                if (!disposed) run()
+            val handler = NodeLifetime.withOwner(null) {
+                dep connect { _ -> if (!disposed) run() }
             }
             disconnectHandlers[dep] = handler
         }
@@ -127,3 +147,6 @@ class Effect(private val block: () -> Unit) {
  * ```
  */
 fun effect(block: () -> Unit): Effect = Effect(block)
+
+/** Creates an effect retained until [owner] exits or is removed, then automatically disposes it. */
+fun effect(owner: Node<*>?, block: () -> Unit): Effect = NodeLifetime.withOwner(owner) { Effect(block) }
