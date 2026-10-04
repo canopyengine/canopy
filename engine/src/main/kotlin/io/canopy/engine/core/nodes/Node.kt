@@ -14,7 +14,8 @@ import kotlinx.coroutines.Job
  * Typed, guarded node facade preserving class-named Kotlin construction and concrete DSL receivers.
  * Engine-owned state is referenced weakly. Destruction invalidates state access, releases owned work,
  * and leaves only immutable identity/diagnostics in retained facades. All operations are game-thread confined.
- * Custom stored properties must use [nodeProperty]. The Canopy compiler plugin rejects unmanaged fields.
+ * Custom stored values must use [nodeProperty]; runtime queries may use [io.canopy.engine.core.queries.Dependency].
+ * The Canopy compiler plugin rejects unmanaged fields.
  */
 @CanopyDsl
 @Suppress("UNCHECKED_CAST")
@@ -546,6 +547,8 @@ abstract class Node<N : Node<N>> protected constructor(
 
     @JvmSynthetic
     internal fun owningManager(): SceneManager = payload().owner
+
+    internal fun isSearchTransparent(): Boolean = skipOnSearch
 
     @JvmSynthetic
     internal fun childSnapshot(): List<Node<*>> = payload().snapshot()
