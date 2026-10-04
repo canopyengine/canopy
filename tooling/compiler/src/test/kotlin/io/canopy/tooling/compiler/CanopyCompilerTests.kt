@@ -66,6 +66,26 @@ class CanopyCompilerTests {
     }
 
     @Test
+    fun `consumer typed dependency delegates compile but storing query descriptors does not`() {
+        // Arrange / Act / Assert
+        compileConsumer(
+            """
+            import io.canopy.engine.core.queries.child
+            class Enemy : Node<Enemy>() { val target by child<Enemy>() }
+            """.trimIndent()
+        ) { code, output -> assertEquals(ExitCode.OK, code, output) }
+        compileConsumer(
+            """
+            import io.canopy.engine.core.queries.child
+            class Enemy : Node<Enemy>() { val query = child<Enemy>() }
+            """.trimIndent()
+        ) { code, output ->
+            assertEquals(ExitCode.COMPILATION_ERROR, code, output)
+            assertTrue("CANOPY_UNMANAGED_NODE_STATE" in output, output)
+        }
+    }
+
+    @Test
     fun `registered rule provider runs alongside mandatory node checks`() {
         withRuleJar(TestNamingRule::class.java) { jar ->
             // Act / Assert: the provider contributes its diagnostic; mandatory safety remains active.
@@ -158,7 +178,27 @@ class CanopyCompilerTests {
             val bytes = ByteArrayOutputStream()
             val compiler = K2JVMCompiler()
             val common = arrayOf("-no-stdlib", "-no-reflect", "-classpath", standardLibrary)
-            val apiCode = compiler.exec(PrintStream(bytes), *common, "-d", apiOutput.path, apiFile.path)
+            val queryFile = directory.resolve("Queries.kt").apply {
+                writeText(
+                    """
+                    package io.canopy.engine.core.queries
+                    import kotlin.reflect.KProperty
+                    import io.canopy.engine.core.nodes.Node
+                    class Dependency<T> {
+                        operator fun getValue(owner: Node<*>, property: KProperty<*>): T = TODO()
+                    }
+                    inline fun <reified T : Node<*>> child(): Dependency<T> = Dependency()
+                    """.trimIndent()
+                )
+            }
+            val apiCode = compiler.exec(
+                PrintStream(bytes),
+                *common,
+                "-d",
+                apiOutput.path,
+                apiFile.path,
+                queryFile.path
+            )
             assertEquals(ExitCode.OK, apiCode, bytes.toString())
             bytes.reset()
             val game = directory.resolve("Game.kt").apply {
