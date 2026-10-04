@@ -33,8 +33,10 @@ class NodeStateRule : CanopyCompilerRule {
                 !field.isStatic &&
                 (
                     !property.isDelegated ||
-                        field.type.classFqName?.asString() !=
-                        "io.canopy.engine.core.nodes.NodeProperty"
+                        field.type.classFqName?.asString() !in setOf(
+                            "io.canopy.engine.core.nodes.NodeProperty",
+                            "io.canopy.engine.core.queries.Dependency"
+                        )
                     )
             ) {
                 val keyword = if (property.isVar) "var" else "val"

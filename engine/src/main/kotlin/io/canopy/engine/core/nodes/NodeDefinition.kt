@@ -3,6 +3,7 @@ package io.canopy.engine.core.nodes
 import java.lang.reflect.Modifier
 import java.util.Collections
 import io.canopy.engine.core.exceptions.InvalidNodeDefinitionException
+import io.canopy.engine.core.queries.Dependency
 
 /** Cache immutable class metadata, never node instances. Also protects Java and precompiled consumers. */
 internal object NodeDefinition {
@@ -12,7 +13,10 @@ internal object NodeDefinition {
             var current: Class<*>? = type
             while (current != null && current != Node::class.java) {
                 for (field in current.declaredFields) {
-                    if (!Modifier.isStatic(field.modifiers) && field.type != NodeProperty::class.java) {
+                    if (!Modifier.isStatic(field.modifiers) &&
+                        field.type != NodeProperty::class.java &&
+                        field.type != Dependency::class.java
+                    ) {
                         result += "${current.simpleName}.${field.name}"
                     }
                 }

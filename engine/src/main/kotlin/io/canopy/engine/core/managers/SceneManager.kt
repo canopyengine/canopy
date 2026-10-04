@@ -426,6 +426,8 @@ class SceneManager(val physicsStep: Float = 1f / 60f, private val block: SceneMa
      * Group management
      * ============================================================ */
 
+    internal fun queryGroup(group: String): List<Node<*>> = groups[group].orEmpty().filter { it.isInsideTree }
+
     fun addToGroup(group: String, node: Node<*>) {
         node.requireValid("add group")
         if (!node.isInsideTree || node in groups[group].orEmpty()) return

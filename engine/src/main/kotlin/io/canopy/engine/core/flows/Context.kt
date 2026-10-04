@@ -1,5 +1,6 @@
 package io.canopy.engine.core.flows
 
+import kotlin.reflect.KClass
 import java.util.*
 import io.canopy.engine.core.nodes.Node
 
@@ -56,6 +57,23 @@ class Context(
     block: Context.() -> Unit = {},
 ) : Node<Context>(name, skipOnSearch = true, block) {
     internal var provided by nodeProperty(provided)
+    private val typedProviders by nodeProperty(linkedMapOf<KClass<*>, () -> Any?>())
+
+    /**
+     * Provides a value under its exact declared type for `core.queries.context<T>()`.
+     * The nearest scope with this type wins, even when its provider returns null.
+     * Providers run on each read on the game thread; keyed providers remain independent.
+     */
+    inline fun <reified T : Any> provide(noinline value: () -> T?) = provideTyped(T::class, value)
+
+    @PublishedApi
+    internal fun <T : Any> provideTyped(type: KClass<T>, value: () -> T?) {
+        typedProviders[type] = value
+    }
+
+    internal fun hasTypedProvider(type: KClass<*>): Boolean = type in typedProviders
+
+    internal fun typedValue(type: KClass<*>): Any? = typedProviders.getValue(type)()
 
     /**
      * Provides a value under a raw string key.
