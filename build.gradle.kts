@@ -161,15 +161,13 @@ subprojects {
 // Compiler tooling is an included build so its consumer plugin is available during project configuration.
 listOf("test", "ktlintCheck", "build").forEach { taskName ->
     tasks.matching { it.name == taskName }.configureEach {
-        dependsOn(gradle.includedBuild("compiler-gradle-plugin").task(":$taskName"))
-        dependsOn(gradle.includedBuild("compiler-gradle-plugin").task(":engine-compiler:$taskName"))
+        dependsOn(gradle.includedBuild("compiler").task(":$taskName"))
     }
 }
 
 // A source-built engine and its consumer compiler integration must use the same version.
 val publishLocalTooling = tasks.register("publishToMavenLocal") {
-    dependsOn(gradle.includedBuild("compiler-gradle-plugin").task(":publishToMavenLocal"))
-    dependsOn(gradle.includedBuild("compiler-gradle-plugin").task(":engine-compiler:publishToMavenLocal"))
+    dependsOn(gradle.includedBuild("compiler").task(":publishToMavenLocal"))
 }
 subprojects {
     plugins.withId("maven-publish") {
@@ -192,11 +190,10 @@ subprojects {
 }
 
 coverageReport.configure {
-    mapOf(":test" to "tooling/compiler-gradle-plugin", ":engine-compiler:test" to "engine/compiler")
-        .forEach { (taskPath, moduleDirectory) ->
-            dependsOn(gradle.includedBuild("compiler-gradle-plugin").task(taskPath))
-            executionData(file("$moduleDirectory/build/jacoco/test.exec"))
-            sourceDirectories.from(file("$moduleDirectory/src/main/kotlin"))
-            classDirectories.from(file("$moduleDirectory/build/classes/kotlin/main"))
-        }
+    dependsOn(gradle.includedBuild("compiler").task(":test"))
+    executionData(file("tooling/compiler/build/jacoco/test.exec"))
+    listOf("main", "compiler").forEach { sourceSet ->
+        sourceDirectories.from(file("tooling/compiler/src/$sourceSet/kotlin"))
+        classDirectories.from(file("tooling/compiler/build/classes/kotlin/$sourceSet"))
+    }
 }

@@ -1,5 +1,5 @@
 pluginManagement {
-    includeBuild("tooling/compiler-gradle-plugin")
+    includeBuild("tooling/compiler")
     repositories {
         gradlePluginPortal()
         google()
@@ -49,10 +49,5 @@ include(
     ":tooling:utils"
 )
 
-// Also substitute the compiler artifact while developing the consumer plugin locally.
-includeBuild("tooling/compiler-gradle-plugin") {
-    dependencySubstitution {
-        substitute(module("io.canopy:engine-compiler"))
-            .using(project(":engine-compiler"))
-    }
-}
+// Register dependency participation as well as early plugin resolution; Gradle keeps one included build.
+includeBuild("tooling/compiler")
