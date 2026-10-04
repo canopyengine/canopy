@@ -202,6 +202,33 @@ abstract class Node<N : Node<N>> protected constructor(
         return NodeProperty.create(key)
     }
 
+    /** Generic internal ownership boundary; facade delegates retain only immutable lookup metadata. */
+    @Suppress("UNCHECKED_CAST")
+    internal fun <T : AutoCloseable> lifetimeSlot(key: Any, acquire: () -> T): T {
+        val initial = state("read owned resource")
+        initial.lifetimeSlots[key]?.let { return it as T }
+        check(initial.entered && !initial.exiting) {
+            "Node $nodeId must be entered and not exiting to acquire resources"
+        }
+        val generation = initial.entryGeneration
+        val handle = acquire()
+        try {
+            val current = state("install owned resource")
+            check(current.entered && !current.exiting && current.entryGeneration == generation) {
+                "Node $nodeId left its entry while acquiring resources"
+            }
+            current.lifetimeSlots[key] = handle
+            return handle
+        } catch (failure: Throwable) {
+            try {
+                handle.close()
+            } catch (error: Throwable) {
+                if (error !== failure) failure.addSuppressed(error)
+            }
+            throw failure
+        }
+    }
+
     private fun attach(child: Node<*>) {
         val s = state("attach")
         val c = child.state("attach")
@@ -419,6 +446,7 @@ abstract class Node<N : Node<N>> protected constructor(
     fun nodeEnterTree() {
         val s = state("enter tree")
         if (s.entered) return
+        s.entryGeneration++
         s.entered = true
         lifecycle = "Active"
         if (!s.built) {
@@ -479,6 +507,7 @@ abstract class Node<N : Node<N>> protected constructor(
                 failures.attempt { cleanup("behavior exit") { s.behavior?.onExitTree() } }
             }
             drain(s.removal, failures)
+            drainSlots(s, failures)
         } finally {
             s.exiting = false
         }
@@ -490,7 +519,13 @@ abstract class Node<N : Node<N>> protected constructor(
         val failures = CleanupFailures()
         for (child in payload().snapshot()) failures.attempt { child.releaseResources() }
         drain(payload().removal, failures)
+        drainSlots(payload(), failures)
         failures.rethrow()
+    }
+    private fun drainSlots(state: NodeState, failures: CleanupFailures) {
+        val handles = state.lifetimeSlots.values.toList().asReversed()
+        state.lifetimeSlots.clear()
+        handles.forEach { handle -> failures.attempt { cleanup("release owned resource") { handle.close() } } }
     }
     private fun drain(callbacks: MutableSet<CleanupRegistration>, failures: CleanupFailures) {
         while (callbacks.isNotEmpty()) {
@@ -518,6 +553,7 @@ abstract class Node<N : Node<N>> protected constructor(
     internal fun finishDestruction() {
         val s = payload()
         val failures = CleanupFailures()
+        drainSlots(s, failures)
         drain(s.destruction, failures)
         s.children.clear()
         s.changed()

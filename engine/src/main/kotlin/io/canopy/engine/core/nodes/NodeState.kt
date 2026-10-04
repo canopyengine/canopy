@@ -13,6 +13,8 @@ internal class NodeState(val owner: SceneManager, var name: String, var builder:
     val groups = linkedSetOf<String>()
     val groupView: Set<String> = Collections.unmodifiableSet(groups)
     val properties = mutableMapOf<Any, Any?>()
+    val lifetimeSlots = linkedMapOf<Any, AutoCloseable>()
+    var entryGeneration = 0L
     val removal = linkedSetOf<CleanupRegistration>()
     val destruction = linkedSetOf<CleanupRegistration>()
     var behavior: Behavior<*>? = null
