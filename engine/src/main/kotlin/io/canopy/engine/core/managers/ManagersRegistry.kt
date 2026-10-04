@@ -17,8 +17,10 @@ object ManagersRegistry {
 
     private val managers = linkedMapOf<KClass<out Manager>, Manager>()
     private val resolvedCache = mutableMapOf<KClass<out Manager>, Manager>()
+    private var exiting = false
 
     fun <T : Manager> register(manager: T) {
+        check(!exiting) { "Cannot register managers during teardown" }
         val concreteKey = manager::class
 
         require(concreteKey !in managers) {
@@ -44,6 +46,7 @@ object ManagersRegistry {
     inline operator fun <reified T : Manager> T.unaryPlus() = register(this)
 
     fun <T : Manager> unregister(klass: KClass<T>) {
+        check(!exiting) { "Cannot unregister managers during teardown" }
         val removed = resolveRegistrationKey(klass)?.let { managers.remove(it) }
         if (removed != null) invalidateCache()
 
@@ -79,6 +82,7 @@ object ManagersRegistry {
     }
 
     fun enter() {
+        check(!exiting) { "Cannot enter managers during teardown" }
         log.info("event" to "managers.setup", "registered" to managers.size) {
             "Bootstrapping managers"
         }
@@ -96,6 +100,7 @@ object ManagersRegistry {
 
     /** Dispatches frames; while [paused], scenes receive real time and other managers receive zero. */
     fun update(delta: Float, paused: Boolean = false) {
+        check(!exiting) { "Cannot update managers during teardown" }
         LogContext.with("delta" to delta, "registered" to managers.size) {
             log.trace("event" to "managers.update") { "Updating managers" }
         }
@@ -120,6 +125,7 @@ object ManagersRegistry {
 
     /** Dispatches physics; while [paused], only scene managers process eligible nodes. */
     fun physicsUpdate(delta: Float, paused: Boolean = false) {
+        check(!exiting) { "Cannot update managers during teardown" }
         LogContext.with("delta" to delta, "registered" to managers.size) {
             log.trace("event" to "managers.physics_update") { "Physics updating managers" }
         }
@@ -143,6 +149,7 @@ object ManagersRegistry {
     }
 
     fun resize(width: Int, height: Int) {
+        check(!exiting) { "Cannot resize managers during teardown" }
         LogContext.with("width" to width, "height" to height, "registered" to managers.size) {
             log.info("event" to "managers.resize") { "Resizing managers" }
         }
@@ -165,23 +172,43 @@ object ManagersRegistry {
         }
     }
 
+    /**
+     * Attempts every manager's shutdown in registration order on the game thread, then clears registry and cache.
+     * The first failure is rethrown with later distinct failures suppressed. Nested shutdown is harmless;
+     * registration, removal and other lifecycle dispatch are rejected until shutdown completes.
+     * Lookup remains available during callbacks so managers can finish dependent cleanup.
+     */
     fun exit() {
-        log.info("event" to "managers.teardown", "registered" to managers.size) {
-            "Tearing down managers"
-        }
-
-        managers.values.forEach { manager ->
-            val name = manager::class.simpleName ?: "UnknownManager"
-            LogContext.with("manager" to name) {
-                log.debug { "teardown()" }
-                manager.onExit()
+        if (exiting) return
+        exiting = true
+        var failure: Throwable? = null
+        try {
+            log.info("event" to "managers.teardown", "registered" to managers.size) {
+                "Tearing down managers"
             }
+            managers.values.toList().forEach { manager ->
+                try {
+                    val name = manager::class.simpleName ?: "UnknownManager"
+                    LogContext.with("manager" to name) {
+                        log.debug { "teardown()" }
+                        manager.onExit()
+                    }
+                } catch (error: Throwable) {
+                    val first = failure
+                    if (first == null) {
+                        failure = error
+                    } else if (first !== error) {
+                        first.addSuppressed(error)
+                    }
+                }
+            }
+        } finally {
+            managers.clear()
+            invalidateCache()
+            exiting = false
         }
-
-        managers.clear()
-        invalidateCache()
-
         log.info("event" to "managers.teardown.done") { "Finished tearing down managers" }
+        failure?.let { throw it }
     }
 
     fun withScope(block: ManagersRegistry.() -> Unit) {
