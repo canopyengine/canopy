@@ -2,22 +2,28 @@ package io.canopy.engine.core.flows.events
 
 import io.canopy.engine.core.nodes.NodeLifetime
 
-/** Subscription handle that retains its callback until disconnection or node removal. */
-class EventDisconnectHandler(disconnectHandler: () -> Unit) {
+/** A retained handle keeps its listener alive only until any disconnection path executes. */
+class EventDisconnectHandler(disconnectHandler: () -> Unit, listener: Any? = null) {
     private var disconnectHandler: (() -> Unit)? = disconnectHandler
+    private var listener: Any? = listener
     private var cancelOwnership: (() -> Unit)? = null
-
     internal fun owned(): EventDisconnectHandler {
-        cancelOwnership = NodeLifetime.own(::disconnect)
+        try {
+            cancelOwnership = NodeLifetime.own(::disconnect)
+        } catch (error: Throwable) {
+            disconnect()
+            throw error
+        }
         return this
     }
 
-    /** Removes the connection once and releases any node ownership registration. */
+    /** Disconnects once and releases the callback and node ownership registration. */
     fun disconnect() {
-        val cleanup = disconnectHandler ?: return
+        val action = disconnectHandler ?: return
         disconnectHandler = null
+        listener = null
         try {
-            cleanup()
+            action()
         } finally {
             cancelOwnership?.invoke()
             cancelOwnership = null

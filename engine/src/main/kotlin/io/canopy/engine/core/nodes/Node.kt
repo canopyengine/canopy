@@ -1,67 +1,159 @@
 package io.canopy.engine.core.nodes
 
 import kotlin.reflect.KClass
-import io.canopy.engine.core.flows.Context
+import java.lang.ref.WeakReference
+import java.util.concurrent.atomic.AtomicLong
+import io.canopy.engine.core.exceptions.*
 import io.canopy.engine.core.managers.SceneManager
-import io.canopy.engine.core.managers.lazyManager
 import io.canopy.engine.core.managers.manager
 import io.canopy.engine.input.events.InputEvent
-import io.canopy.engine.logging.EngineLogs
-import io.canopy.engine.logging.LogContext
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Job
 
 /**
- * Base node class for a 2D scene graph.
- *
- * Design overview:
- * - Nodes form a tree (parent/children) and expose a small DSL for building that tree.
- * - Nodes can optionally have a [Behavior] attached (script-like logic).
- * - The [SceneManager] uses the node tree to:
- *   - drive lifecycle callbacks (enter/ready/exit)
- *   - run updates (frame + physics)
- *   - register nodes into systems and groups
- *
- * Overridden lifecycle/update methods must delegate to super to retain normal subtree traversal.
- * The manager still releases generic owned resources if an exit override throws before delegating.
- *
- * Construction vs initialization:
- * - `init { ... }` attaches this node to the current DSL parent (if any).
- * - `nodeEnterTree()` runs `create()` and the user-provided DSL [block] exactly once
- *   to build children and configure the node.
- *
- * Generic type parameter:
- * - `N : Node<N>` enables DSL blocks to have the concrete node type as receiver.
+ * Typed, guarded node facade preserving class-named Kotlin construction and concrete DSL receivers.
+ * Engine-owned state is referenced weakly. Destruction invalidates state access, releases owned work,
+ * and leaves only immutable identity/diagnostics in retained facades. All operations are game-thread confined.
+ * Custom stored properties must use [nodeProperty]. The Canopy compiler plugin rejects unmanaged fields.
  */
 @CanopyDsl
 @Suppress("UNCHECKED_CAST")
 abstract class Node<N : Node<N>> protected constructor(
-    /** Node name (expected to be unique among siblings). */
     name: String,
-    protected open val skipOnSearch: Boolean = false,
-    /**
-     * Node DSL block used to configure/build the node subtree.
-     * Executed once during [nodeEnterTree].
-     */
-    private val block: N.() -> Unit = {},
+    protected val skipOnSearch: Boolean = false,
+    block: N.() -> Unit = {},
 ) {
+    final override fun equals(other: Any?): Boolean = this === other
+    final override fun hashCode(): Int = System.identityHashCode(this)
 
-    private val removalCallbacks = linkedSetOf<() -> Unit>()
-    /**
-     * Controls frame, physics, input and tree-system processing on the engine thread.
-     * Inheritance follows actual parents, including context wrappers. Explicit descendant modes
-     * override inactive ancestors; changing a mode or parent takes effect at the next dispatch.
-     * Tree entry, ready, exit and signal delivery are unaffected.
-     */
-    var processMode: ProcessMode = ProcessMode.Inherit
+    /** Immutable identity, never reused and available after destruction. */
+    val nodeId: Long = identities.incrementAndGet()
+    private var lastPath = "/$name"
+    private var lifecycle = "Detached"
+    private var queued = false
+    private var metadata = NodeExitMetadata(nodeId, name, lastPath, false)
+    private val reference: WeakReference<NodeState>
 
-    /**
-     * Whether this node processes for [paused]. An inherited root defaults to [ProcessMode.Pausable].
-     * This query does not require membership in the active scene.
-     */
-    fun canProcess(paused: Boolean = sceneManager.isPaused): Boolean {
-        var node: Node<*>? = this
-        while (node != null) {
-            when (node.processMode) {
-                ProcessMode.Inherit -> node = node.parent
+    companion object {
+        private val identities = AtomicLong()
+        private val currentParent = ThreadLocal<Node<*>?>()
+    }
+
+    init {
+        NodeDefinition.validate(javaClass)
+        val owner = manager<SceneManager>()
+        val payload = NodeState(owner, name) { block(this as N) }
+        reference = WeakReference(payload)
+        owner.retainState(nodeId, payload)
+        try {
+            currentParent.get()?.attach(this)
+        } catch (failure: Throwable) {
+            payload.builder = null
+            owner.releaseState(nodeId)
+            reference.clear()
+            lifecycle = "Destroyed"
+            throw failure
+        }
+    }
+
+    /** True while this facade can access its engine state, including reusable detachment. */
+    val isValid: Boolean get() = lifecycle != "Destroying" && lifecycle != "Destroyed" && reference.get() != null
+
+    /** True after permanent destruction starts. */
+    val isFreed: Boolean get() = lifecycle == "Destroying" || lifecycle == "Destroyed"
+
+    /** Whether a safe-boundary deletion is pending. */
+    val isQueuedForDeletion: Boolean get() = queued
+
+    /** Immutable exit information; never resolves disposed state. */
+    val exitMetadata: NodeExitMetadata get() = metadata
+
+    /** Whether this node currently belongs to an entered tree. */
+    val isInsideTree: Boolean get() = isValid && reference.get()?.entered == true
+
+    @PublishedApi
+    @JvmSynthetic
+    internal fun diagnostic(operation: String, phase: String? = null) =
+        NodeDiagnostic(nodeId, javaClass.simpleName, lastPath, lifecycle, operation, phase)
+
+    @JvmSynthetic
+    internal fun state(operation: String): NodeState {
+        val current = reference.get()
+        if (current == null || lifecycle == "Destroying" || lifecycle == "Destroyed") {
+            throw NodeDestroyedException(diagnostic(operation))
+        }
+        return current
+    }
+
+    @JvmSynthetic
+    internal fun propertyState(property: kotlin.reflect.KProperty<*>, writing: Boolean): NodeState {
+        val current = reference.get()
+        if (current == null || lifecycle == "Destroying" || lifecycle == "Destroyed") {
+            val operation = if (writing) "write" else "read"
+            throw NodeDestroyedException(diagnostic("$operation property '${property.name}'"))
+        }
+        return current
+    }
+
+    private fun payload(): NodeState = reference.get() ?: throw NodeDestroyedException(diagnostic("cleanup"))
+
+    @JvmSynthetic
+    internal fun requireValid(operation: String) {
+        state(operation)
+    }
+
+    @JvmSynthetic
+    internal fun fail(operation: String, message: String): Nothing =
+        throw InvalidNodeOperationException(diagnostic(operation), message)
+
+    /** Owning scene manager, available only while the node is valid. */
+    protected val sceneManager: SceneManager get() = state("sceneManager").owner
+
+    /** Renaming updates descendant paths and all engine index keys. */
+    var name: String
+        get() = state("read name").name
+        set(value) {
+            val s = state("rename")
+            if (s.name == value) return
+            val p = s.parent?.state("rename child")
+            if (p != null && value in p.children) fail("rename", "Sibling '$value' already exists")
+            p?.children?.remove(s.name)
+            s.name = value
+            p?.children?.set(value, this)
+            p?.changed()
+            refreshPaths()
+        }
+
+    /** Absolute path; unavailable after destruction. Diagnostics retain its last value. */
+    val path: String get() {
+        state("read path")
+        return lastPath
+    }
+
+    /** Parent facade, or null for a root or reusable detached node. */
+    val parent: Node<*>? get() = state("read parent").parent
+
+    /** Read-only membership snapshot, rebuilt only when children change. */
+    val children: Map<String, Node<*>> get() = state("read children").publicSnapshot()
+
+    /** Read-only view of local group membership. */
+    val groups: Set<String> get() = state("read groups").groupView
+
+    /** Pause eligibility, inherited through actual parents including context wrappers. */
+    var processMode: ProcessMode
+        get() = state("read processMode").mode
+        set(value) {
+            state("write processMode").mode = value
+        }
+
+    /** Queries pause eligibility. Tree dispatch independently requires entered membership. */
+    fun canProcess(paused: Boolean = sceneManager.isPaused): Boolean = eligible(state("canProcess"), paused)
+
+    private fun eligible(start: NodeState, paused: Boolean): Boolean {
+        var cursor: NodeState? = start
+        while (cursor != null) {
+            when (cursor.mode) {
+                ProcessMode.Inherit -> cursor = cursor.parentState
                 ProcessMode.Pausable -> return !paused
                 ProcessMode.WhenPaused -> return paused
                 ProcessMode.Always -> return true
@@ -71,710 +163,484 @@ abstract class Node<N : Node<N>> protected constructor(
         return !paused
     }
 
-    /* ============================================================
-     * Identity
-     * ============================================================ */
-
-    /**
-     * Node name. Renaming updates:
-     * - the parentâ€™s children map key
-     * - this nodeâ€™s [path] and all descendant paths
-     */
-    private var _name = name
-    var name
-        get() = _name
-        set(value) = rename(value)
-
-    /* ============================================================
-     * Groups
-     * ============================================================ */
-
-    /**
-     * Local group memberships for this node.
-     *
-     * Stored as a set to avoid duplicates.
-     * Publicly exposed as read-only.
-     */
-    private val _groups = linkedSetOf<String>()
-    val groups: Set<String> get() = _groups
-
-    /**
-     * Adds this node to a group.
-     *
-     * If the node is already inside the built tree, also mirrors the change
-     * into the SceneManager group registry.
-     */
+    /** Adds a local group; only entered nodes are mirrored into manager memberships. */
     fun addGroup(group: String) {
-        if (_groups.add(group) && built) {
-            sceneManager.addToGroup(group, this)
-        }
+        val s = state("addGroup")
+        if (s.groups.add(group) && s.entered) s.owner.addToGroup(group, this)
     }
 
-    /**
-     * Removes this node from a group.
-     *
-     * If the node is already inside the built tree, also mirrors the change
-     * into the SceneManager group registry.
-     */
+    /** Removes a local and, when entered, manager group membership. */
     fun removeGroup(group: String) {
-        if (_groups.remove(group) && built) {
-            sceneManager.removeFromGroup(group, this)
-        }
+        val s = state("removeGroup")
+        if (s.groups.remove(group) && s.entered) s.owner.removeFromGroup(group, this)
     }
 
-    /**
-     * Batch-updates groups and applies only the actual diff to SceneManager.
-     *
-     * Example:
-     * ```kotlin
-     * updateGroups {
-     *     remove("enemy")
-     *     add("player")
-     *     add("controllable")
-     * }
-     * ```
-     */
+    /** Applies a group diff without exposing the engine's mutable membership set. */
     fun updateGroups(block: MutableSet<String>.() -> Unit) {
-        _groups.block()
-
-        if (!built) return
-
-        sceneManager.updateGroups(this)
+        val s = state("updateGroups")
+        val result = s.groups.toMutableSet().apply(block)
+        s.groups.clear()
+        s.groups.addAll(result)
+        if (s.entered) s.owner.updateGroups(this)
     }
 
-    /** Optional behavior instance attached to this node. */
-    internal var behavior: Behavior<N>? = null
+    internal var behavior: Behavior<N>?
+        get() = state("read behavior").behavior as Behavior<N>?
         set(value) {
-            if (field === value) return
-            if (enteredTree) field?.let { runBehavior("exit_tree") { it.onExitTree() } }
-            field = value
-            if (enteredTree) value?.let { runBehavior("enter_tree") { it.onEnterTree() } }
+            val s = state("attach behavior")
+            if (s.behavior === value) return
+            if (s.entered && !s.initializing) callback("behavior exit") { s.behavior?.onExitTree() }
+            s.behavior = value
+            if (s.entered && !s.initializing) callback("behavior enter") { value?.onEnterTree() }
         }
 
-    /* ============================================================
-     * Managers
-     * ============================================================ */
-
-    /** Scene manager instance (resolved lazily from ManagersRegistry). */
-    protected val sceneManager: SceneManager by lazyManager()
-
-    /* ============================================================
-     * Other
-     * ============================================================ */
-
-    /**
-     * Full path from the tree root.
-     *
-     * Format: `/Root/Player/Weapon`
-     *
-     * Notes:
-     * - Root nodes have paths like `/RootName`
-     * - Paths are recomputed when:
-     *   - a node is attached/detached
-     *   - a node is renamed
-     */
-    private var _path: String = "/$name"
-    val path: String get() = _path
-
-    /** Stable engine logger for node operations (routable to engine logs). */
-    private val log = EngineLogs.node
-
-    /** Prefab nodes do not run lifecycle automatically when attached. */
-    private var isPrefab: Boolean = false
-
-    /* ============================================================
-     * Tree structure
-     * ============================================================ */
-
-    /**
-     * References this node's parent
-     */
-    private var _parent: Node<*>? = null
-    val parent get() = _parent
-
-    /**
-     * References this node's children
-     */
-    private val _children: MutableMap<String, Node<*>> = mutableMapOf()
-    val children get() = _children.toMap()
-
-    /* ============================================================
-     * DSL support
-     * ============================================================ */
-
-    companion object {
-        /**
-         * DSL builder state: the "current parent" node.
-         *
-         * During `nodeReady()`, this is temporarily set to the node being built so that
-         * children constructed in the DSL `block { ... }` automatically attach to it.
-         */
-        private val currentParent = ThreadLocal.withInitial<Node<*>?> { null }
+    /** Stores custom state outside the facade. Reads/writes fail with NodeDestroyedException after disposal. */
+    protected fun <T> nodeProperty(initial: T): NodeProperty<T> {
+        val key = Any()
+        state("create property").properties[key] = initial
+        return NodeProperty.create(key)
     }
 
-    init {
-        /*
-         * If we are inside a DSL build block, auto-attach to the current parent.
-         * This is intentionally done in init to allow nested construction:
-         */
-        currentParent.get()?.addChildInternal(this)
-    }
-
-    /* ============================================================
-     * Child management
-     * ============================================================ */
-
-    /**
-     * Internal attach without lifecycle calls.
-     *
-     * Used by:
-     * - DSL construction (children attach during init)
-     * - runtime attach via [addChild] (then lifecycle is applied unless prefab)
-     */
-    private fun addChildInternal(child: Node<*>) {
-        check(!isFreed && !child.isFreed) { "Freed nodes cannot be attached" }
-        check(child.name !in children) {
-            "Child with name '${child.name}' already exists under '${this.name}'"
+    private fun attach(child: Node<*>) {
+        val s = state("attach")
+        val c = child.state("attach")
+        if (s.owner !== c.owner) fail("attach", "Nodes belong to different scene managers")
+        if (c.parent != null) fail("attach", "Child already has a parent")
+        if (c.name in s.children) fail("attach", "Child '${c.name}' already exists")
+        var ancestor: Node<*>? = this
+        while (ancestor != null) {
+            if (ancestor === child) fail("attach", "Cannot create a hierarchy cycle")
+            ancestor = ancestor.state("attach").parent
         }
-
-        _children[child.name] = child
-        child._parent = this
-        child.recomputePathRecursively()
-
-        LogContext.with("nodePath" to this.path, "childPath" to child.path) {
-            log.debug(
-                "event" to "node.add_child_internal",
-                "parent" to this@Node.name,
-                "child" to child.name
-            ) { "Attached child" }
-        }
-
-        // Register nodes into systems/groups indices maintained by SceneManager.
-        sceneManager.registerSubtree(child)
+        s.children[c.name] = child
+        s.changed()
+        c.parent = this
+        c.parentState = s
+        child.refreshPaths()
+        if (s.entered) s.owner.registerSubtree(child)
     }
 
-    /**
-     * Attaches a child node at runtime and runs its lifecycle (unless it is a prefab).
-     *
-     * Lifecycle order for the attached subtree:
-     * - enterTree
-     * - ready
-     */
+    /** Attaches a valid child, entering it only when its parent is entered and it is not a prefab. */
     fun addChild(child: Node<*>) {
-        check(child.parent == null) { "Node '${child.name}' already has a parent!" }
-
-        addChildInternal(child)
-
-        if (child.isPrefab) {
-            LogContext.with("nodePath" to child.path) {
-                log.trace("event" to "node.add_child.prefab") { "Child is prefab; skipping lifecycle" }
-            }
-            return
-        }
-
-        LogContext.with("nodePath" to child.path) {
-            log.trace("event" to "node.lifecycle.enter_tree") { "enterTree()" }
-            NodeLifetime.withOwner(child) { child.nodeEnterTree() }
-            log.trace("event" to "node.lifecycle.ready") { "ready()" }
-            NodeLifetime.withOwner(child) { child.nodeReady() }
-        }
+        attach(child)
+        if (state("addChild").entered && !child.state("addChild").prefab) child.buildTree()
     }
 
-    /** DSL: `+childNode` inside a node scope. */
-    operator fun Node<*>.unaryPlus() = addChild(this)
-
-    /** DSL: `node += child` */
-    operator fun plusAssign(child: Node<*>) = addChild(child)
-
-    /**
-     * Removes a child node and runs teardown lifecycle.
-     *
-     * Order:
-     * - exitTree on subtree
-     * - unregister subtree from SceneManager
-     * - detach from parent
-     *
-     * Preserves the detached subtree structure. Cleanup and detachment complete even if an exit hook throws.
-     */
+    /** Immediate reusable detachment; completes despite exit or unregister failures. */
     fun removeChild(child: Node<*>) {
-        check(child.parent == this) { "Node '${child.name}' is not a child of '$name'!" }
-
+        val s = state("removeChild")
+        if (child.state("removeChild").parent !== this) fail("removeChild", "Node is not a child")
         val failures = CleanupFailures()
-        failures.attempt { NodeLifetime.withOwner(child) { child.nodeExitTree() } }
-        failures.attempt { child.releaseResources() }
-        failures.attempt { sceneManager.unregisterSubtree(child) }
+        failures.attempt { child.nodeExitTree() }
+        failures.attempt { s.owner.unregisterSubtree(child) }
         child.detachFromParent()
         failures.rethrow()
     }
 
-    /** DSL: `-childNode` */
-    operator fun Node<*>.unaryMinus() = removeChild(this)
-
-    /** DSL: `node -= child` */
-    operator fun minusAssign(child: Node<*>) = removeChild(child)
-
-    /** Removes a child node by path. */
+    /** Removes a direct child resolved by path. */
     fun removeChild(path: String) {
-        val child = getNode(path)
+        val child = resolve(path) ?: throw NodeNotFoundException(diagnostic("removeChild"), path)
         removeChild(child)
     }
 
-    /* ============================================================
-     * Node lookup
-     * ============================================================ */
+    /** Class-named DSL attachment operator. */
+    operator fun Node<*>.unaryPlus() = addChild(this)
 
-    /**
-     * Resolves a node by path.
-     *
-     * Path rules:
-     * - "$/..." resolves from the current scene root
-     * - "./..." resolves from this node
-     * - "../" goes to parent (skipping [Context] wrappers)
-     * - Paths may omit ContextScopeNode segments; lookup searches through context wrappers
-     *   to make DSL context blocks transparent.
-     *
-     * Examples:
-     * - `$/Player/Weapon`
-     * - `./UI/HUD`
-     * - `../Camera`
-     */
-    fun <T : Node<T>> getNode(path: String): T {
-        val parts = path.split("/")
-        val firstPart = parts.firstOrNull()
+    /** Runtime DSL attachment operator. */
+    operator fun plusAssign(child: Node<*>) = addChild(child)
 
-        var current: Node<*>? =
-            if (firstPart == "$") sceneManager.currScene else this
+    /** Class-named DSL reusable detachment operator. */
+    operator fun Node<*>.unaryMinus() = removeChild(this)
 
-        val searchParts = when {
-            path.startsWith("/") -> parts.drop(1)
-            firstPart == "$" || firstPart == "." -> parts.drop(1)
-            else -> parts
-        }
+    /** Runtime reusable detachment operator. */
+    operator fun minusAssign(child: Node<*>) = removeChild(child)
 
-        /**
-         * Skips wrapper nodes(nodes with skipOnSearch = false) and finds closest parent node
-         */
-        fun Node<*>.findVisibleParent(): Node<*>? {
-            var p = parent
-            while (p?.skipOnSearch == true) p = p.parent
-            return p
-        }
-
-        fun Node<*>.resolveSearchHit(): Node<*>? {
-            if (!skipOnSearch) return this
-
-            for (child in children.values) {
-                child.resolveSearchHit()?.let { return it }
-            }
-
-            return null
-        }
-
-        /**
-         * Skips wrapper nodes to find searchable nodes
-         */
-        fun Node<*>.findVisibleChild(name: String): Node<*>? {
-            children[name]?.resolveSearchHit()?.let { return it }
-
-            for (child in children.values) {
-                if (child.skipOnSearch) {
-                    child.findVisibleChild(name)?.let { return it }
-                }
-            }
-
-            return null
-        }
-
-        for (part in searchParts) {
-            current = when (part) {
-                // Start here
-                "", "." -> current
-
-                // Go back one node
-                ".." -> current?.findVisibleParent()
-                    ?: throw IllegalArgumentException("No parent for path: $path")
-
-                // Paths (ex: [a,b,c])
-                else -> {
-                    val node = current
-                        ?: throw IllegalArgumentException("Null node while resolving path: $path")
-
-                    node.findVisibleChild(part)
-                        ?: throw IllegalArgumentException(
-                            "No child '$part' under '${node.name}' for path '$path'"
-                        )
-                }
-            }
-        }
-
-        return current as T
-    }
-
-    /**
-     * Kotlin shorthand: `node["Player/Weapon"]`
-     */
-    inline operator fun <reified T : Node<T>> get(path: String): T = getNode(path)
-
-    /* ============================================================
-     * Prefab / instancing
-     * ============================================================ */
-
-    /**
-     * Marks this node as a prefab.
-     *
-     * Prefabs are attachable as children but do not automatically run lifecycle.
-     * Intended for templates that are instantiated/activated later.
-     */
-    fun asPrefab(): N {
-        isPrefab = true
-        LogContext.with("nodePath" to path) {
-            log.trace("event" to "node.prefab") { "Marked as prefab" }
-        }
-        return this as N
-    }
-
-    /**
-     * Queues permanent destruction of this node and its current subtree.
-     *
-     * The owning SceneManager drains requests after a complete frame or physics update, including
-     * failed updates. Until that boundary nodes remain attached and eligible for callbacks. Repeated
-     * requests are harmless. Detached nodes and active roots are supported. Use [removeChild] for
-     * immediate, reusable detachment. All operations must run on the serialized game thread.
-     */
-    fun queueFree() {
-        if (isQueuedForDeletion || isFreed) return
-        sceneManager.queueFree(this)
-    }
-
-    /**
-     * Moves an existing child and its subtree without repeating lifecycle or cleaning up resources.
-     * Context values and node-owned subscriptions remain active; paths and manager indexes change.
-     */
-    fun reparent(child: Node<*>, newParent: Node<*>) {
-        check(child.parent === this) { "Node '${child.name}' is not a child of '$name'!" }
-        check(!newParent.isFreed && !child.isFreed) { "Freed nodes cannot be reparented" }
-        if (newParent === this) return
-        check(child.name !in newParent.children) { "Child '${child.name}' already exists under '${newParent.name}'" }
-        var ancestor: Node<*>? = newParent
-        while (ancestor != null) {
-            require(ancestor !== child) { "Cannot reparent a node beneath itself" }
-            ancestor = ancestor.parent
-        }
-        sceneManager.unregisterSubtree(child)
-        child.detachFromParent()
-        newParent.addChildInternal(child)
-        fun registerGroups(node: Node<*>) {
-            node.groups.forEach { sceneManager.addToGroup(it, node) }
-            node.children.values.forEach(::registerGroups)
-        }
-        registerGroups(child)
-    }
-
-    fun hasChildType(type: KClass<out Node<*>>) = children.values.any { it::class == type }
-
-    /* ============================================================
-     * Tree building
-     * ============================================================ */
-
-    /**
-     * Builds this node as a root/subtree:
-     * - enterTree (which executes create() + DSL block once)
-     * - ready
-     */
-    fun buildTree() {
-        LogContext.with("nodePath" to path) {
-            log.debug("event" to "node.build_tree") { "Building tree" }
-        }
-        NodeLifetime.withOwner(this) { nodeEnterTree() }
-        NodeLifetime.withOwner(this) { nodeReady() }
-    }
-
-    /* ============================================================
-     * Lifecycle hooks
-     * ============================================================ */
-
-    /**
-     * Override for predefined node configuration.
-     *
-     * Example uses:
-     * - internal child structure
-     * - default components/behavior
-     * - setting initial transforms
-     */
-    open fun nodeInit() {}
-
-    private var built = false
-    private var enteredTree = false
-
-    /** Whether destruction has been requested but has not yet reached a safe update boundary. */
-    var isQueuedForDeletion: Boolean = false
-        private set
-
-    /** Whether this node was permanently destroyed by [queueFree]. */
-    var isFreed: Boolean = false
-        private set
-
-    /**
-     * Registers resource cleanup for the next removal or scene exit, on the serialized game thread.
-     * Cleanup runs after exit callbacks, including when they throw. Each registration runs once;
-     * callbacks registered during cleanup are also drained. A freed node cleans up immediately.
-     * Resources can use this hook without requiring Node to know their implementation.
-     * The returned callback cancels the registration without executing cleanup.
-     */
-    fun onRemoval(cleanup: () -> Unit): () -> Unit {
-        if (isFreed) {
-            cleanup()
-            return {}
-        }
-        val registration = { cleanup() }
-        removalCallbacks += registration
-        return { removalCallbacks.remove(registration) }
-    }
-
-    internal fun markQueued() {
-        isQueuedForDeletion = true
-    }
-
-    internal fun markFreed() {
-        isQueuedForDeletion = false
-        isFreed = true
-        children.values.forEach { it.markFreed() }
-    }
-
-    /** Final safety net for resources when an overriding exit method fails before calling super. */
-    internal open fun releaseResources() {
-        val failures = CleanupFailures()
-        children.values.forEach { child -> failures.attempt { child.releaseResources() } }
-        enteredTree = false
-        while (removalCallbacks.isNotEmpty()) {
-            val callbacks = removalCallbacks.toList()
-            removalCallbacks.clear()
-            callbacks.forEach { failures.attempt(it) }
-        }
-        failures.rethrow()
-    }
-
-    internal fun detachFromParent() {
-        _parent?._children?.remove(name)
-        _parent = null
-        recomputePathRecursively()
-    }
-
-    /**
-     * Called when the node enters the tree.
-     *
-     * Order:
-     * - runs `create()` + the DSL [block] once (guarded by [built])
-     * - register groups in SceneManager
-     * - behavior.onEnterTree()
-     * - recurse into children
-     */
-    open fun nodeEnterTree() {
-        LogContext.with("nodePath" to path) {
-            log.trace("event" to "node.enter_tree") { "nodeEnterTree()" }
-        }
-
-        // Avoid executing DSL/build twice (e.g., if nodeEnterTree is triggered again).
-        check(!isFreed) { "Freed nodes cannot enter the tree" }
-        if (enteredTree) return
-        val needsBuild = !built
-        built = true
-
-        // Build subtree via DSL after full construction.
-        val oldParent = currentParent.get()
-        currentParent.set(this)
-
-        try {
-            if (needsBuild) {
-                NodeLifetime.withOwner(this) {
-                    nodeInit()
-                    block(this as N)
-                }
-            }
-        } finally {
-            currentParent.set(oldParent)
-            LogContext.with("nodePath" to path) {
-                log.trace("event" to "node.constructed") { "Node constructed" }
-            }
-        }
-
-        groups.forEach { sceneManager.addToGroup(it, this) }
-        enteredTree = true
-        behavior?.let { runBehavior("enter_tree") { it.onEnterTree() } }
-        children.values.forEach { child -> NodeLifetime.withOwner(child) { child.nodeEnterTree() } }
-    }
-
-    /**
-     * Called when the node and its subtree should finish initialization.
-     *
-     * This method:
-     * - then recurses into children (so the entire subtree becomes ready)
-     * - then fires behavior.onReady()
-     */
-    open fun nodeReady() {
-        LogContext.with("nodePath" to path) {
-            log.trace("event" to "node.ready") { "nodeReady()" }
-        }
-
-        // Children were attached during their init; now recurse.
-        children.values.forEach { child -> NodeLifetime.withOwner(child) { child.nodeReady() } }
-        behavior?.let { runBehavior("ready") { it.onReady() } }
-    }
-
-    /**
-     * Called when the node exits the tree.
-     *
-     * Order:
-     * - recurse into children
-     * - behavior.onExitTree() once per entry
-     * - release node-owned resources, even when exit callbacks fail
-     */
-    open fun nodeExitTree() {
-        LogContext.with("nodePath" to path) {
-            log.trace("event" to "node.exit_tree") { "nodeExitTree()" }
-        }
-        val failures = CleanupFailures()
-        children.values.forEach { child -> failures.attempt { NodeLifetime.withOwner(child) { child.nodeExitTree() } } }
-        val wasEntered = enteredTree
-        enteredTree = false
-        if (wasEntered) failures.attempt { behavior?.let { runBehavior("exit_tree") { it.onExitTree() } } }
-        while (removalCallbacks.isNotEmpty()) {
-            val callbacks = removalCallbacks.toList()
-            removalCallbacks.clear()
-            callbacks.forEach { failures.attempt(it) }
-        }
-        failures.rethrow()
-    }
-
-    /* ============================================================
-     * Updates
-     * ============================================================ */
-
-    /** Runs child updates before this behavior. Engine dispatch skips inactive node overrides. */
-    open fun nodeUpdate(delta: Float) {
-        LogContext.with("nodePath" to path, "delta" to delta) {
-            log.trace("event" to "node.update") { "nodeUpdate()" }
-        }
-        children.values.forEach { it.dispatchUpdate(delta) }
-        if (canProcess()) behavior?.let { runBehavior("update") { it.onUpdate(delta) } }
-    }
-
-    /** Runs child physics updates before this behavior, with delta in seconds. */
-    open fun nodePhysicsUpdate(delta: Float) {
-        LogContext.with("nodePath" to path, "delta" to delta) {
-            log.trace("event" to "node.physics_update") { "nodePhysicsUpdate()" }
-        }
-        children.values.forEach { it.dispatchPhysicsUpdate(delta) }
-        if (canProcess()) behavior?.let { runBehavior("physics_update") { it.onPhysicsUpdate(delta) } }
-    }
-
-    /* ============================================================
-     * Input
-     * ============================================================ */
-
-    /** Delivers input to eligible descendants before this behavior. */
-    open fun nodeInput(event: InputEvent) {
-        children.values.forEach { it.dispatchInput(event) }
-        if (canProcess()) behavior?.let { runBehavior("input") { it.onInput(event) } }
-    }
-
-    // Traverse inactive ancestors without invoking their overridable gameplay hooks.
-    internal fun dispatchUpdate(delta: Float) {
-        if (canProcess()) nodeUpdate(delta) else children.values.forEach { it.dispatchUpdate(delta) }
-    }
-
-    internal fun dispatchPhysicsUpdate(delta: Float) {
-        if (canProcess()) nodePhysicsUpdate(delta) else children.values.forEach { it.dispatchPhysicsUpdate(delta) }
-    }
-
-    internal fun dispatchInput(event: InputEvent) {
-        if (canProcess()) nodeInput(event) else children.values.forEach { it.dispatchInput(event) }
-    }
-
-    /* ============================================================
-     * Internals
-     * ============================================================ */
-
-    /**
-     * Executes a behavior callback and logs/rethrows exceptions with useful context.
-     * This is intentionally fail-fast: behavior errors should be surfaced quickly.
-     */
-    private fun runBehavior(phase: String, delta: Float? = null, block: () -> Unit) {
-        try {
-            NodeLifetime.withOwner(this, block)
-        } catch (t: Throwable) {
-            val fields = buildMap {
-                put("event", "behavior.error")
-                put("phase", phase)
-                put("nodePath", path)
-                put("behavior", behavior?.javaClass?.name)
-                if (delta != null) put("delta", delta)
-            }.map { Pair(it.key, it.value) }
-
-            EngineLogs.node.error(t = t, *fields.toTypedArray()) { "Behavior threw during $phase" }
-            throw t
-        }
-    }
-
-    /** Recomputes this node path and all descendant paths. */
-    private fun recomputePathRecursively() {
-        _path = parent?.let { "${it.path}/$name" } ?: "/$name"
-        _children.values.forEach { it.recomputePathRecursively() }
-    }
-
-    /**
-     * Renames this node and updates the parent index + paths.
-     */
-    private fun rename(newName: String) {
-        if (newName == name) return
-
-        val p = parent
-        if (p != null) {
-            require(!p._children.containsKey(newName)) {
-                "Sibling with name '$newName' already exists under parent '${p.path}'."
-            }
-
-            p._children.remove(name)
-            p._children[newName] = this
-        }
-
-        _name = newName
-        recomputePathRecursively()
-    }
-
-    /* ============================================================
-     * DSL helpers
-     * ============================================================ */
-
-    infix fun child(node: Node<*>) = addChild(node)
-
-    // fun groups(vararg groups: String) = apply { groups.forEach { addGroup(it) } }
-
-    fun <T : Node<T>> patch(path: String, handler: T.() -> Unit) = getNode<T>(path).apply(handler)
-
-    /* ------------------------------------------------------------------
-     * Top-level DSL helpers
-     * ------------------------------------------------------------------ */
-
-    /** `parent + child` attaches [child] to [parent] and returns [parent]. */
+    /** Attaches a child and returns its parent facade. */
     operator fun Node<*>.plus(node: Node<*>): Node<*> {
         addChild(node)
         return this
     }
 
-    /**
-     * Sets this node as the active scene root in the global [SceneManager].
-     *
-     * This triggers SceneManager scene replacement logic (unregister old scene, register new scene).
-     */
-    fun asSceneRoot(): Node<*> {
-        val sceneManager = manager<SceneManager>()
-        sceneManager.currScene = this
+    /** Named attachment helper. */
+    infix fun child(node: Node<*>) = addChild(node)
 
-        LogContext.with("nodePath" to this.path) {
-            EngineLogs.subsystem("scene").info("event" to "scene.set_root") { "Set as scene root" }
+    private fun resolve(request: String): Node<*>? {
+        state("lookup '$request'")
+        var cursor: Node<*>? = if (request.startsWith("$/")) sceneManager.currScene else this
+        fun visible(node: Node<*>): Node<*>? = if (!node.skipOnSearch) {
+            node
+        } else {
+            node.payload().snapshot().firstNotNullOfOrNull { visible(it) }
         }
+        fun find(node: Node<*>, part: String): Node<*>? {
+            val s = node.state("lookup '$request'")
+            s.children[part]?.let { return visible(it) }
+            return s.snapshot().filter { it.skipOnSearch }.firstNotNullOfOrNull { find(it, part) }
+        }
+        for (part in request.split('/')) {
+            cursor = when (part) {
+                "", ".", "$" -> cursor
+                ".." -> cursor?.parent?.let { p ->
+                    var result: Node<*>? = p
+                    while (result?.skipOnSearch == true) result = result.parent
+                    result
+                }
+                else -> cursor?.let { find(it, part) }
+            }
+            if (cursor == null) return null
+        }
+        return cursor?.takeIf { it.isValid }
+    }
 
+    /** Resolves typed facades through context-transparent paths; invalid receivers always fail. */
+    inline fun <reified T : Node<T>> getNode(path: String): T =
+        lookup(path, T::class) ?: throw NodeNotFoundException(diagnostic("getNode"), path)
+
+    /** Missing nodes return null; invalid receivers and incompatible requested types still fail. */
+    inline fun <reified T : Node<T>> getNodeOrNull(path: String): T? = lookup(path, T::class)
+
+    @PublishedApi
+    @JvmSynthetic
+    internal fun <T : Node<T>> lookup(path: String, type: KClass<T>): T? {
+        val result = resolve(path) ?: return null
+        if (!type.isInstance(
+                result
+            )
+        ) {
+            fail("lookup '$path'", "Requested ${type.simpleName}, found ${result.javaClass.simpleName}")
+        }
+        return result as T
+    }
+
+    /** Typed indexing shorthand. */
+    inline operator fun <reified T : Node<T>> get(path: String): T = getNode(path)
+
+    /** Applies a typed patch without exposing private engine state. */
+    inline fun <reified T : Node<T>> patch(path: String, handler: T.() -> Unit) = getNode<T>(path).apply(handler)
+
+    /** Marks this facade as a reusable prefab; skips automatic entry during attachment. */
+    fun asPrefab(): N {
+        state("asPrefab").prefab = true
+        return this as N
+    }
+
+    /** Idempotently queues a valid subtree until the next outermost frame/physics boundary. */
+    fun queueFree() {
+        val s = state("queueFree")
+        if (!queued) s.owner.queueFree(this)
+    }
+
+    /** Moves an existing child. Same-tree moves preserve lifetimes and system registrations. */
+    fun reparent(child: Node<*>, newParent: Node<*>) {
+        val s = state("reparent")
+        val c = child.state("reparent")
+        val destination = newParent.state("reparent")
+        if (c.parent !== this) fail("reparent", "Node is not a child")
+        if (newParent === this) return
+        var ancestor: Node<*>? = newParent
+        while (ancestor != null) {
+            if (ancestor === child) fail("reparent", "Cannot create a hierarchy cycle")
+            ancestor = ancestor.state("reparent").parent
+        }
+        if (c.name in destination.children || s.owner !== destination.owner) fail("reparent", "Invalid destination")
+        val sameTree = s.entered && destination.entered
+        if (!sameTree) {
+            val failures = CleanupFailures()
+            failures.attempt { child.nodeExitTree() }
+            failures.attempt { s.owner.unregisterSubtree(child) }
+            child.detachFromParent()
+            newParent.addChild(child)
+            failures.rethrow()
+        } else {
+            child.detachFromParent()
+            newParent.attach(child)
+        }
+    }
+
+    /** Whether an immediate child has the exact public facade type. */
+    fun hasChildType(type: KClass<out Node<*>>) = state("hasChildType").snapshot().any { it::class == type }
+
+    /** Sets this valid facade as its manager's current root. */
+    fun asSceneRoot(): Node<*> {
+        state("asSceneRoot").owner.currScene = this
         return this
+    }
+
+    private fun register(cleanup: () -> Unit, permanent: Boolean): () -> Unit {
+        val s = state("register cleanup")
+        val callbacks = if (permanent) s.destruction else s.removal
+        val entry = CleanupRegistration(cleanup)
+        callbacks += entry
+        val weak = WeakReference(s)
+        return {
+            entry.cancel()
+            weak.get()?.let { (if (permanent) it.destruction else it.removal).remove(entry) }
+        }
+    }
+
+    /** Registers once-per-entry cleanup; the returned function cancels ownership without executing it. */
+    fun onRemoval(cleanup: () -> Unit): () -> Unit = register(cleanup, false)
+
+    /** Registers cooperative cancellation before starting an owned coroutine job. */
+    fun onRemoval(job: Job): () -> Unit = onRemoval { job.cancel() }
+
+    /** Registers exclusive resource disposal on permanent destruction, not reusable detachment. */
+    fun onDestroy(cleanup: () -> Unit): () -> Unit = register(cleanup, true)
+
+    /** One-time configuration hook. */
+    open fun nodeInit() {}
+
+    /** Custom entry hook; engine traversal is independent of this hook. */
+    protected open fun onEnterTree() {}
+
+    /** Custom readiness hook, after children are ready. */
+    protected open fun onReady() {}
+
+    /** Custom exit hook; use [exitMetadata] when permanent destruction has invalidated gameplay access. */
+    protected open fun onExitTree() {}
+
+    /** Custom eligible frame hook, delta in seconds. */
+    protected open fun onUpdate(delta: Float) {}
+
+    /** Custom eligible fixed-step hook, delta in seconds. */
+    protected open fun onPhysicsUpdate(delta: Float) {}
+
+    /** Custom eligible input hook. */
+    protected open fun onInput(event: InputEvent) {}
+
+    /** Builds and enters the class-named DSL once, then runs readiness. */
+    fun buildTree() {
+        nodeEnterTree()
+        nodeReady()
+    }
+
+    /** Engine-controlled parent-first entry. */
+    fun nodeEnterTree() {
+        val s = state("enter tree")
+        if (s.entered) return
+        s.entered = true
+        lifecycle = "Active"
+        if (!s.built) {
+            s.built = true
+            val previous = currentParent.get()
+            currentParent.set(this)
+            s.initializing = true
+            try {
+                callback("initialize") {
+                    nodeInit()
+                    s.builder?.invoke()
+                }
+            } finally {
+                currentParent.set(previous)
+                s.builder = null
+                s.initializing = false
+            }
+        }
+        s.owner.registerSubtree(this)
+        s.groups.forEach { s.owner.addToGroup(it, this) }
+        callback("enter") {
+            onEnterTree()
+            s.behavior?.onEnterTree()
+        }
+        for (child in s.snapshot()) if (child.isValid && child.payload().parent === this) child.nodeEnterTree()
+    }
+
+    /** Engine-controlled child-first readiness. */
+    fun nodeReady() {
+        val s = state("ready")
+        for (child in s.snapshot()) if (child.isInsideTree) child.nodeReady()
+        callback("ready") {
+            onReady()
+            s.behavior?.onReady()
+        }
+    }
+
+    /** Engine-controlled child-first exit. All descendants and registrations are attempted on failure. */
+    fun nodeExitTree() {
+        state("exit tree")
+        exitInternal()
+    }
+
+    @JvmSynthetic
+    internal fun exitInternal() {
+        val s = payload()
+        if (s.exiting) return
+        s.exiting = true
+        val failures = CleanupFailures()
+        try {
+            for (child in s.snapshot()) failures.attempt { child.exitInternal() }
+            metadata = NodeExitMetadata(nodeId, s.name, lastPath, isFreed)
+            val wasEntered = s.entered
+            s.entered = false
+            if (!isFreed) lifecycle = "Detached"
+            if (wasEntered) {
+                failures.attempt { cleanup("exit hook") { onExitTree() } }
+                failures.attempt { cleanup("behavior exit") { s.behavior?.onExitTree() } }
+            }
+            drain(s.removal, failures)
+        } finally {
+            s.exiting = false
+        }
+        failures.rethrow()
+    }
+
+    @JvmSynthetic
+    internal fun releaseResources() {
+        val failures = CleanupFailures()
+        for (child in payload().snapshot()) failures.attempt { child.releaseResources() }
+        drain(payload().removal, failures)
+        failures.rethrow()
+    }
+    private fun drain(callbacks: MutableSet<CleanupRegistration>, failures: CleanupFailures) {
+        while (callbacks.isNotEmpty()) {
+            val batch = callbacks.toList()
+            callbacks.clear()
+            for (entry in batch) entry.take()?.let { action -> failures.attempt { cleanup("dispose") { action() } } }
+        }
+    }
+
+    @JvmSynthetic
+    internal fun markQueued() {
+        state("queueFree")
+        queued = true
+    }
+
+    @JvmSynthetic
+    internal fun beginDestruction() {
+        val s = payload()
+        metadata = NodeExitMetadata(nodeId, s.name, lastPath, true)
+        lifecycle = "Destroying"
+        queued = false
+    }
+
+    @JvmSynthetic
+    internal fun finishDestruction() {
+        val s = payload()
+        val failures = CleanupFailures()
+        drain(s.destruction, failures)
+        s.children.clear()
+        s.changed()
+        s.groups.clear()
+        s.properties.clear()
+        s.builder = null
+        s.behavior = null
+        s.parent = null
+        s.parentState = null
+        s.owner.releaseState(nodeId)
+        reference.clear()
+        lifecycle = "Destroyed"
+        failures.rethrow()
+    }
+
+    @JvmSynthetic
+    internal fun detachFromParent() {
+        val s = payload()
+        s.parent?.payload()?.let { p ->
+            p.children.remove(s.name)
+            p.changed()
+        }
+        s.parent = null
+        s.parentState = null
+        if (isValid) refreshPaths()
+    }
+
+    @JvmSynthetic
+    internal fun owningManager(): SceneManager = payload().owner
+
+    @JvmSynthetic
+    internal fun childSnapshot(): List<Node<*>> = payload().snapshot()
+
+    @JvmSynthetic
+    internal fun internalGroups(): Set<String> = payload().groups
+
+    @JvmSynthetic
+    internal fun internalPath(): String = lastPath
+
+    @JvmSynthetic
+    internal fun refreshPaths() {
+        val s = payload()
+        lastPath = s.parent?.let { "${it.internalPath()}/${s.name}" } ?: "/${s.name}"
+        s.owner.reindex(this)
+        for (child in s.snapshot()) child.refreshPaths()
+    }
+
+    /** Validated frame entrypoint. Engine processing is not overridable. */
+    fun nodeUpdate(delta: Float) {
+        state("frame update")
+        dispatchUpdate(delta)
+    }
+
+    /** Validated physics entrypoint. */
+    fun nodePhysicsUpdate(delta: Float) {
+        state("physics update")
+        dispatchPhysicsUpdate(delta)
+    }
+
+    /** Validated input entrypoint. */
+    fun nodeInput(event: InputEvent) {
+        state("input")
+        dispatchInput(event)
+    }
+
+    @JvmSynthetic
+    internal fun dispatchUpdate(delta: Float) = dispatch(0, delta, null)
+
+    @JvmSynthetic
+    internal fun dispatchPhysicsUpdate(delta: Float) = dispatch(1, delta, null)
+
+    @JvmSynthetic
+    internal fun dispatchInput(event: InputEvent) = dispatch(2, 0f, event)
+    private fun dispatch(kind: Int, delta: Float, event: InputEvent?) {
+        val s = reference.get() ?: return
+        dispatchState(kind, delta, event, s)
+    }
+
+    private fun dispatchState(kind: Int, delta: Float, event: InputEvent?, s: NodeState) {
+        if (!s.entered || isFreed) return
+        val phase = when (kind) {
+            0 -> "frame"
+            1 -> "physics"
+            else -> "input"
+        }
+        if (eligible(s, s.owner.isPaused)) {
+            callback(phase) {
+                when (kind) {
+                    0 -> onUpdate(delta)
+                    1 -> onPhysicsUpdate(delta)
+                    else -> onInput(event!!)
+                }
+            }
+        }
+        for (child in s.snapshot()) {
+            val childState = child.reference.get() ?: continue
+            if (childState.parent === this) child.dispatchState(kind, delta, event, childState)
+        }
+        if (!s.entered || isFreed || !eligible(s, s.owner.isPaused)) return
+        val behavior = s.behavior ?: return
+        callback(phase) {
+            when (kind) {
+                0 -> behavior.onUpdate(delta)
+                1 -> behavior.onPhysicsUpdate(delta)
+                else -> behavior.onInput(event!!)
+            }
+        }
+    }
+
+    @JvmSynthetic
+    internal inline fun callback(phase: String, action: () -> Unit) {
+        try {
+            NodeLifetime.withOwner(this, action)
+        } catch (error: Throwable) {
+            if (error is Error || error is CancellationException || error is CanopyException) throw error
+            throw NodeCallbackException(diagnostic("callback", phase), error)
+        }
+    }
+    private inline fun cleanup(phase: String, action: () -> Unit) {
+        try {
+            NodeLifetime.withOwner(null, action)
+        } catch (error: Throwable) {
+            if (error is Error || error is CancellationException || error is CanopyException) throw error
+            throw NodeCleanupException(diagnostic("cleanup", phase), error)
+        }
     }
 }

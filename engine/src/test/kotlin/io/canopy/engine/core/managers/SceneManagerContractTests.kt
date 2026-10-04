@@ -6,6 +6,7 @@ import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
 import kotlin.test.assertSame
 import kotlin.test.assertTrue
+import io.canopy.engine.core.exceptions.NodeCallbackException
 import io.canopy.engine.core.nodes.Node
 import io.canopy.engine.core.nodes.TreeSystem
 import io.canopy.engine.core.nodes.types.empty.EmptyNode
@@ -283,11 +284,12 @@ class SceneManagerContractTests {
         calls.clear()
 
         // Act
-        val failure = assertFailsWith<IllegalStateException> { scenes.removeSystem(RecordingSystem::class) }
+        val failure = assertFailsWith<NodeCallbackException> { scenes.removeSystem(RecordingSystem::class) }
 
         // Assert
-        assertSame(nodeFailures.first(), failure)
-        assertEquals(listOf(nodeFailures.last(), unregisterFailure), failure.suppressed.toList())
+        assertSame(nodeFailures.first(), failure.cause)
+        assertSame(nodeFailures.last(), failure.suppressed[0].cause)
+        assertSame(unregisterFailure, failure.suppressed[1])
         assertEquals(listOf("system:remove:root", "system:remove:child", "system:unregister"), calls)
         assertEquals(emptyList(), system.nodes)
         assertFalse(scenes.hasSystem(RecordingSystem::class))

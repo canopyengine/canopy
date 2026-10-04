@@ -304,14 +304,15 @@ class NodeTests {
         // Verifies a node can attach behavior from within create().
         var wasCalled = false
 
-        class CustomScene(name: String, block: CustomScene.() -> Unit = {}) :
+        class CustomScene(name: String, onCalled: () -> Unit, block: CustomScene.() -> Unit = {}) :
             Node<CustomScene>(name, block = block) {
+            private val onCalled by nodeProperty(onCalled)
             override fun nodeInit() {
-                behavior(onReady = { wasCalled = true })
+                behavior(onReady = { onCalled() })
             }
         }
 
-        val root = CustomScene("root").asSceneRoot()
+        val root = CustomScene("root", { wasCalled = true }).asSceneRoot()
         root.buildTree()
 
         assertTrue(wasCalled)
@@ -385,12 +386,17 @@ class NodeTests {
             }
         }
 
+        val root = EmptyNode("root")
+        root.addChild(first)
+        root.addChild(removed)
+        root.addChild(added)
+        io.canopy.engine.core.managers.manager<SceneManager>().currScene = root
         val system = SnapshotSystem()
         system.register(first)
         system.register(removed)
 
         system.tick(0f)
-        assertEquals(listOf("first", "removed"), processed)
+        assertEquals(listOf("first"), processed)
 
         processed.clear()
         system.tick(0f)

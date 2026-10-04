@@ -52,26 +52,10 @@ interface ContextKey {
  */
 class Context(
     name: String = "__context__" + UUID.randomUUID().toString(),
-    internal val provided: MutableMap<String, () -> Any?> = linkedMapOf(),
+    provided: MutableMap<String, () -> Any?> = linkedMapOf(),
     block: Context.() -> Unit = {},
 ) : Node<Context>(name, skipOnSearch = true, block) {
-
-    /** Releases providers on permanent destruction. Reusable detachment and manager re-entry retain them. */
-    override fun nodeExitTree() {
-        try {
-            super.nodeExitTree()
-        } finally {
-            if (isFreed) provided.clear()
-        }
-    }
-
-    internal override fun releaseResources() {
-        try {
-            super.releaseResources()
-        } finally {
-            if (isFreed) provided.clear()
-        }
-    }
+    internal var provided by nodeProperty(provided)
 
     /**
      * Provides a value under a raw string key.

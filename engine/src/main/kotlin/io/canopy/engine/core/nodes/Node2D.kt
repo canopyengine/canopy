@@ -58,17 +58,17 @@ abstract class Node2D<N : Node2D<N>> protected constructor(name: String, block: 
     /**
      * Local position in 2D space.
      */
-    open var position: Vector2 = Vector2()
+    open var position: Vector2 by nodeProperty(Vector2())
 
     /**
      * Local scale in 2D space.
      */
-    var scale: Vector2 = Vector2(1f, 1f)
+    var scale: Vector2 by nodeProperty(Vector2(1f, 1f))
 
     /**
      * Local rotation in radians.
      */
-    open var rotation: Float = 0f
+    open var rotation: Float by nodeProperty(0f)
 
     /* ============================================================
      * DSL helpers

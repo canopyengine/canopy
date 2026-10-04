@@ -1,6 +1,8 @@
 package io.canopy.engine.core.managers
 
 import kotlin.reflect.KClass
+import io.canopy.engine.core.nodes.Node
+import io.canopy.engine.core.nodes.NodeLifetime
 import io.canopy.engine.logging.EngineLogs
 
 /**
@@ -28,6 +30,7 @@ class InjectionManager : Manager {
      * Note: despite the "weakly" comment, this is a strong reference map.
      * Providers may still choose to return weak references internally if desired.
      */
+    private val ownership = mutableMapOf<KClass<*>, () -> Unit>()
     private val providers = mutableMapOf<KClass<*>, () -> Any>()
 
     private val log = EngineLogs.subsystem("di")
@@ -41,7 +44,12 @@ class InjectionManager : Manager {
      *
      * @throws IllegalArgumentException if a provider for [kClass] is already registered
      */
-    fun <T : Any> registerInjectable(kClass: KClass<T>, provider: () -> T) {
+    fun <T : Any> registerInjectable(kClass: KClass<T>, provider: () -> T) =
+        registerInjectable(kClass, NodeLifetime.current(), provider)
+
+    /** Registers a provider for an explicit tree lifetime; null selects application ownership. */
+    fun <T : Any> registerInjectable(kClass: KClass<T>, owner: Node<*>?, provider: () -> T) {
+        owner?.requireValid("register provider")
         val typeName = kClass.qualifiedName ?: kClass.simpleName ?: "UnknownType"
 
         require(kClass !in providers) {
@@ -49,6 +57,11 @@ class InjectionManager : Manager {
         }
 
         providers[kClass] = provider
+        if (owner != null) {
+            ownership[kClass] = owner.onRemoval {
+                if (providers[kClass] === provider) unregisterInjectable(kClass)
+            }
+        }
 
         log.info(
             "event" to "di.register",
@@ -65,6 +78,12 @@ class InjectionManager : Manager {
      */
     inline operator fun <reified T : Any> plusAssign(noinline provider: () -> T) =
         registerInjectable(T::class, provider)
+
+    /** Removes a provider and its ownership registration without disposing borrowed values. */
+    fun unregisterInjectable(kClass: KClass<*>) {
+        providers.remove(kClass)
+        ownership.remove(kClass)?.invoke()
+    }
 
     /* ============================================================
      * Resolution
@@ -119,7 +138,7 @@ class InjectionManager : Manager {
 
     override fun onExit() {
         log.debug("event" to "di.teardown", "size" to providers.size) { "Teardown" }
-        providers.clear()
+        providers.keys.toList().forEach(::unregisterInjectable)
     }
 }
 

@@ -41,8 +41,9 @@ import io.canopy.engine.logging.EngineLogs
  * e.dispose() // stops reacting
  * ```
  */
-class Effect(private val block: () -> Unit) {
+class Effect(block: () -> Unit) {
 
+    private var action: (() -> Unit)? = block
     private val log = EngineLogs.subsystem("effect")
 
     private var dependencies: Set<Signal<*>> = emptySet()
@@ -73,7 +74,9 @@ class Effect(private val block: () -> Unit) {
      * All dependency subscriptions are removed. Safe to call multiple times.
      */
     fun dispose() {
+        if (disposed) return
         disposed = true
+        action = null
         cancelOwnership?.invoke()
         cancelOwnership = null
         disconnectHandlers.values.forEach { it.disconnect() }
@@ -97,7 +100,7 @@ class Effect(private val block: () -> Unit) {
             running = true
             val frame = TrackingContext.push()
             try {
-                block()
+                NodeLifetime.withOwner(null) { action?.invoke() }
             } finally {
                 TrackingContext.pop()
                 running = false
@@ -146,4 +149,4 @@ class Effect(private val block: () -> Unit) {
 fun effect(block: () -> Unit): Effect = Effect(block)
 
 /** Creates an effect retained until [owner] exits or is removed, then automatically disposes it. */
-fun effect(owner: Node<*>, block: () -> Unit): Effect = NodeLifetime.withOwner(owner) { Effect(block) }
+fun effect(owner: Node<*>?, block: () -> Unit): Effect = NodeLifetime.withOwner(owner) { Effect(block) }

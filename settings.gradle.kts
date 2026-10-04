@@ -1,4 +1,5 @@
 pluginManagement {
+    includeBuild("tooling/node-gradle-plugin")
     repositories {
         gradlePluginPortal()
         google()
@@ -47,3 +48,11 @@ include(
     ":tooling:devtools",
     ":tooling:utils"
 )
+
+// Also substitute the compiler artifact while developing the consumer plugin locally.
+includeBuild("tooling/node-gradle-plugin") {
+    dependencySubstitution {
+        substitute(module("io.canopy:engine-compiler"))
+            .using(project(":engine-compiler"))
+    }
+}

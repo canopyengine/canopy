@@ -1,12 +1,18 @@
 package io.canopy.engine.core.nodes
 
 /** Internal ownership context shared by lifecycle-aware resources without coupling nodes to their implementations. */
+@PublishedApi
 internal object NodeLifetime {
-    private val owner = ThreadLocal<Node<*>?>()
+    @PublishedApi
+    internal val owner = ThreadLocal<Node<*>?>()
+
+    fun current(): Node<*>? = owner.get()
 
     fun own(cleanup: () -> Unit): () -> Unit = owner.get()?.onRemoval(cleanup) ?: {}
 
-    fun <T> withOwner(node: Node<*>?, block: () -> T): T {
+    fun destroyWith(cleanup: () -> Unit): () -> Unit = owner.get()?.onDestroy(cleanup) ?: {}
+
+    inline fun <T> withOwner(node: Node<*>?, block: () -> T): T {
         val previous = owner.get()
         owner.set(node)
         try {

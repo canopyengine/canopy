@@ -1,6 +1,7 @@
 package io.canopy.engine.core.nodes
 
 import kotlin.test.*
+import io.canopy.engine.core.exceptions.*
 import io.canopy.engine.core.flows.Context
 import io.canopy.engine.core.flows.events.computed
 import io.canopy.engine.core.flows.events.effect
@@ -61,8 +62,8 @@ class NodeLifetimeTests {
                 behavior(onUpdate = {
                     queueFree()
                     queueFree()
-                }, onExitTree = { exits += name })
-                EmptyNode("leaf") { behavior(onExitTree = { exits += name }) }
+                }, onExitTree = { exits += exitMetadata.name })
+                EmptyNode("leaf") { behavior(onExitTree = { exits += exitMetadata.name }) }
             }
             EmptyNode("sibling")
         }
@@ -77,16 +78,16 @@ class NodeLifetimeTests {
         assertEquals(listOf("leaf", "branch"), exits)
         assertTrue(branch.isFreed)
         assertFalse(branch.isQueuedForDeletion)
-        assertNull(branch.parent)
-        assertSame(branch, leaf.parent)
+        assertFailsWith<NodeDestroyedException> { branch.parent }
+        assertFailsWith<NodeDestroyedException> { leaf.parent }
         assertTrue(branch in system.processed)
         assertTrue(leaf in system.processed)
         assertEquals(listOf<Node<*>>(leaf, branch), system.removed)
         assertEquals(listOf<Node<*>>(root, root.children.getValue("sibling")), system.nodes)
-        branch.queueFree()
+        assertFailsWith<NodeDestroyedException> { branch.queueFree() }
         scenes.onUpdate(0f)
         assertEquals(2, system.removed.size)
-        assertFailsWith<IllegalStateException> { root.addChild(branch) }
+        assertFailsWith<NodeDestroyedException> { root.addChild(branch) }
     }
 
     @Test
@@ -165,12 +166,13 @@ class NodeLifetimeTests {
         root.onRemoval { cleaned = true }
 
         // Act
-        val failure = assertFailsWith<IllegalStateException> { scenes.onUpdate(0f) }
+        val failure = assertFailsWith<NodeCallbackException> { scenes.onUpdate(0f) }
 
         // Assert
-        assertSame(updateFailure, failure)
-        assertTrue(removalFailure in failure.suppressed)
-        assertTrue(exitFailure in removalFailure.suppressed)
+        assertSame(updateFailure, failure.cause)
+        val cleanup = failure.suppressed.flatMap { listOf(it) + it.suppressed }.map { it.cause }
+        assertTrue(exitFailure in cleanup)
+        assertTrue(removalFailure in cleanup)
         assertTrue(cleaned)
         assertTrue(system.nodes.isEmpty())
         assertNull(scenes.currScene)
@@ -193,8 +195,8 @@ class NodeLifetimeTests {
                     state()
                     effectCalls++
                 }
-                behavior(onExitTree = { exits += name })
-                EmptyNode("leaf") { behavior(onExitTree = { exits += name }) }
+                behavior(onExitTree = { exits += exitMetadata.name })
+                EmptyNode("leaf") { behavior(onExitTree = { exits += exitMetadata.name }) }
             }
         }
         scenes.currScene = root
@@ -283,7 +285,7 @@ class NodeLifetimeTests {
         assertEquals(1, exits)
         context.queueFree()
         scenes.onUpdate(0f)
-        assertNull(context.fromContextOrNull<String>("value"))
+        assertFailsWith<NodeDestroyedException> { context.fromContextOrNull<String>("value") }
     }
 
     @Test
@@ -365,7 +367,7 @@ class NodeLifetimeTests {
         scenes.onUpdate(0f)
         val active = EmptyNode("active")
         scenes.currScene = active
-        assertFailsWith<IllegalArgumentException> { scenes.currScene = freed }
+        assertFailsWith<NodeDestroyedException> { scenes.currScene = freed }
         assertSame(active, scenes.currScene)
     }
 
@@ -373,13 +375,16 @@ class NodeLifetimeTests {
     fun `custom node update owns connections in managed dispatch`() {
         val source = event()
         var calls = 0
-        class Subscriber : Node<Subscriber>("subscriber") {
-            override fun nodeUpdate(delta: Float) {
-                source.connect { calls++ }
-                super.nodeUpdate(delta)
+        class Subscriber(source: io.canopy.engine.core.flows.events.NoArgEvent, onCall: () -> Unit) :
+            Node<Subscriber>("subscriber") {
+            private val source by nodeProperty(source)
+            private val onCall by nodeProperty(onCall)
+            override fun onUpdate(delta: Float) {
+                this.source.connect { onCall() }
+                super.onUpdate(delta)
             }
         }
-        val root = Subscriber()
+        val root = Subscriber(source) { calls++ }
         scenes.currScene = root
         scenes.onUpdate(0f)
         source.emit()
@@ -397,13 +402,14 @@ class NodeLifetimeTests {
         }
         ManagersRegistry.register(input)
         scenes.addSystem(InputSystem())
-        class Subscriber : Node<Subscriber>("subscriber") {
-            override fun nodeInput(event: InputEvent) {
-                source.connect {}
-                super.nodeInput(event)
+        class Subscriber(source: io.canopy.engine.core.flows.events.NoArgEvent) : Node<Subscriber>("subscriber") {
+            private val source by nodeProperty(source)
+            override fun onInput(event: InputEvent) {
+                this.source.connect {}
+                super.onInput(event)
             }
         }
-        scenes.currScene = Subscriber()
+        scenes.currScene = Subscriber(source)
         input.enqueue(TextInputEvent("text"))
         input.processEvents()
         scenes.onUpdate(0f)
@@ -415,21 +421,21 @@ class NodeLifetimeTests {
     @Test
     fun `custom failing exit still releases owned resources`() {
         val source = event()
-        val exitFailure = IllegalStateException("custom exit")
-        class Subscriber : Node<Subscriber>("subscriber") {
+        class Subscriber(source: io.canopy.engine.core.flows.events.NoArgEvent) : Node<Subscriber>("subscriber") {
+            private val source by nodeProperty(source)
             override fun nodeInit() {
-                source.connect {}
+                this.source.connect {}
                 Context("scope") { provide("value") { 42 } }
             }
-            override fun nodeExitTree(): Unit = throw exitFailure
+            override fun onExitTree(): Unit = error("custom exit")
         }
-        val root = Subscriber()
+        val root = Subscriber(source)
         scenes.currScene = root
         val context = root.children.getValue("scope") as Context
         root.queueFree()
-        assertSame(exitFailure, assertFailsWith<IllegalStateException> { scenes.onUpdate(0f) })
+        assertEquals("custom exit", assertFailsWith<NodeCleanupException> { scenes.onUpdate(0f) }.cause?.message)
         assertEquals(0, source.size())
-        assertNull(context.fromContextOrNull<Int>("value"))
+        assertFailsWith<NodeDestroyedException> { context.fromContextOrNull<Int>("value") }
         assertNull(scenes.currScene)
     }
 
