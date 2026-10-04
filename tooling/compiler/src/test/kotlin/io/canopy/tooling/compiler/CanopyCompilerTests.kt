@@ -86,6 +86,37 @@ class CanopyCompilerTests {
     }
 
     @Test
+    fun `consumer asset delegates compile while unmanaged descriptors and non asset types fail`() {
+        // Arrange / Act / Assert
+        compileConsumer(
+            """
+            import io.canopy.engine.data.assets.*
+            class Rules : CanopyAsset { override fun close() = Unit }
+            class Level : Node<Level>() { val rules by asset<Rules>("rules") }
+            """.trimIndent()
+        ) { code, output -> assertEquals(ExitCode.OK, code, output) }
+        compileConsumer(
+            """
+            import io.canopy.engine.data.assets.*
+            class Rules : CanopyAsset { override fun close() = Unit }
+            class Level : Node<Level>() { val rules = asset<Rules>("rules") }
+            """.trimIndent()
+        ) { code, output ->
+            assertEquals(ExitCode.COMPILATION_ERROR, code, output)
+            assertTrue("CANOPY_UNMANAGED_NODE_STATE" in output, output)
+        }
+        compileConsumer(
+            """
+            import io.canopy.engine.data.assets.*
+            class Level : Node<Level>() { val rules by asset<String>("rules") }
+            """.trimIndent()
+        ) { code, output ->
+            assertEquals(ExitCode.COMPILATION_ERROR, code, output)
+            assertTrue("CanopyAsset" in output, output)
+        }
+    }
+
+    @Test
     fun `registered rule provider runs alongside mandatory node checks`() {
         withRuleJar(TestNamingRule::class.java) { jar ->
             // Act / Assert: the provider contributes its diagnostic; mandatory safety remains active.
@@ -191,13 +222,28 @@ class CanopyCompilerTests {
                     """.trimIndent()
                 )
             }
+            val assetFile = directory.resolve("Assets.kt").apply {
+                writeText(
+                    """
+                    package io.canopy.engine.data.assets
+                    import kotlin.reflect.KProperty
+                    import io.canopy.engine.core.nodes.Node
+                    interface CanopyAsset : AutoCloseable
+                    class AssetDelegate<T : CanopyAsset> {
+                        operator fun getValue(owner: Node<*>, property: KProperty<*>): T = TODO()
+                    }
+                    inline fun <reified T : CanopyAsset> asset(path: String): AssetDelegate<T> = AssetDelegate()
+                    """.trimIndent()
+                )
+            }
             val apiCode = compiler.exec(
                 PrintStream(bytes),
                 *common,
                 "-d",
                 apiOutput.path,
                 apiFile.path,
-                queryFile.path
+                queryFile.path,
+                assetFile.path
             )
             assertEquals(ExitCode.OK, apiCode, bytes.toString())
             bytes.reset()
