@@ -52,9 +52,10 @@ interface ContextKey {
  */
 class Context(
     name: String = "__context__" + UUID.randomUUID().toString(),
-    internal val provided: MutableMap<String, () -> Any?> = linkedMapOf(),
+    provided: MutableMap<String, () -> Any?> = linkedMapOf(),
     block: Context.() -> Unit = {},
 ) : Node<Context>(name, skipOnSearch = true, block) {
+    internal var provided by nodeProperty(provided)
 
     /**
      * Provides a value under a raw string key.

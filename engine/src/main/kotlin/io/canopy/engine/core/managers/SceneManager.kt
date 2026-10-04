@@ -2,9 +2,11 @@ package io.canopy.engine.core.managers
 
 import kotlin.reflect.KClass
 import io.canopy.engine.app.App
-import io.canopy.engine.core.flows.events.asSignal
 import io.canopy.engine.core.flows.events.event
+import io.canopy.engine.core.nodes.CleanupFailures
 import io.canopy.engine.core.nodes.Node
+import io.canopy.engine.core.nodes.NodeLifetime
+import io.canopy.engine.core.nodes.NodeState
 import io.canopy.engine.core.nodes.TreeSystem
 import io.canopy.engine.logging.EngineLogs
 import io.canopy.engine.logging.LogContext
@@ -41,6 +43,33 @@ class SceneManager(val physicsStep: Float = 1f / 60f, private val block: SceneMa
      * This is updated when scenes are registered/unregistered.
      */
     private val flatTree = mutableMapOf<String, Node<*>>()
+    private val pathsByNode = mutableMapOf<Node<*>, String>()
+    private val ownedStates = mutableMapOf<Long, NodeState>()
+    internal val retainedStateCount: Int get() = ownedStates.size
+    internal val indexedNodeCount: Int get() = pathsByNode.size
+    internal var indexRemovalCount: Long = 0
+        private set
+
+    @JvmSynthetic
+    internal fun retainState(id: Long, state: NodeState) {
+        ownedStates[id] = state
+    }
+
+    @JvmSynthetic
+    internal fun releaseState(id: Long) {
+        ownedStates.remove(id)
+    }
+
+    @JvmSynthetic
+    internal fun reindex(node: Node<*>) {
+        val previous = pathsByNode[node] ?: return
+        if (flatTree[previous] === node) flatTree.remove(previous)
+        pathsByNode[node] = node.internalPath()
+        flatTree[node.internalPath()] = node
+    }
+    private val phaseSnapshots = mutableMapOf<TreeSystem.UpdatePhase, List<TreeSystem>>()
+    private fun phaseSnapshot(phase: TreeSystem.UpdatePhase): List<TreeSystem> =
+        phaseSnapshots.getOrPut(phase) { systems[phase]?.toList().orEmpty() }
 
     companion object {
         /**
@@ -61,18 +90,21 @@ class SceneManager(val physicsStep: Float = 1f / 60f, private val block: SceneMa
      * ============================================================ */
 
     /** Latest host dimensions; updated before [onResize] listeners run. Initially zero. */
-    val sceneSize = Vector2.Zero.asSignal()
+    val sceneSize = io.canopy.engine.core.flows.events.signal(owner = null, value = Vector2.Zero)
 
     /** Emitted for every host resize, after [sceneSize] has been updated. */
-    val onResize = event<Int, Int>()
+    val onResize = event<Int, Int>(owner = null)
 
     /** Emitted after the scene root is replaced. Payload is the new root (or null). */
-    val onSceneReplaced = event<Node<*>?>()
+    val onSceneReplaced = event<Node<*>?>(owner = null)
 
     /* ============================================================
      * Scene state
      * ============================================================ */
 
+    private val deletionQueue = linkedSetOf<Node<*>>()
+    private var updateDepth = 0
+    private var flushing = false
     internal var pauseState: () -> Boolean = { false }
 
     /** Application pause state. Standalone scene managers default to running. */
@@ -119,12 +151,12 @@ class SceneManager(val physicsStep: Float = 1f / 60f, private val block: SceneMa
      * Named groups of nodes.
      * Maps a node to its list of groups
      */
-    private val groupsByNode = mutableMapOf<Node<*>, MutableList<String>>()
+    private val groupsByNode = mutableMapOf<Node<*>, MutableSet<String>>()
 
     /**
      * Maps a group to all their nodes
      */
-    private val groups = mutableMapOf<String, MutableList<Node<*>>>()
+    private val groups = mutableMapOf<String, MutableSet<Node<*>>>()
 
     /* ============================================================
      * Scene replacement
@@ -139,7 +171,9 @@ class SceneManager(val physicsStep: Float = 1f / 60f, private val block: SceneMa
      * 3) Register + build new subtree
      */
     private fun replaceScene(newScene: Node<*>?) {
+        newScene?.requireValid("replace scene")
         val oldScene = _currScene
+        if (oldScene === newScene) return
 
         log.info(
             "event" to "scene.replace",
@@ -150,8 +184,12 @@ class SceneManager(val physicsStep: Float = 1f / 60f, private val block: SceneMa
         oldScene?.let { scene ->
             LogContext.with("scene" to scene.name) {
                 log.debug("event" to "scene.exit_tree") { "Exiting old scene tree" }
-                scene.nodeExitTree()
-                unregisterSubtree(scene)
+                val failures = CleanupFailures()
+                failures.attempt { NodeLifetime.withOwner(scene) { scene.nodeExitTree() } }
+                failures.attempt { scene.releaseResources() }
+                failures.attempt { unregisterSubtree(scene) }
+                _currScene = null
+                failures.rethrow()
             }
         }
 
@@ -174,11 +212,16 @@ class SceneManager(val physicsStep: Float = 1f / 60f, private val block: SceneMa
      * - [flatTree] lookup table
      * - any systems that declared interest in the node's type
      */
+    @JvmSynthetic
     internal fun registerSubtree(root: Node<*>? = currScene) {
         root ?: return
 
         traverseNodes(root) { node ->
             // Flat lookup by path (assumes node paths are unique within a scene).
+            node.requireValid("register subtree")
+            if (!node.isInsideTree) return@traverseNodes
+            pathsByNode[node]?.let { old -> if (flatTree[old] === node) flatTree.remove(old) }
+            pathsByNode[node] = node.path
             flatTree[node.path] = node
 
             // Register node into systems interested in its type.
@@ -208,42 +251,35 @@ class SceneManager(val physicsStep: Float = 1f / 60f, private val block: SceneMa
      * - [flatTree]
      * - any systems that declared interest in the node's type
      */
+    @JvmSynthetic
     internal fun unregisterSubtree(root: Node<*>? = currScene) {
         root ?: return
-
-        traverseNodes(root) { node ->
-            flatTree.remove(node.path)
+        val nodes = mutableListOf<Node<*>>()
+        traverseNodes(root) { nodes += it }
+        val failures = CleanupFailures()
+        for (node in nodes) {
+            pathsByNode.remove(node)?.let { key ->
+                if (flatTree[key] === node) flatTree.remove(key)
+                indexRemovalCount++
+            }
             groupsByNode.remove(node)?.forEach { group ->
                 groups[group]?.remove(node)
                 if (groups[group].isNullOrEmpty()) groups.remove(group)
             }
-
-            systemsFor(node).forEach { sys ->
-                LogContext.with(
-                    "scene" to root.name,
-                    "nodePath" to node.path,
-                    "system" to sys::class.simpleName
-                ) {
-                    log.trace("event" to "system.unregister_node") { "Unregistering node from system" }
-                }
-                sys.unregister(node)
-            }
+            systemsFor(node).toList().forEach { system -> failures.attempt { system.unregisterInternal(node) } }
         }
-
-        log.debug(
-            "event" to "scene.subtree_unregistered",
-            "scene" to root.name,
-            "flatTreeSize" to flatTree.size
-        ) { "Subtree unregistered" }
+        failures.rethrow()
     }
 
-    /**
-     * Depth-first traversal of the node tree.
-     * Used for register/unregister operations.
-     */
     private fun traverseNodes(node: Node<*>, action: (Node<*>) -> Unit) {
-        action(node)
-        node.children.values.forEach { traverseNodes(it, action) }
+        val pending = ArrayDeque<Node<*>>()
+        pending.addLast(node)
+        while (pending.isNotEmpty()) {
+            val next = pending.removeLast()
+            val children = next.childSnapshot()
+            for (i in children.indices.reversed()) pending.addLast(children[i])
+            action(next)
+        }
     }
 
     /** Returns systems indexed by any node type that the concrete node inherits. */
@@ -271,6 +307,7 @@ class SceneManager(val physicsStep: Float = 1f / 60f, private val block: SceneMa
             "System ${system::class.simpleName} is already registered"
         }
 
+        phaseSnapshots.remove(system.phase)
         systemsByClass[system::class] = system
 
         systems.getOrPut(system.phase) { mutableListOf() }.let { list ->
@@ -314,6 +351,7 @@ class SceneManager(val physicsStep: Float = 1f / 60f, private val block: SceneMa
             system.requiredTypes.forEach { type -> systemsByNodeTypes[type]?.remove(system) }
             sortBy(TreeSystem::priority)
         }
+        phaseSnapshots.remove(system.phase)
         systemsByClass.remove(kClass)
         releaseSystem(system)
 
@@ -389,8 +427,10 @@ class SceneManager(val physicsStep: Float = 1f / 60f, private val block: SceneMa
      * ============================================================ */
 
     fun addToGroup(group: String, node: Node<*>) {
-        groups.computeIfAbsent(group) { mutableListOf() }.add(node)
-        groupsByNode.computeIfAbsent(node) { mutableListOf() }.add(group)
+        node.requireValid("add group")
+        if (!node.isInsideTree || node in groups[group].orEmpty()) return
+        groups.computeIfAbsent(group) { linkedSetOf() }.add(node)
+        groupsByNode.computeIfAbsent(node) { linkedSetOf() }.add(group)
 
         log.trace("event" to "group.add", "group" to group, "nodePath" to node.path) {
             "Added node to group"
@@ -408,7 +448,7 @@ class SceneManager(val physicsStep: Float = 1f / 60f, private val block: SceneMa
 
     fun updateGroups(node: Node<*>) {
         // Get or create entry
-        val oldGroups = groupsByNode.computeIfAbsent(node) { mutableListOf() }
+        val oldGroups = groupsByNode.computeIfAbsent(node) { linkedSetOf() }
 
         // Remove old entries
         oldGroups.forEach { group ->
@@ -419,7 +459,7 @@ class SceneManager(val physicsStep: Float = 1f / 60f, private val block: SceneMa
         // Add new entries
         oldGroups.addAll(node.groups)
         node.groups.forEach { group ->
-            groups.computeIfAbsent(group) { mutableListOf() }.add(node)
+            groups.computeIfAbsent(group) { linkedSetOf() }.add(node)
         }
     }
 
@@ -431,7 +471,13 @@ class SceneManager(val physicsStep: Float = 1f / 60f, private val block: SceneMa
         val groupNodes = groups[group] ?: error("Group $group does not exist")
         LogContext.with("group" to group) {
             log.debug("event" to "group.signal", "count" to groupNodes.size) { "Signaling group" }
-            groupNodes.forEach(callback)
+            groupNodes.toList().forEach { node ->
+                if (node.isInsideTree &&
+                    node in groups[group].orEmpty()
+                ) {
+                    node.callback("group $group") { callback(node) }
+                }
+            }
         }
     }
 
@@ -447,24 +493,25 @@ class SceneManager(val physicsStep: Float = 1f / 60f, private val block: SceneMa
      * - FramePre systems
      * - nodeUpdate(delta)
      * - FramePost systems
+     * - drain queued node destruction (also after callback failures)
      */
-    override fun onUpdate(delta: Float) {
-        val root = currScene ?: return
+    override fun onUpdate(delta: Float) = updateBoundary {
+        val root = currScene ?: return@updateBoundary
 
         LogContext.with(
             "scene" to root.name,
             "delta" to delta,
             "physicsStep" to physicsStep
         ) {
-            systems[TreeSystem.UpdatePhase.FramePre]?.toList()?.forEach { sys ->
+            phaseSnapshot(TreeSystem.UpdatePhase.FramePre).forEach { sys ->
                 LogContext.with("system" to (sys::class.simpleName ?: "UnknownSystem"), "phase" to "FramePre") {
                     sys.tick(delta)
                 }
             }
 
-            root.dispatchUpdate(delta)
+            NodeLifetime.withOwner(root) { root.dispatchUpdate(delta) }
 
-            systems[TreeSystem.UpdatePhase.FramePost]?.toList()?.forEach { sys ->
+            phaseSnapshot(TreeSystem.UpdatePhase.FramePost).forEach { sys ->
                 LogContext.with("system" to (sys::class.simpleName ?: "UnknownSystem"), "phase" to "FramePost") {
                     sys.tick(delta)
                 }
@@ -472,26 +519,71 @@ class SceneManager(val physicsStep: Float = 1f / 60f, private val block: SceneMa
         }
     }
 
-    override fun onPhysicsUpdate(delta: Float) {
-        val root = currScene ?: return
+    /** Dispatches a complete physics traversal, then drains queued destruction even if callbacks fail. */
+    override fun onPhysicsUpdate(delta: Float) = updateBoundary {
+        val root = currScene ?: return@updateBoundary
 
         LogContext.with("scene" to root.name, "delta" to delta) {
             log.trace("event" to "tick.physics") { "Physics tick" }
 
-            systems[TreeSystem.UpdatePhase.PhysicsPre]?.toList()?.forEach { sys ->
+            phaseSnapshot(TreeSystem.UpdatePhase.PhysicsPre).forEach { sys ->
                 LogContext.with("system" to (sys::class.simpleName ?: "UnknownSystem"), "phase" to "PhysicsPre") {
                     sys.tick(delta)
                 }
             }
 
-            root.dispatchPhysicsUpdate(delta)
+            NodeLifetime.withOwner(root) { root.dispatchPhysicsUpdate(delta) }
 
-            systems[TreeSystem.UpdatePhase.PhysicsPost]?.toList()?.forEach { sys ->
+            phaseSnapshot(TreeSystem.UpdatePhase.PhysicsPost).forEach { sys ->
                 LogContext.with("system" to (sys::class.simpleName ?: "UnknownSystem"), "phase" to "PhysicsPost") {
                     sys.tick(delta)
                 }
             }
         }
+    }
+
+    @JvmSynthetic
+    internal fun queueFree(node: Node<*>) {
+        node.markQueued()
+        deletionQueue += node
+    }
+
+    private fun updateBoundary(block: () -> Unit) {
+        updateDepth++
+        val failures = CleanupFailures()
+        failures.attempt(block)
+        updateDepth--
+        if (updateDepth == 0) failures.attempt { flushDeletionQueue() }
+        failures.rethrow()
+    }
+
+    private fun flushDeletionQueue() {
+        if (flushing) return
+        flushing = true
+        val failures = CleanupFailures()
+        try {
+            while (deletionQueue.isNotEmpty()) {
+                val pending = deletionQueue.toList()
+                deletionQueue.clear()
+                for (root in pending) {
+                    if (root.isFreed) continue
+                    val nodes = mutableListOf<Node<*>>()
+                    traverseNodes(root) { nodes += it }
+                    nodes.forEach { it.beginDestruction() }
+                    failures.attempt { root.exitInternal() }
+                    failures.attempt { unregisterSubtree(root) }
+                    root.detachFromParent()
+                    if (_currScene === root) {
+                        _currScene = null
+                        failures.attempt { onSceneReplaced.emit(null) }
+                    }
+                    for (node in nodes.asReversed()) failures.attempt { node.finishDestruction() }
+                }
+            }
+        } finally {
+            flushing = false
+        }
+        failures.rethrow()
     }
 
     /**
@@ -512,10 +604,9 @@ class SceneManager(val physicsStep: Float = 1f / 60f, private val block: SceneMa
     override fun onEnter() {
         if (entered) return
         entered = true
-        systemsByClass.values.toList().forEach { system ->
-            initializeSystem(system)
-            backfillSystem(system)
-        }
+        systemsByClass.values.toList().forEach { initializeSystem(it) }
+        currScene?.let { NodeLifetime.withOwner(it) { it.nodeEnterTree() } }
+        systemsByClass.values.toList().forEach { backfillSystem(it) }
 
         log.info("event" to "sceneManager.setup", "physicsStep" to physicsStep) { "Setup" }
 
@@ -527,12 +618,20 @@ class SceneManager(val physicsStep: Float = 1f / 60f, private val block: SceneMa
         }
     }
 
-    /** Releases matches and initialized systems once; retains the scene and system configuration for re-entry. */
+    /**
+     * Exits node lifetimes and releases matches and initialized systems once, including on failure.
+     * Retains scene structure and system configuration. Re-entry calls node entry callbacks without
+     * rebuilding DSL blocks; recreate resources in entry callbacks when they must survive re-entry.
+     */
     override fun onExit() {
         if (!entered) return
         entered = false
+        if (currentParent.get() === this) currentParent.remove()
         log.info("event" to "sceneManager.teardown") { "Teardown" }
         // One failing cleanup hook must not leave the other systems holding scene nodes.
+        val sceneFailures = CleanupFailures()
+        sceneFailures.attempt { currScene?.let { NodeLifetime.withOwner(it) { it.nodeExitTree() } } }
+        sceneFailures.attempt { currScene?.releaseResources() }
         var failure: Throwable? = null
         systemsByClass.values.toList().forEach { system ->
             try {
@@ -546,7 +645,9 @@ class SceneManager(val physicsStep: Float = 1f / 60f, private val block: SceneMa
                 }
             }
         }
-        failure?.let { throw it }
+        sceneFailures.attempt { failure?.let { throw it } }
+        sceneFailures.attempt { flushDeletionQueue() }
+        sceneFailures.rethrow()
     }
 
     fun App<*>.sceneManager(handler: SceneManager.() -> Unit) {

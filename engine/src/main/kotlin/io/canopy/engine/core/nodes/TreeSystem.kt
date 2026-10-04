@@ -1,6 +1,7 @@
 package io.canopy.engine.core.nodes
 
 import kotlin.reflect.KClass
+import java.util.Collections
 import io.canopy.engine.core.managers.SceneManager
 import io.canopy.engine.core.managers.manager
 import io.canopy.engine.logging.EngineLogs
@@ -18,7 +19,14 @@ abstract class TreeSystem(
     private val log = EngineLogs.subsystem("system")
 
     /** Nodes currently matching the system's type requirements */
-    protected val matchingNodes = mutableListOf<Node<*>>()
+    private val matches = linkedSetOf<Node<*>>()
+    private var snapshot: List<Node<*>>? = null
+
+    /** Read-only ordered snapshot; changes become visible on the next access. */
+    protected val matchingNodes: List<Node<*>>
+        get() = snapshot ?: Collections.unmodifiableList(matches.toList()).also { snapshot = it }
+
+    private val removalRegistrations = mutableMapOf<Node<*>, () -> Unit>()
 
     private val systemName: String = this::class.simpleName ?: "AnonymousTreeSystem"
 
@@ -38,14 +46,17 @@ abstract class TreeSystem(
 
     /** Adds an accepted node once; repeat registrations do not repeat [onNodeAdded]. */
     fun register(node: Node<*>) {
-        if (matchingNodes.any { it === node } || !acceptsNode(node)) return
+        node.requireValid("register system")
+        if (node in matches || !acceptsNode(node)) return
 
-        matchingNodes += node
+        matches += node
+        snapshot = null
+        removalRegistrations[node] = node.onRemoval { unregisterInternal(node) }
 
         LogContext.with(
             "system" to systemName,
             "phase" to phase.name,
-            "nodePath" to node.path
+            "nodePath" to node.internalPath()
         ) {
             log.trace("event" to "system.node_added") { "Node added to system" }
         }
@@ -53,13 +64,22 @@ abstract class TreeSystem(
         runHook("onNodeAdded", node = node) { onNodeAdded(node) }
     }
 
+    /** Releases a match and its lifetime registration before invoking [onNodeRemoved]. */
     fun unregister(node: Node<*>) {
-        if (!matchingNodes.remove(node)) return
+        node.requireValid("unregister system")
+        unregisterInternal(node)
+    }
+
+    @JvmSynthetic
+    internal fun unregisterInternal(node: Node<*>) {
+        if (!matches.remove(node)) return
+        snapshot = null
+        removalRegistrations.remove(node)?.invoke()
 
         LogContext.with(
             "system" to systemName,
             "phase" to phase.name,
-            "nodePath" to node.path
+            "nodePath" to node.internalPath()
         ) {
             log.trace("event" to "system.node_removed") { "Node removed from system" }
         }
@@ -70,9 +90,9 @@ abstract class TreeSystem(
     /** Releases current matches through the normal removal hook, leaving this system reusable. */
     internal fun clearNodes() {
         var failure: Throwable? = null
-        matchingNodes.toList().forEach { node ->
+        matchingNodes.forEach { node ->
             try {
-                unregister(node)
+                unregisterInternal(node)
             } catch (error: Throwable) {
                 val previous = failure
                 if (previous == null) {
@@ -116,8 +136,8 @@ abstract class TreeSystem(
             runHook("beforeProcess", delta = delta) { beforeProcess(delta) }
 
             // No automatic per-node logging (too spammy). Use subclass logging if needed.
-            matchingNodes.toList().forEach { node ->
-                if (node.canProcess()) {
+            matchingNodes.forEach { node ->
+                if (node in matches && node.isInsideTree && node.canProcess()) {
                     runHook("processNode", delta = delta, node = node) { processNode(node, delta) }
                 }
             }
@@ -134,9 +154,13 @@ abstract class TreeSystem(
     //           SAFE HOOK RUNNER
     // ===============================
 
-    private inline fun runHook(hook: String, delta: Float? = null, node: Node<*>? = null, block: () -> Unit) {
+    private fun runHook(hook: String, delta: Float? = null, node: Node<*>? = null, block: () -> Unit) {
         try {
-            block()
+            if (node != null && node.isValid) {
+                node.callback(hook, block)
+            } else {
+                NodeLifetime.withOwner(null, block)
+            }
         } catch (t: Throwable) {
             val fields = buildMap<String, Any?> {
                 put("event", "system.hook_error")
@@ -147,11 +171,18 @@ abstract class TreeSystem(
                 put("requiredTypes", requiredTypes.joinToString { it.simpleName ?: it.toString() })
                 put("matchingCount", matchingNodes.size)
                 if (delta != null) put("delta", delta)
-                if (node != null) put("nodePath", node.path)
+                if (node != null) put("nodePath", node.internalPath())
             }.map { Pair(it.key, it.value) }
 
             log.error(t = t, *fields.toTypedArray()) { "System hook threw" }
-            throw t // fail fast; change to 'return' if you prefer resilience
+            if (node != null &&
+                t !is io.canopy.engine.core.exceptions.CanopyException &&
+                t !is Error &&
+                t !is kotlinx.coroutines.CancellationException
+            ) {
+                throw io.canopy.engine.core.exceptions.NodeCleanupException(node.diagnostic("system", hook), t)
+            }
+            throw t
         }
     }
 
