@@ -8,6 +8,7 @@ val canopyVersion = project.property("canopyVersion") ?: ""
 
 plugins {
     base
+    id("io.canopy.compiler") apply false
     jacoco
     alias(libs.plugins.kotlin.jvm) apply false
     alias(libs.plugins.kotlin.serialization) apply false
@@ -38,6 +39,10 @@ subprojects {
         extensions.configure<BasePluginExtension>("base") {
             archivesName.set(project.path.removePrefix(":").replace(":", "-"))
         }
+    }
+
+    plugins.withId("org.jetbrains.kotlin.jvm") {
+        pluginManager.apply("io.canopy.compiler")
     }
 
     plugins.withId("java") {
@@ -150,5 +155,45 @@ subprojects {
             sourceDirectories.from(mainSourceSet.map { it.allSource.srcDirs })
             classDirectories.from(mainSourceSet.map { it.output })
         }
+    }
+}
+
+// Compiler tooling is an included build so its consumer plugin is available during project configuration.
+listOf("test", "ktlintCheck", "build").forEach { taskName ->
+    tasks.matching { it.name == taskName }.configureEach {
+        dependsOn(gradle.includedBuild("compiler").task(":$taskName"))
+    }
+}
+
+// A source-built engine and its consumer compiler integration must use the same version.
+val publishLocalTooling = tasks.register("publishToMavenLocal") {
+    dependsOn(gradle.includedBuild("compiler").task(":publishToMavenLocal"))
+}
+subprojects {
+    plugins.withId("maven-publish") {
+        val modulePublication = tasks.named("publishToMavenLocal")
+        publishLocalTooling.configure { dependsOn(modulePublication) }
+    }
+}
+
+val allTests = tasks.register("test") { group = "verification" }
+val allLint = tasks.register("ktlintCheck") { group = "verification" }
+subprojects {
+    plugins.withId("java") {
+        val moduleTests = tasks.named("test")
+        allTests.configure { dependsOn(moduleTests) }
+    }
+    plugins.withId("org.jlleitschuh.gradle.ktlint") {
+        val moduleLint = tasks.named("ktlintCheck")
+        allLint.configure { dependsOn(moduleLint) }
+    }
+}
+
+coverageReport.configure {
+    dependsOn(gradle.includedBuild("compiler").task(":test"))
+    executionData(file("tooling/compiler/build/jacoco/test.exec"))
+    listOf("main", "compiler").forEach { sourceSet ->
+        sourceDirectories.from(file("tooling/compiler/src/$sourceSet/kotlin"))
+        classDirectories.from(file("tooling/compiler/build/classes/kotlin/$sourceSet"))
     }
 }

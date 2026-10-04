@@ -1,4 +1,5 @@
 pluginManagement {
+    includeBuild("tooling/compiler")
     repositories {
         gradlePluginPortal()
         google()
@@ -47,3 +48,6 @@ include(
     ":tooling:devtools",
     ":tooling:utils"
 )
+
+// Register dependency participation as well as early plugin resolution; Gradle keeps one included build.
+includeBuild("tooling/compiler")
