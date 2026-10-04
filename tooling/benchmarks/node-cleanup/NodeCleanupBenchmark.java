@@ -15,6 +15,7 @@ import kotlin.reflect.KClass;
 /** Identical harness for main and candidate; off-screen balanced 8-way scenes. */
 public class NodeCleanupBenchmark {
     static volatile long sink;
+    /** Exercises guarded built-ins and managed transforms without backend rendering. */
     static class ReadingSystem extends TreeSystem {
         long reads;
         @SuppressWarnings({"unchecked", "rawtypes"})

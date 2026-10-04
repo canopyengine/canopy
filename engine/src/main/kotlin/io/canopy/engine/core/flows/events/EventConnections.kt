@@ -5,6 +5,7 @@ import io.canopy.engine.core.nodes.NodeLifetime
 
 /** Weak unowned listeners, strong retained handles, O(1) handle removal and mutation-only snapshots. */
 internal class EventConnections<T : Any> {
+    /** Old dispatch snapshots retain neither listeners nor cancellation handles strongly. */
     private class Connection<T : Any>(val listener: WeakReference<T>, val handle: WeakReference<EventDisconnectHandler>)
     private val connections = linkedMapOf<Long, Connection<T>>()
     private var sequence = 0L

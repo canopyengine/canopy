@@ -46,7 +46,7 @@ class NodeCleanupException(diagnostic: NodeDiagnostic, cause: Throwable) :
 class InvalidNodeDefinitionException(val nodeType: String, fields: List<String>) :
     CanopyException(
         "CANOPY_UNMANAGED_NODE_STATE: $nodeType contains unmanaged fields ${fields.joinToString()}; " +
-            "use 'by nodeProperty(...)' and apply the io.canopy.node-state Gradle plugin"
+            "use 'by nodeProperty(...)' and apply the io.canopy.compiler Gradle plugin"
     ) {
     /** Immutable field names; mutating diagnostics cannot alter the cached validation result. */
     val fields: List<String> = Collections.unmodifiableList(fields.toList())

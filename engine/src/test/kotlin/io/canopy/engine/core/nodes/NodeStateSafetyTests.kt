@@ -14,9 +14,11 @@ import io.canopy.engine.core.nodes.types.empty.EmptyNode
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.BeforeEach
 
+/** Exercises retained-facade guards, reusable detachment and unsafe precompiled class rejection. */
 class NodeStateSafetyTests {
     private lateinit var scenes: SceneManager
 
+    /** Concrete managed-state node used to preserve the class-named DSL and typed lookup contract. */
     private class EnemyNode(name: String, block: EnemyNode.() -> Unit = {}) : Node<EnemyNode>(name, block = block) {
         var health by nodeProperty(100)
         val resource by nodeProperty(Any())

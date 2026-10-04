@@ -67,11 +67,10 @@ The following completed successfully with desktop already excluded by repository
 settings; desktop restoration remains deferred:
 
 ```text
-gradlew.bat projects :node-gradle-plugin:projects test ktlintCheck build coverageReport :engine:benchmarkClasspath --init-script tooling/benchmarks/node-cleanup/classpath.init.gradle.kts --no-daemon --console=plain
+gradlew.bat projects test ktlintCheck build coverageReport :engine:benchmarkClasspath --init-script tooling/benchmarks/node-cleanup/classpath.init.gradle.kts --no-daemon --console=plain
 ```
 
-Engine: 163 tests; compiler: 3 tests (including multiple compilation fixtures);
-consumer Gradle integration: 1 test checking independent main and test compilations.
-All pass without skips. Line coverage: 2,326 / 3,260 (71.3%), above the unchanged
-60% gate. Both repository diffs pass `git diff --check`; relative links in the
+Engine: 163 tests pass without skips. Compiler checks and consumer integration are
+in a separate stacked PR and must merge before releasing the complete state-safety
+system. Runtime class validation remains active in this branch. Runtime-only line coverage is 2,236 / 3,158 (70.8%), above the unchanged 60% gate. Both repository diffs pass `git diff --check`; relative links in the
 five changed companion documentation files resolve locally.

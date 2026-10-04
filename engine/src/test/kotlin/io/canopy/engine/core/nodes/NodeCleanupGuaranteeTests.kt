@@ -9,6 +9,7 @@ import kotlinx.coroutines.*
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.BeforeEach
 
+/** Verifies engine-owned cleanup, failure handling and deterministic index-removal costs. */
 class NodeCleanupGuaranteeTests {
     private lateinit var scenes: SceneManager
 
