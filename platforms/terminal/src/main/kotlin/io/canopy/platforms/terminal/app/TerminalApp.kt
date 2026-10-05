@@ -1,6 +1,5 @@
 package io.canopy.platforms.terminal.app
 
-import kotlin.time.Duration.Companion.milliseconds
 import java.util.concurrent.atomic.AtomicBoolean
 import com.github.ajalt.mordant.input.KeyboardEvent
 import com.github.ajalt.mordant.input.coroutines.receiveEventsFlow
@@ -9,12 +8,9 @@ import com.github.ajalt.mordant.terminal.Terminal
 import io.canopy.adapters.mordant.input.MordantInputManager
 import io.canopy.engine.app.App
 import io.canopy.engine.app.AppConfig
+import io.canopy.engine.commands.CommandPromptHost
 import io.canopy.engine.core.managers.SceneManager
 import io.canopy.engine.input.InputSystem
-import io.canopy.engine.input.binds.Key
-import io.canopy.engine.input.events.InputState
-import io.canopy.engine.input.events.KeyInputEvent
-import io.canopy.engine.input.events.TextInputEvent
 import io.canopy.engine.logging.EngineLogs
 import io.canopy.platforms.terminal.data.assets.TerminalAssetsManager
 import io.canopy.tooling.utils.UnstableApi
@@ -34,13 +30,20 @@ class TerminalApp internal constructor() : App<AppConfig>() {
     private var lineInputMode = false
 
     private var hasRenderedFrame = false
+    private val lineInput = TerminalLineInputBridge(inputManager)
+    private val commandPresentation = TerminalCommandPresentation(
+        lineMode = { lineInputMode },
+        output = { terminal.rawPrint(it) },
+        restoreFrame = { hasRenderedFrame = false }
+    )
+    private val commandHost = CommandPromptHost(this, commandPresentation)
 
     // App-wide coroutine scope
     private val appScope = CoroutineScope(Dispatchers.Default + SupervisorJob())
 
     /** Clears the interactive terminal and renders one frame of demo output. */
     fun renderFrame(lines: List<String>) {
-        if (!lineInputMode) {
+        if (!lineInputMode && !commandPresentation.isVisible) {
             val frame = buildString {
                 if (!hasRenderedFrame) {
                     append(terminal.cursor.getMoves { clearScreen() })
@@ -66,7 +69,8 @@ class TerminalApp internal constructor() : App<AppConfig>() {
 
     override fun provideManagers() = listOf(
         inputManager,
-        assetsManager
+        assetsManager,
+        commandHost
     )
 
     @OptIn(UnstableApi::class)
@@ -111,16 +115,12 @@ class TerminalApp internal constructor() : App<AppConfig>() {
             } catch (t: Throwable) {
                 log.info { "Raw terminal input unavailable; switching to line input: ${t.message}" }
                 try {
-                    lineInputMode = true
+                    lineInput.preparePresentation { lineInputMode = true }.await()
                     while (true) {
                         if (!running.get()) break
                         val line = withContext(Dispatchers.IO) { readLine() } ?: break
                         if (!running.get()) break
-                        lineInputMode = false
-                        inputManager.enqueue(TextInputEvent(line))
-                        inputManager.enqueue(KeyInputEvent(Key.ENTER, state = InputState.JustPressed))
-                        delay(50.milliseconds)
-                        lineInputMode = true
+                        lineInput.submit(line).await()
                     }
                 } catch (e: CancellationException) {
                     // Normal shutdown
@@ -136,35 +136,39 @@ class TerminalApp internal constructor() : App<AppConfig>() {
         var lastTime = System.nanoTime()
 
         // 🔹 Main loop (sync)
-        while (running.get() && !Thread.currentThread().isInterrupted) {
-            val now = System.nanoTime()
-            val deltaNanos = now - lastTime
-            lastTime = now
+        try {
+            while (running.get() && !Thread.currentThread().isInterrupted) {
+                val now = System.nanoTime()
+                val deltaNanos = now - lastTime
+                lastTime = now
 
-            val delta = deltaNanos / 1_000_000_000f
+                val delta = deltaNanos / 1_000_000_000f
 
-            // Process input FIRST (drains queue → updates action states)
-            inputManager.processEvents()
+                // Process input FIRST (drains queue → updates action states)
+                val processedLine = lineInput.processEvents()
 
-            // Process frame
-            engineLoop.update(delta)
+                // Process frame
+                engineLoop.update(delta)
+                processedLine?.complete(Unit)
 
-            // Frame limiting
-            val elapsed = System.nanoTime() - now
-            val sleepNanos = frameNanos - elapsed
-            if (sleepNanos > 0) {
-                Thread.sleep(
-                    sleepNanos / 1_000_000L,
-                    (sleepNanos % 1_000_000L).toInt()
-                )
+                // Frame limiting
+                val elapsed = System.nanoTime() - now
+                val sleepNanos = frameNanos - elapsed
+                if (sleepNanos > 0) {
+                    Thread.sleep(
+                        sleepNanos / 1_000_000L,
+                        (sleepNanos % 1_000_000L).toInt()
+                    )
+                }
             }
+
+            // 🔹 Shutdown
+        } finally {
+            inputJob.cancel()
+            appScope.cancel()
+            lineInput.cancel()
+            engineLoop.exit()
         }
-
-        // 🔹 Shutdown
-        inputJob.cancel()
-        appScope.cancel()
-
-        engineLoop.exit()
     }
 }
 

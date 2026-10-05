@@ -4,12 +4,16 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.FutureTask
+import java.util.concurrent.TimeUnit
 import io.canopy.engine.input.binds.InputBind
 import io.canopy.engine.input.binds.InputData
 import io.canopy.engine.input.binds.Key
 import io.canopy.engine.input.events.InputEvent
 import io.canopy.engine.input.events.InputState
 import io.canopy.engine.input.events.KeyInputEvent
+import io.canopy.engine.input.events.TextInputEvent
 import io.canopy.engine.math.Vector2
 
 class InputManagerTests {
@@ -21,6 +25,48 @@ class InputManagerTests {
         override fun handleEvent(event: InputEvent) {
             handled += event
         }
+
+        fun publishPair(firstPublished: CountDownLatch, publishSecond: CountDownLatch) {
+            synchronized(eventQueue) {
+                enqueue(KeyInputEvent(Key.Q_KEY, state = InputState.JustPressed))
+                firstPublished.countDown()
+                check(publishSecond.await(10, TimeUnit.SECONDS)) { "Batch publication was not released" }
+                enqueue(TextInputEvent("q"))
+            }
+        }
+    }
+
+    @Test
+    fun `a frame cannot observe a partially published backend key and text batch`() {
+        // Arrange: hold the publication monitor between the key and its related text.
+        val input = TestInputManager()
+        val firstPublished = CountDownLatch(1)
+        val publishSecond = CountDownLatch(1)
+        val producerTask = FutureTask { input.publishPair(firstPublished, publishSecond) }
+        val producer = Thread(producerTask)
+        val consumerTask = FutureTask { input.processEvents() }
+        val consumer = Thread(consumerTask)
+        producer.start()
+        assertTrue(firstPublished.await(10, TimeUnit.SECONDS))
+        consumer.start()
+        try {
+            // Act: wait for observable blocking or completion, rather than guessing thread execution order.
+            val deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(10)
+            while (consumer.state != Thread.State.BLOCKED && !consumerTask.isDone && System.nanoTime() < deadline) {
+                Thread.yield()
+            }
+            // Assert: polling waits for complete publication; it cannot return the key alone.
+            assertEquals(Thread.State.BLOCKED, consumer.state)
+            assertTrue(input.handled.isEmpty())
+        } finally {
+            publishSecond.countDown()
+            producerTask.get(10, TimeUnit.SECONDS)
+            consumerTask.get(10, TimeUnit.SECONDS)
+        }
+        assertEquals(
+            listOf(KeyInputEvent(Key.Q_KEY, state = InputState.JustPressed), TextInputEvent("q")),
+            input.eventsThisFrame
+        )
     }
 
     @Test
