@@ -2,7 +2,9 @@ package io.canopy.engine.input
 
 import java.util.concurrent.ConcurrentLinkedQueue
 import io.canopy.engine.app.App
+import io.canopy.engine.commands.CommandPromptHost
 import io.canopy.engine.core.managers.Manager
+import io.canopy.engine.core.managers.ManagersRegistry
 import io.canopy.engine.core.managers.manager
 import io.canopy.engine.data.saving.registerSaveModule
 import io.canopy.engine.input.binds.InputBind
@@ -21,17 +23,27 @@ abstract class InputManager : Manager {
 
     private val _actionStates = mutableMapOf<String, InputState>()
 
-    /** Returns a copy of the current mapped action states. */
-    val actionStates get() = _actionStates.toMap()
+    /** Returns copied mapped states, or an empty map while command editing owns this frame's input. */
+    val actionStates get() = if (blocksGameplay) emptyMap() else _actionStates.toMap()
+
+    private fun commandHost(): CommandPromptHost? = if (ManagersRegistry.has(CommandPromptHost::class)) {
+        ManagersRegistry.getManager(CommandPromptHost::class)
+    } else {
+        null
+    }
+
+    internal val blocksGameplay: Boolean get() = commandHost()?.blocksGameplay == true
 
     /**
      * Async → Sync bridge.
      * Backends enqueue events, engine drains them per frame.
+     * Backends publishing a related event batch must synchronize on this queue around their enqueue calls.
+     * Polling uses the same monitor so no frame can observe a partially published batch.
      */
     protected val eventQueue = ConcurrentLinkedQueue<InputEvent>()
 
     /**
-     * Per-frame snapshot of all raw events processed this frame.
+     * Per-frame snapshot of raw events not consumed by command focus.
      * Populated by processEvents(), consumed by InputSystem to dispatch to nodes.
      * Cleared at the start of each processEvents() call.
      */
@@ -65,19 +77,21 @@ abstract class InputManager : Manager {
      *
      * This:
      * 1. Clears last frame's raw event snapshot
-     * 2. Drains async events → backend state + raw snapshot
+     * 2. Drains async events into backend state, routing focused commands before the gameplay raw snapshot
      * 3. Recomputes action states
      */
     open fun processEvents() {
         // 1. Clear last frame's raw event snapshot
         _eventsThisFrame.clear()
         eventsConsumedThisFrame = false
+        val host = commandHost()
+        host?.beginInputFrame()
 
         // 2. Drain queue → backend state + raw snapshot
         while (true) {
-            val event = eventQueue.poll() ?: break
-            _eventsThisFrame += event
+            val event = synchronized(eventQueue) { eventQueue.poll() } ?: break
             handleEvent(event)
+            if (host?.route(event) != true) _eventsThisFrame += event
         }
 
         // 3. Recompute action states
@@ -89,8 +103,8 @@ abstract class InputManager : Manager {
      */
     fun updateActions() {
         mapper.actions.forEach { (action, binds) ->
-            val rawPressed = binds.any(::pollPressed)
-            val previousState = getActionState(action)
+            val rawPressed = !blocksGameplay && binds.any(::pollPressed)
+            val previousState = _actionStates[action] ?: InputState.Released
 
             val nextState = getNextState(
                 previousState = previousState,
@@ -101,8 +115,9 @@ abstract class InputManager : Manager {
         }
     }
 
-    /** Returns the current action state, defaulting to Released for an unknown action. */
-    fun getActionState(action: String): InputState = _actionStates[action] ?: InputState.Released
+    /** Returns Released for unknown actions and while command editing owns this frame's input. */
+    fun getActionState(action: String): InputState =
+        if (blocksGameplay) InputState.Released else _actionStates[action] ?: InputState.Released
 
     /** Returns whether the action is held or was just pressed. */
     fun isActionPressed(action: String): Boolean {
@@ -122,8 +137,8 @@ abstract class InputManager : Manager {
         return state == InputState.Released || state == InputState.JustReleased
     }
 
-    /** Polls the backend directly for a physical binding. */
-    fun isPressed(bind: InputBind): Boolean = pollPressed(bind)
+    /** Polls a physical binding, suppressed while command editing owns this frame's input. */
+    fun isPressed(bind: InputBind): Boolean = !blocksGameplay && pollPressed(bind)
 
     /** Returns -1 or 1 when only one action is pressed, otherwise zero. */
     fun getAxis(negativeAction: String, positiveAction: String): Float {
@@ -175,7 +190,7 @@ abstract class InputManager : Manager {
      * Called by async producers (coroutines, callbacks, etc.)
      */
     fun enqueue(event: InputEvent) {
-        eventQueue.add(event)
+        synchronized(eventQueue) { eventQueue.add(event) }
     }
 
     /** Registers input mapping serialization with the current SaveManager; loading resets states to Released. */

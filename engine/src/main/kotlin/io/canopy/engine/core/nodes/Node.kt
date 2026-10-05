@@ -433,7 +433,7 @@ abstract class Node<N : Node<N>> protected constructor(
     /** Custom eligible fixed-step hook, delta in seconds. */
     protected open fun onPhysicsUpdate(delta: Float) {}
 
-    /** Custom eligible input hook. */
+    /** Custom eligible input hook. Consuming the event stops remaining descendants and behavior callbacks. */
     protected open fun onInput(event: InputEvent) {}
 
     /** Builds and enters the class-named DSL once, then runs readiness. */
@@ -615,7 +615,10 @@ abstract class Node<N : Node<N>> protected constructor(
         dispatchPhysicsUpdate(delta)
     }
 
-    /** Validated input entrypoint. */
+    /**
+     * Validated input entrypoint. Traverses node, children in tree order, then behavior. A consumed event stops
+     * the remaining traversal; use a fresh event for each independent dispatch.
+     */
     fun nodeInput(event: InputEvent) {
         state("input")
         dispatchInput(event)
@@ -635,7 +638,7 @@ abstract class Node<N : Node<N>> protected constructor(
     }
 
     private fun dispatchState(kind: Int, delta: Float, event: InputEvent?, s: NodeState) {
-        if (!s.entered || isFreed) return
+        if (!s.entered || isFreed || (kind == 2 && event?.isHandled == true)) return
         val phase = when (kind) {
             0 -> "frame"
             1 -> "physics"
@@ -651,10 +654,17 @@ abstract class Node<N : Node<N>> protected constructor(
             }
         }
         for (child in s.snapshot()) {
+            if (kind == 2 && event?.isHandled == true) return
             val childState = child.reference.get() ?: continue
             if (childState.parent === this) child.dispatchState(kind, delta, event, childState)
         }
-        if (!s.entered || isFreed || !eligible(s, s.owner.isPaused)) return
+        if (!s.entered ||
+            isFreed ||
+            !eligible(s, s.owner.isPaused) ||
+            (kind == 2 && event?.isHandled == true)
+        ) {
+            return
+        }
         val behavior = s.behavior ?: return
         callback(phase) {
             when (kind) {

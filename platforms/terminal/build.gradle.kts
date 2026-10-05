@@ -32,3 +32,12 @@ dependencies {
     testImplementation(libs.assertj.core)
     testImplementation(libs.mockk)
 }
+
+tasks.register<JavaExec>("commandPromptSmoke") {
+    group = "verification"
+    description = "Launch the manual command prompt terminal smoke example"
+    dependsOn(tasks.testClasses)
+    classpath = sourceSets.test.get().runtimeClasspath
+    mainClass.set("io.canopy.platforms.terminal.app.CommandPromptSmokeKt")
+    standardInput = System.`in`
+}

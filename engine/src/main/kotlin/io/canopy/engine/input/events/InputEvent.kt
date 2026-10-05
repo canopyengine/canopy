@@ -13,7 +13,8 @@ sealed class InputEvent(open val action: String, open val state: InputState) {
     internal var isHandled = false
 
     /**
-     * Marks the event handled; dispatch code decides whether to honor the flag.
+     * Marks the event handled. Node input traversal stops remaining descendants, siblings and behavior callbacks.
+     * Host focus routing also consumes events before gameplay mapping. Do not reuse consumed events for dispatch.
      */
     fun consume() {
         isHandled = true
