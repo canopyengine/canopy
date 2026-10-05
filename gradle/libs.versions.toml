@@ -26,7 +26,7 @@ mockitoKotlin = "5.4.0"
 
 # Logging
 slf4j = "2.0.20"
-logback = "1.6.4"
+logback = "1.6.5"
 logstash="9.0"
 
 # TOML
