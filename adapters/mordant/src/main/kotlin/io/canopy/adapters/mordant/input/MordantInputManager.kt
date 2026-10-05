@@ -74,23 +74,33 @@ class MordantInputManager : InputManager() {
      * - A [KeyInputEvent] for any key that maps to a known [InputBind] (for action-based input)
      * - A [TextInputEvent] for any printable character (for raw text input / command prompts)
      */
-    fun enqueueMordantKeyEvent(event: com.github.ajalt.mordant.input.KeyboardEvent) {
-        if (event.isCtrlC) return
+    fun enqueueMordantKeyEvent(event: com.github.ajalt.mordant.input.KeyboardEvent): Unit = synchronized(eventQueue) {
+        if (event.isCtrlC) return@synchronized
 
         // Enqueue KeyInputEvent for mapped binds (action system)
         val bind = event.toInputBind()
         if (bind != null) {
-            enqueue(KeyInputEvent(key = bind.toKey(), state = InputState.JustPressed))
+            enqueue(
+                KeyInputEvent(
+                    key = bind.toKey(),
+                    ctrl = event.ctrl,
+                    alt = event.alt,
+                    shift = event.shift,
+                    state = InputState.JustPressed
+                )
+            )
         }
 
         // Enqueue TextInputEvent for printable characters (text input system)
         // A printable character is a single character that is not a special key
         val text = when {
             event.key == "space" || event.key == " " -> " "
-            event.key.length == 1 -> event.key
+            event.key.codePointCount(0, event.key.length) == 1 -> event.key
             else -> null
         }
-        if (text != null) enqueue(TextInputEvent(text = text))
+        if (text != null && !event.ctrl && !event.alt && text.none(Char::isISOControl)) {
+            enqueue(TextInputEvent(text = text))
+        }
     }
 
     /**
@@ -134,7 +144,7 @@ class MordantInputManager : InputManager() {
 
             else -> {
                 if (normalized.length == 1) {
-                    runCatching { InputBind.valueOf(normalized) }.getOrNull()
+                    runCatching { InputBind.valueOf(normalized.uppercase()) }.getOrNull()
                 } else {
                     null
                 }
