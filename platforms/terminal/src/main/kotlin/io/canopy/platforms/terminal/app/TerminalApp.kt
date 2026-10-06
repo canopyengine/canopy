@@ -29,37 +29,24 @@ class TerminalApp internal constructor() : App<AppConfig>() {
     @Volatile
     private var lineInputMode = false
 
-    private var hasRenderedFrame = false
     private val lineInput = TerminalLineInputBridge(inputManager)
     private val commandPresentation = TerminalCommandPresentation(
         lineMode = { lineInputMode },
         output = { terminal.rawPrint(it) },
-        restoreFrame = { hasRenderedFrame = false }
+        restoreFrame = {}
     )
     private val commandHost = CommandPromptHost(this, commandPresentation)
 
     // App-wide coroutine scope
     private val appScope = CoroutineScope(Dispatchers.Default + SupervisorJob())
 
-    /** Clears the interactive terminal and renders one frame of demo output. */
+    /**
+     * Replaces the interactive screen with one frame, including when [lines] is empty.
+     * Rendering is suspended while command presentation or line input owns the terminal.
+     */
     fun renderFrame(lines: List<String>) {
         if (!lineInputMode && !commandPresentation.isVisible) {
-            val frame = buildString {
-                if (!hasRenderedFrame) {
-                    append(terminal.cursor.getMoves { clearScreen() })
-                    hasRenderedFrame = true
-                }
-                lines.forEachIndexed { index, line ->
-                    append(
-                        terminal.cursor.getMoves {
-                            setPosition(1, index + 1)
-                            clearLine()
-                        }
-                    )
-                    append(line).append('\n')
-                }
-            }
-            terminal.rawPrint(frame)
+            terminal.rawPrint(buildTerminalFrame(terminal, lines))
         }
     }
 
@@ -179,3 +166,22 @@ class TerminalApp internal constructor() : App<AppConfig>() {
 
 /** Constructs and configures an application without launching it. */
 fun terminalApp(builder: TerminalApp.() -> Unit = {}): TerminalApp = TerminalApp().apply(builder)
+
+/** Full-screen replacement also erases rows occupied by wrapped output in the previous frame. */
+internal fun buildTerminalFrame(terminal: Terminal, lines: List<String>): String = buildString {
+    append(
+        terminal.cursor.getMoves {
+            clearScreen()
+            setPosition(0, 0)
+        }
+    )
+    lines.forEachIndexed { index, line ->
+        append(
+            terminal.cursor.getMoves {
+                setPosition(0, index)
+                clearLine()
+            }
+        )
+        append(line).append('\n')
+    }
+}
