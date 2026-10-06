@@ -78,6 +78,11 @@ class TerminalApp internal constructor() : App<AppConfig>() {
         addSystem(InputSystem())
     }
 
+    override fun beforeExit() {
+        appScope.cancel()
+        lineInput.cancel()
+    }
+
     override fun internalLaunch(config: AppConfig, vararg args: String) {
         log.info { "Starting terminal runtime" }
 
