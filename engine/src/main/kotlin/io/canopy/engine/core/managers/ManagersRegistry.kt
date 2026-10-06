@@ -10,6 +10,8 @@ import io.canopy.engine.logging.LogContext
  *
  * Registration, lookup, lifecycle dispatch, and teardown are expected to run
  * serially on the game thread. The registry's maps are not thread-safe.
+ * Registration, removal, scope replacement and nested lifecycle dispatch are rejected during
+ * lifecycle callbacks. Lookups remain available; mutation is allowed again after the pass finishes.
  */
 object ManagersRegistry {
 
@@ -18,9 +20,11 @@ object ManagersRegistry {
     private val managers = linkedMapOf<KClass<out Manager>, Manager>()
     private val resolvedCache = mutableMapOf<KClass<out Manager>, Manager>()
     private var exiting = false
+    private var dispatching = false
 
+    /** Registers a unique manager on the engine thread; rejected during lifecycle dispatch and teardown. */
     fun <T : Manager> register(manager: T) {
-        check(!exiting) { "Cannot register managers during teardown" }
+        check(!exiting && !dispatching) { "Cannot register managers during lifecycle dispatch or teardown" }
         val concreteKey = manager::class
 
         require(concreteKey !in managers) {
@@ -45,8 +49,9 @@ object ManagersRegistry {
 
     inline operator fun <reified T : Manager> T.unaryPlus() = register(this)
 
+    /** Removes a matching registration without calling onExit; rejected during lifecycle dispatch and teardown. */
     fun <T : Manager> unregister(klass: KClass<T>) {
-        check(!exiting) { "Cannot unregister managers during teardown" }
+        check(!exiting && !dispatching) { "Cannot unregister managers during lifecycle dispatch or teardown" }
         val removed = resolveRegistrationKey(klass)?.let { managers.remove(it) }
         if (removed != null) invalidateCache()
 
@@ -83,7 +88,8 @@ object ManagersRegistry {
         return resolved as T
     }
 
-    fun enter() {
+    /** Enters managers in registration order; callbacks cannot mutate or redispatch this registry. */
+    fun enter() = dispatch {
         check(!exiting) { "Cannot enter managers during teardown" }
         log.info("event" to "managers.setup", "registered" to managers.size) {
             "Bootstrapping managers"
@@ -101,7 +107,7 @@ object ManagersRegistry {
     }
 
     /** Dispatches frames; while [paused], scenes receive real time and other managers receive zero. */
-    fun update(delta: Float, paused: Boolean = false) {
+    fun update(delta: Float, paused: Boolean = false) = dispatch {
         check(!exiting) { "Cannot update managers during teardown" }
         LogContext.with("delta" to delta, "registered" to managers.size) {
             log.trace("event" to "managers.update") { "Updating managers" }
@@ -126,7 +132,7 @@ object ManagersRegistry {
     }
 
     /** Dispatches physics; while [paused], only scene managers process eligible nodes. */
-    fun physicsUpdate(delta: Float, paused: Boolean = false) {
+    fun physicsUpdate(delta: Float, paused: Boolean = false) = dispatch {
         check(!exiting) { "Cannot update managers during teardown" }
         LogContext.with("delta" to delta, "registered" to managers.size) {
             log.trace("event" to "managers.physics_update") { "Physics updating managers" }
@@ -150,7 +156,8 @@ object ManagersRegistry {
         }
     }
 
-    fun resize(width: Int, height: Int) {
+    /** Dispatches dimensions in registration order; callbacks cannot mutate or redispatch this registry. */
+    fun resize(width: Int, height: Int) = dispatch {
         check(!exiting) { "Cannot resize managers during teardown" }
         LogContext.with("width" to width, "height" to height, "registered" to managers.size) {
             log.info("event" to "managers.resize") { "Resizing managers" }
@@ -182,6 +189,7 @@ object ManagersRegistry {
      */
     fun exit() {
         if (exiting) return
+        checkCanExit()
         exiting = true
         var failure: Throwable? = null
         try {
@@ -213,12 +221,27 @@ object ManagersRegistry {
         failure?.let { throw it }
     }
 
+    /** Replaces the global scope and enters the new registrations; rejected during lifecycle dispatch and teardown. */
     fun withScope(block: ManagersRegistry.() -> Unit) {
         log.info("event" to "managers.scope") { "Creating scoped Managers registry..." }
         exit()
         block()
         enter()
         log.info("event" to "managers.scope.done") { "Finished creating scoped Managers registry" }
+    }
+
+    internal fun checkCanExit() {
+        check(!dispatching && !exiting) { "Cannot exit managers during lifecycle dispatch or teardown" }
+    }
+
+    private inline fun dispatch(block: () -> Unit) {
+        check(!exiting && !dispatching) { "Cannot redispatch managers during lifecycle dispatch or teardown" }
+        dispatching = true
+        try {
+            block()
+        } finally {
+            dispatching = false
+        }
     }
 
     private fun invalidateCache() {
