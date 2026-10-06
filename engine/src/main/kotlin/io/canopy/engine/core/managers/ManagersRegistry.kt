@@ -64,19 +64,21 @@ object ManagersRegistry {
 
     operator fun contains(clazz: KClass<out Manager>): Boolean = has(clazz)
 
+    /** Resolves an assignable manager on the game thread; absence and ambiguity throw IllegalStateException. */
+    fun <T : Manager> getManager(clazz: KClass<T>): T = getManagerOrNull(clazz)
+        ?: throw IllegalStateException(
+            """
+            [MANAGERS REGISTRY]
+            No ${clazz.simpleName} registered!
+            To fix this: register it into the Managers Registry!
+            """.trimIndent()
+        )
+
+    /** Resolves an assignable manager, returning null only for absence; ambiguity still throws. */
     @Suppress("UNCHECKED_CAST")
-    fun <T : Manager> getManager(clazz: KClass<T>): T {
+    fun <T : Manager> getManagerOrNull(clazz: KClass<T>): T? {
         resolvedCache[clazz]?.let { return it as T }
-
-        val resolved = resolveManagerOrNull(clazz)
-            ?: throw IllegalStateException(
-                """
-                [MANAGERS REGISTRY]
-                No ${clazz.simpleName} registered!
-                To fix this: register it into the Managers Registry!
-                """.trimIndent()
-            )
-
+        val resolved = resolveManagerOrNull(clazz) ?: return null
         resolvedCache[clazz] = resolved
         return resolved as T
     }
@@ -301,5 +303,11 @@ object ManagersRegistry {
     private fun KClass<*>.isConcreteManagerLookupType(): Boolean = isSubclassOfManager() && this != Manager::class
 }
 
+/** Immediately resolves the current global registration on the game thread; missing registrations throw. */
 inline fun <reified T : Manager> manager(): T = ManagersRegistry.getManager(T::class)
+
+/** Immediately resolves the current global registration; only absence returns null, and ambiguity throws. */
+inline fun <reified T : Manager> managerOrNull(): T? = ManagersRegistry.getManagerOrNull(T::class)
+
+/** Caches the first successful global lookup; subsequent registration changes are not observed. */
 inline fun <reified T : Manager> lazyManager() = lazy { manager<T>() }

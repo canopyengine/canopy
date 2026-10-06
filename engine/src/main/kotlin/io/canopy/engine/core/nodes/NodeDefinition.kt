@@ -3,7 +3,8 @@ package io.canopy.engine.core.nodes
 import java.lang.reflect.Modifier
 import java.util.Collections
 import io.canopy.engine.core.exceptions.InvalidNodeDefinitionException
-import io.canopy.engine.core.queries.Dependency
+import io.canopy.engine.core.queries.GlobalDependency
+import io.canopy.engine.core.queries.NodeDependency
 import io.canopy.engine.data.assets.AssetDelegate
 
 /** Cache immutable class metadata, never node instances. Also protects Java and precompiled consumers. */
@@ -16,7 +17,8 @@ internal object NodeDefinition {
                 for (field in current.declaredFields) {
                     if (!Modifier.isStatic(field.modifiers) &&
                         field.type != NodeProperty::class.java &&
-                        field.type != Dependency::class.java &&
+                        field.type != GlobalDependency::class.java &&
+                        field.type != NodeDependency::class.java &&
                         field.type != AssetDelegate::class.java
                     ) {
                         result += "${current.simpleName}.${field.name}"

@@ -257,13 +257,14 @@ class DependencyTests {
         assertEquals(Rules(3), controller.rules)
         assertSame(service, controller.service)
         val detached = Controller()
+        assertSame(service, detached.service)
         assertNull(detached.optionalTarget)
         assertTrue(detached.targets.isEmpty())
         assertFailsWith<NoSuchElementException> { detached.target }
     }
 
     @Test
-    fun `every delegate read rejects a permanently destroyed owner including optional queries`() {
+    fun `node dependency reads reject a destroyed owner while global reads remain available`() {
         // Arrange
         val consumer = Consumer()
         val controller = Controller(consumer)
@@ -281,7 +282,8 @@ class DependencyTests {
         assertFailsWith<NodeDestroyedException> { consumer.optionalTree }
         assertFailsWith<NodeDestroyedException> { consumer.targets }
         assertFailsWith<NodeDestroyedException> { consumer.optionalRules }
-        assertFailsWith<NodeDestroyedException> { consumer.optionalService }
+        assertNull(consumer.optionalService)
+        assertSame(scenes, consumer.oldManager())
         assertFailsWith<NodeDestroyedException> { controller.optionalTarget }
     }
 }

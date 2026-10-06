@@ -11,7 +11,8 @@ import io.canopy.engine.input.events.InputEvent
  *
  * Behaviors allow node logic to be composed modularly without requiring
  * subclassing of the node itself.
- * Typed [io.canopy.engine.core.queries.Dependency] properties resolve against [node] on each game-thread read.
+ * [io.canopy.engine.core.queries.NodeDependency] properties resolve against [node] on each game-thread read.
+ * Global dependencies resolve independently of [node], including behaviors created without one.
  *
  * Typical responsibilities of a behavior:
  * - responding to node lifecycle events

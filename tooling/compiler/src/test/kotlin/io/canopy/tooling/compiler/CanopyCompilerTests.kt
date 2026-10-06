@@ -86,6 +86,52 @@ class CanopyCompilerTests {
     }
 
     @Test
+    fun `global delegates compile in node and ordinary scopes while stored descriptors fail`() {
+        // Arrange / Act / Assert
+        compileConsumer(
+            """
+            import io.canopy.engine.core.queries.*
+            class Service
+            val shared by manager<Service>()
+            object Services { val optional by managerOrNull<Service>() }
+            class Controller { val service by manager<Service>() }
+            class Enemy : Node<Enemy>() {
+                val service by manager<Service>()
+                val target by child<Enemy>()
+            }
+            fun local() { val service by manager<Service>() }
+            """.trimIndent()
+        ) { code, output -> assertEquals(ExitCode.OK, code, output) }
+        compileConsumer(
+            """
+            import io.canopy.engine.core.queries.manager
+            class Enemy : Node<Enemy>() { val descriptor = manager<Any>() }
+            """.trimIndent()
+        ) { code, output ->
+            assertEquals(ExitCode.COMPILATION_ERROR, code, output)
+            assertTrue("CANOPY_UNMANAGED_NODE_STATE" in output, output)
+        }
+    }
+
+    @Test
+    fun `node dependencies reject ordinary receivers and the shared base cannot delegate`() {
+        // Arrange / Act / Assert
+        listOf(
+            "class Controller { val target by child<Enemy>() }",
+            "val target by child<Enemy>()",
+            "class Controller { val service by (manager<Any>() as Dependency<Any>) }"
+        ).forEach { declaration ->
+            compileConsumer(
+                """
+                import io.canopy.engine.core.queries.*
+                class Enemy : Node<Enemy>()
+                $declaration
+                """.trimIndent()
+            ) { code, _ -> assertEquals(ExitCode.COMPILATION_ERROR, code) }
+        }
+    }
+
+    @Test
     fun `consumer asset delegates compile while unmanaged descriptors and non asset types fail`() {
         // Arrange / Act / Assert
         compileConsumer(
@@ -215,10 +261,16 @@ class CanopyCompilerTests {
                     package io.canopy.engine.core.queries
                     import kotlin.reflect.KProperty
                     import io.canopy.engine.core.nodes.Node
-                    class Dependency<T> {
+                    sealed class Dependency<T>
+                    class NodeDependency<T> : Dependency<T>() {
                         operator fun getValue(owner: Node<*>, property: KProperty<*>): T = TODO()
                     }
-                    inline fun <reified T : Node<*>> child(): Dependency<T> = Dependency()
+                    class GlobalDependency<T> : Dependency<T>() {
+                        operator fun getValue(owner: Any?, property: KProperty<*>): T = TODO()
+                    }
+                    inline fun <reified T : Any> manager(): GlobalDependency<T> = GlobalDependency()
+                    inline fun <reified T : Any> managerOrNull(): GlobalDependency<T?> = GlobalDependency()
+                    inline fun <reified T : Node<*>> child(): NodeDependency<T> = NodeDependency()
                     """.trimIndent()
                 )
             }
