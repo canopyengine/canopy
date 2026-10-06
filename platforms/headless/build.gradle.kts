@@ -5,13 +5,6 @@ plugins {
     `maven-publish`
 }
 
-// If you need this flag here (recommended: compute here, no coupling to root)
-val enableGraalNative: Boolean = providers
-    .gradleProperty("enableGraalNative")
-    .map(String::toBoolean)
-    .orElse(false)
-    .get()
-
 dependencies {
     // Canopy deps
     implementation(projects.engine)
