@@ -4,8 +4,8 @@ import java.util.concurrent.ConcurrentLinkedQueue
 import io.canopy.engine.app.App
 import io.canopy.engine.commands.CommandPromptHost
 import io.canopy.engine.core.managers.Manager
-import io.canopy.engine.core.managers.ManagersRegistry
 import io.canopy.engine.core.managers.manager
+import io.canopy.engine.core.managers.managerOrNull
 import io.canopy.engine.data.saving.registerSaveModule
 import io.canopy.engine.input.binds.InputBind
 import io.canopy.engine.input.binds.InputData
@@ -26,11 +26,7 @@ abstract class InputManager : Manager {
     /** Returns copied mapped states, or an empty map while command editing owns this frame's input. */
     val actionStates get() = if (blocksGameplay) emptyMap() else _actionStates.toMap()
 
-    private fun commandHost(): CommandPromptHost? = if (ManagersRegistry.has(CommandPromptHost::class)) {
-        ManagersRegistry.getManager(CommandPromptHost::class)
-    } else {
-        null
-    }
+    private fun commandHost(): CommandPromptHost? = managerOrNull<CommandPromptHost>()
 
     internal val blocksGameplay: Boolean get() = commandHost()?.blocksGameplay == true
 
