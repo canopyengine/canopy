@@ -27,20 +27,6 @@ class ScreenRegistry internal constructor() {
     val screenManager by lazyManager<ScreenManager>()
 
     /* ============================================================
-     * Setup
-     * ============================================================ */
-
-//    private var setupCallback: ScreenRegistry.() -> Unit = {}
-//
-//    fun registerSetupCallback(callback: ScreenRegistry.() -> Unit = {}) {
-//        setupCallback = callback
-//    }
-
-//    fun setup() {
-//        setupCallback()
-//    }
-
-    /* ============================================================
      * Registration
      * ============================================================ */
 

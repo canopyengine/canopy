@@ -1,7 +1,6 @@
 package io.canopy.engine.app
 
 import kotlin.time.Duration
-import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicLong
 import java.util.concurrent.atomic.AtomicReference
 import io.canopy.engine.core.CanopyBuildInfo
@@ -58,7 +57,6 @@ abstract class App<C : AppConfig> protected constructor() {
 
     private val onStarted = CompletableDeferred<Unit>()
     private val onStopped = CompletableDeferred<Unit>()
-    private val finished = AtomicBoolean(false)
 
     private val backendExitRef = AtomicReference<(() -> Unit)?>(null)
     private val backendForceRef = AtomicReference<(() -> Unit)?>(null)
@@ -268,7 +266,6 @@ abstract class App<C : AppConfig> protected constructor() {
         if (ownsManagerScope) attempt { ManagersRegistry.exit() }
         attempt { CanopyLogging.end(reason = if (failure == null) "normal" else "crash", t = failure) }
         attempt { onExit(this) }
-        markFinished()
         val error = failure
         if (error == null) {
             onStopped.safeComplete()
@@ -355,10 +352,6 @@ abstract class App<C : AppConfig> protected constructor() {
     /* ============================================================
      * Internals
      * ============================================================ */
-
-    private fun markFinished() {
-        finished.compareAndSet(false, true)
-    }
 
     private fun CompletableDeferred<Unit>.safeComplete() {
         if (!isCompleted) complete(Unit)
