@@ -1,6 +1,7 @@
 package io.canopy.platforms.terminal.data.assets
 
 import java.io.File
+import java.io.FileNotFoundException
 import java.io.FileOutputStream
 import java.net.URL
 import io.canopy.engine.data.assets.AssetEntry
@@ -11,6 +12,8 @@ import io.canopy.engine.logging.EngineLogs
 /**
  * Terminal-specific asset entry using standard Java I/O.
  * No libGDX dependencies - works purely on JVM filesystem/classpath.
+ * Classpath entries are read-only and never fall back to the working directory.
+ * Classpath directory enumeration is unsupported; [list] returns an empty list.
  */
 class TerminalAssetEntry(
     private val file: File,
@@ -23,12 +26,13 @@ class TerminalAssetEntry(
     override val path: String = file.path
     override val name: String = file.name
     override val extension: String = file.extension ?: ""
-    override val isDirectory: Boolean = file.isDirectory
+    override val isDirectory: Boolean = source != FileSource.Classpath && file.isDirectory
 
-    override fun exists(): Boolean = file.exists() || classpathUrl != null
+    override fun exists(): Boolean = if (source == FileSource.Classpath) classpathUrl != null else file.exists()
 
-    override fun readBytes(): ByteArray = if (classpathUrl != null) {
-        classpathUrl.openStream().readAllBytes()
+    override fun readBytes(): ByteArray = if (source == FileSource.Classpath) {
+        val url = classpathUrl ?: throw FileNotFoundException("Classpath resource not found: $path")
+        url.openStream().use { it.readAllBytes() }
     } else {
         file.readBytes()
     }
@@ -42,7 +46,7 @@ class TerminalAssetEntry(
     }
 
     override fun writeBytes(bytes: ByteArray, append: Boolean) {
-        require(classpathUrl == null) { "Cannot write to classpath resource: $path" }
+        require(source != FileSource.Classpath) { "Cannot write to classpath resource: $path" }
         require(!isDirectory) { "Cannot write to directory: $path" }
 
         file.parentFile?.mkdirs()
@@ -70,7 +74,7 @@ class TerminalAssetEntry(
                 val file = if (url != null && url.protocol == "file") {
                     File(url.toURI())
                 } else {
-                    File(path) // fallback, will fail gracefully on read
+                    File(path) // Metadata only; classpath reads never fall back to the filesystem.
                 }
                 TerminalAssetEntry(file, source, url)
             }
