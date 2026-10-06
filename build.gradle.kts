@@ -1,3 +1,4 @@
+import org.gradle.jvm.tasks.Jar
 import org.gradle.plugins.ide.eclipse.model.EclipseModel
 import org.gradle.plugins.ide.idea.model.IdeaModel
 import org.gradle.testing.jacoco.tasks.JacocoReport
@@ -43,18 +44,23 @@ subprojects {
 
     plugins.withId("org.jetbrains.kotlin.jvm") {
         pluginManager.apply("io.canopy.compiler")
-    }
 
-    plugins.withId("java") {
-        extensions.configure<JavaPluginExtension>("java") {
-            toolchain.languageVersion.set(JavaLanguageVersion.of(25))
-            sourceCompatibility = JavaVersion.VERSION_25
-            targetCompatibility = JavaVersion.VERSION_25
-            withSourcesJar()
+        // Use the shared Jar base type so both Java and Kotlin source archives keep this metadata.
+        if (project.path in setOf(":engine", ":adapters:libgdx", ":adapters:mordant")) {
+            tasks.withType<Jar>().configureEach {
+                manifest {
+                    attributes(
+                        mapOf(
+                            "Project-Title" to project.name,
+                            "Project-Version" to rootProject.version
+                        )
+                    )
+                }
+            }
         }
     }
 
-    plugins.withId("java-library") {
+    plugins.withId("java") {
         extensions.configure<JavaPluginExtension>("java") {
             toolchain.languageVersion.set(JavaLanguageVersion.of(25))
             sourceCompatibility = JavaVersion.VERSION_25
