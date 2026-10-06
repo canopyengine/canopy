@@ -6,13 +6,6 @@ plugins {
     `maven-publish`
 }
 
-// If you need this flag here (recommended: compute here, no coupling to root)
-val enableGraalNative: Boolean = providers
-    .gradleProperty("enableGraalNative")
-    .map(String::toBoolean)
-    .orElse(false)
-    .get()
-
 dependencies {
     // Canopy
     api(projects.tooling.utils)
@@ -36,16 +29,4 @@ dependencies {
     testImplementation(libs.junit.jupiter)
     testImplementation(libs.assertj.core)
     testImplementation(libs.mockk)
-}
-
-// Canopy custom tasks
-tasks.withType<Jar>().configureEach {
-    manifest {
-        attributes(
-            mapOf(
-                "Project-Title" to project.name,
-                "Project-Version" to rootProject.version
-            )
-        )
-    }
 }
