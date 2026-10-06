@@ -15,7 +15,11 @@ import io.canopy.engine.logging.LogContext
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.withTimeout
 
-/** Shared application lifecycle and configuration, driven by a platform through [engineLoop]. */
+/**
+ * Shared application lifecycle and configuration, driven by a platform through [engineLoop].
+ * Failed startup rolls back the manager scope and runs shutdown hooks. Teardown attempts all stages,
+ * preserving the first failure with later failures suppressed before completing [handle].
+ */
 abstract class App<C : AppConfig> protected constructor() {
     /* ============================================================
      * Configuration
@@ -168,6 +172,7 @@ abstract class App<C : AppConfig> protected constructor() {
     fun exit() = engineLoop.exit()
 
     private fun performEnter() {
+        var ownsManagerScope = false
         try {
             CanopyLogging.init(
                 CanopyLogging.Config(
@@ -180,6 +185,7 @@ abstract class App<C : AppConfig> protected constructor() {
                 EngineLogs.lifecycle.info { "Booting Canopy..." }
 
                 var sceneManager: SceneManager? = null
+                ownsManagerScope = true
                 ManagersRegistry.withScope {
                     provideManagers().forEach(::register)
                     +InjectionManager()
@@ -204,8 +210,7 @@ abstract class App<C : AppConfig> protected constructor() {
             }
         } catch (t: Throwable) {
             onStarted.safeFail(t)
-            onStopped.safeFail(t)
-            throw t
+            teardown(t, ownsManagerScope)
         }
     }
 
@@ -240,24 +245,36 @@ abstract class App<C : AppConfig> protected constructor() {
         ) { "Screen resized." }
     }
 
-    private fun performExit() {
-        try {
-            EngineLogs.lifecycle.info("event" to "app.dispose") { "Disposing app" }
+    private fun performExit() = teardown()
 
-            beforeExit()
-            ManagersRegistry.exit()
-            CanopyLogging.end(reason = "normal")
-        } catch (t: Throwable) {
-            CanopyLogging.end(reason = "crash", t = t)
-            onStopped.safeFail(t)
-            throw t
-        } finally {
+    /** Attempts every cleanup stage before completing the stopped signal. */
+    private fun teardown(initialFailure: Throwable? = null, ownsManagerScope: Boolean = true) {
+        var failure = initialFailure
+        fun attempt(block: () -> Unit) {
             try {
-                onExit(this)
-            } finally {
-                onStopped.safeComplete()
-                markFinished()
+                block()
+            } catch (error: Throwable) {
+                val first = failure
+                if (first == null) {
+                    failure = error
+                } else if (first !== error) {
+                    first.addSuppressed(error)
+                }
             }
+        }
+
+        attempt { EngineLogs.lifecycle.info("event" to "app.dispose") { "Disposing app" } }
+        attempt { beforeExit() }
+        if (ownsManagerScope) attempt { ManagersRegistry.exit() }
+        attempt { CanopyLogging.end(reason = if (failure == null) "normal" else "crash", t = failure) }
+        attempt { onExit(this) }
+        markFinished()
+        val error = failure
+        if (error == null) {
+            onStopped.safeComplete()
+        } else {
+            onStopped.safeFail(error)
+            throw error
         }
     }
 
