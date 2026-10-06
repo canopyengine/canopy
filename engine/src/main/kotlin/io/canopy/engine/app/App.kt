@@ -82,7 +82,7 @@ abstract class App<C : AppConfig> protected constructor() {
         onResize = ::performResize,
         onExit = ::performExit,
         isPaused = { isPaused }
-    )
+    ).also { it.validateExit = ManagersRegistry::checkCanExit }
 
     /* ============================================================
      * Builder hooks
