@@ -15,10 +15,6 @@ class InputMapper {
     val actions: Map<String, List<InputBind>>
         get() = mappings.mapValues { it.value.toList() }
 
-    init {
-        clearMappings()
-    }
-
     /** Creates a serializable snapshot of the mappings. */
     fun toData(): InputData = asData()
 

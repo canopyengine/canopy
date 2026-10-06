@@ -10,8 +10,6 @@ internal object NodeLifetime {
 
     fun own(cleanup: () -> Unit): () -> Unit = owner.get()?.onRemoval(cleanup) ?: {}
 
-    fun destroyWith(cleanup: () -> Unit): () -> Unit = owner.get()?.onDestroy(cleanup) ?: {}
-
     inline fun <T> withOwner(node: Node<*>?, block: () -> T): T {
         val previous = owner.get()
         owner.set(node)

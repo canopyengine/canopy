@@ -2,7 +2,6 @@ package io.canopy.engine.core.flows.events
 
 import io.canopy.engine.core.nodes.Node
 import io.canopy.engine.core.nodes.NodeLifetime
-import io.canopy.engine.logging.EngineLogs
 
 /**
  * A reactive side effect that re-runs [block] whenever any of its signal
@@ -44,7 +43,6 @@ import io.canopy.engine.logging.EngineLogs
 class Effect(block: () -> Unit) {
 
     private var action: (() -> Unit)? = block
-    private val log = EngineLogs.subsystem("effect")
 
     private var dependencies: Set<Signal<*>> = emptySet()
     private val disconnectHandlers: MutableMap<Signal<*>, EventDisconnectHandler> = mutableMapOf()
