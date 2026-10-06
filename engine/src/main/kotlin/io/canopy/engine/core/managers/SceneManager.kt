@@ -71,20 +71,6 @@ class SceneManager(val physicsStep: Float = 1f / 60f, private val block: SceneMa
     private fun phaseSnapshot(phase: TreeSystem.UpdatePhase): List<TreeSystem> =
         phaseSnapshots.getOrPut(phase) { systems[phase]?.toList().orEmpty() }
 
-    companion object {
-        /**
-         * Thread-local pointer to the "current" SceneManager.
-         *
-         * This is typically used by builders/DSLs that want implicit access to the active
-         * SceneManager during construction.
-         */
-        internal val currentParent = ThreadLocal.withInitial<SceneManager?> { null }
-    }
-
-    init {
-        currentParent.set(this)
-    }
-
     /* ============================================================
      * Signals / events
      * ============================================================ */
@@ -628,7 +614,6 @@ class SceneManager(val physicsStep: Float = 1f / 60f, private val block: SceneMa
     override fun onExit() {
         if (!entered) return
         entered = false
-        if (currentParent.get() === this) currentParent.remove()
         log.info("event" to "sceneManager.teardown") { "Teardown" }
         // One failing cleanup hook must not leave the other systems holding scene nodes.
         val sceneFailures = CleanupFailures()
