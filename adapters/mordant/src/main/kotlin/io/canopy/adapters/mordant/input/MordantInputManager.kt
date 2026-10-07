@@ -61,7 +61,7 @@ class MordantInputManager : InputManager() {
         pressedThisFrame.clear()
 
         // Let base class:
-        // 1. drain eventQueue → handleEvent()
+        // 1. drain queued events → handleEvent()
         // 2. call updateActions()
         super.processEvents()
     }
@@ -73,34 +73,38 @@ class MordantInputManager : InputManager() {
      * Emits:
      * - A [KeyInputEvent] for any key that maps to a known [InputBind] (for action-based input)
      * - A [TextInputEvent] for any printable character (for raw text input / command prompts)
+     * Related key and text events are published as one atomic batch.
      */
-    fun enqueueMordantKeyEvent(event: com.github.ajalt.mordant.input.KeyboardEvent): Unit = synchronized(eventQueue) {
-        if (event.isCtrlC) return@synchronized
+    fun enqueueMordantKeyEvent(event: com.github.ajalt.mordant.input.KeyboardEvent) {
+        if (event.isCtrlC) return
 
-        // Enqueue KeyInputEvent for mapped binds (action system)
-        val bind = event.toInputBind()
-        if (bind != null) {
-            enqueue(
-                KeyInputEvent(
-                    key = bind.toKey(),
-                    ctrl = event.ctrl,
-                    alt = event.alt,
-                    shift = event.shift,
-                    state = InputState.JustPressed
+        val events = buildList<InputEvent>(2) {
+            // Enqueue KeyInputEvent for mapped binds (action system)
+            val bind = event.toInputBind()
+            if (bind != null) {
+                add(
+                    KeyInputEvent(
+                        key = bind.toKey(),
+                        ctrl = event.ctrl,
+                        alt = event.alt,
+                        shift = event.shift,
+                        state = InputState.JustPressed
+                    )
                 )
-            )
-        }
+            }
 
-        // Enqueue TextInputEvent for printable characters (text input system)
-        // A printable character is a single character that is not a special key
-        val text = when {
-            event.key == "space" || event.key == " " -> " "
-            event.key.codePointCount(0, event.key.length) == 1 -> event.key
-            else -> null
+            // Enqueue TextInputEvent for printable characters (text input system)
+            // A printable character is a single character that is not a special key
+            val text = when {
+                event.key == "space" || event.key == " " -> " "
+                event.key.codePointCount(0, event.key.length) == 1 -> event.key
+                else -> null
+            }
+            if (text != null && !event.ctrl && !event.alt && text.none(Char::isISOControl)) {
+                add(TextInputEvent(text = text))
+            }
         }
-        if (text != null && !event.ctrl && !event.alt && text.none(Char::isISOControl)) {
-            enqueue(TextInputEvent(text = text))
-        }
+        enqueueBatch(events)
     }
 
     /**
