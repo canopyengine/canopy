@@ -335,7 +335,6 @@ class SceneManager(val physicsStep: Float = 1f / 60f, private val block: SceneMa
         systems[system.phase]?.apply {
             remove(system)
             system.requiredTypes.forEach { type -> systemsByNodeTypes[type]?.remove(system) }
-            sortBy(TreeSystem::priority)
         }
         phaseSnapshots.remove(system.phase)
         systemsByClass.remove(kClass)
@@ -491,19 +490,11 @@ class SceneManager(val physicsStep: Float = 1f / 60f, private val block: SceneMa
             "delta" to delta,
             "physicsStep" to physicsStep
         ) {
-            phaseSnapshot(TreeSystem.UpdatePhase.FramePre).forEach { sys ->
-                LogContext.with("system" to (sys::class.simpleName ?: "UnknownSystem"), "phase" to "FramePre") {
-                    sys.tick(delta)
-                }
-            }
+            runPhase(TreeSystem.UpdatePhase.FramePre, delta)
 
             NodeLifetime.withOwner(root) { root.dispatchUpdate(delta) }
 
-            phaseSnapshot(TreeSystem.UpdatePhase.FramePost).forEach { sys ->
-                LogContext.with("system" to (sys::class.simpleName ?: "UnknownSystem"), "phase" to "FramePost") {
-                    sys.tick(delta)
-                }
-            }
+            runPhase(TreeSystem.UpdatePhase.FramePost, delta)
         }
     }
 
@@ -514,18 +505,18 @@ class SceneManager(val physicsStep: Float = 1f / 60f, private val block: SceneMa
         LogContext.with("scene" to root.name, "delta" to delta) {
             log.trace("event" to "tick.physics") { "Physics tick" }
 
-            phaseSnapshot(TreeSystem.UpdatePhase.PhysicsPre).forEach { sys ->
-                LogContext.with("system" to (sys::class.simpleName ?: "UnknownSystem"), "phase" to "PhysicsPre") {
-                    sys.tick(delta)
-                }
-            }
+            runPhase(TreeSystem.UpdatePhase.PhysicsPre, delta)
 
             NodeLifetime.withOwner(root) { root.dispatchPhysicsUpdate(delta) }
 
-            phaseSnapshot(TreeSystem.UpdatePhase.PhysicsPost).forEach { sys ->
-                LogContext.with("system" to (sys::class.simpleName ?: "UnknownSystem"), "phase" to "PhysicsPost") {
-                    sys.tick(delta)
-                }
+            runPhase(TreeSystem.UpdatePhase.PhysicsPost, delta)
+        }
+    }
+
+    private fun runPhase(phase: TreeSystem.UpdatePhase, delta: Float) {
+        phaseSnapshot(phase).forEach { system ->
+            LogContext.with("system" to (system::class.simpleName ?: "UnknownSystem"), "phase" to phase.name) {
+                system.tick(delta)
             }
         }
     }
