@@ -12,7 +12,6 @@ dependencies {
 
     // Kotlin
     api(libs.coroutines.core)
-    api(libs.kotlin.reflect)
 
     // Serialization
     api(libs.kotlinx.serialization.core)

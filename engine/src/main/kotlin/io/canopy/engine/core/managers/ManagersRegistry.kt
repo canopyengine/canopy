@@ -1,7 +1,6 @@
 package io.canopy.engine.core.managers
 
 import kotlin.reflect.KClass
-import kotlin.reflect.full.superclasses
 import io.canopy.engine.logging.EngineLogs
 import io.canopy.engine.logging.LogContext
 
@@ -307,16 +306,18 @@ object ManagersRegistry {
 
     @Suppress("UNCHECKED_CAST")
     private fun KClass<out Manager>.managerTypeClosure(): Set<KClass<out Manager>> {
-        val visited = linkedSetOf<KClass<*>>()
+        val visited = linkedSetOf<Class<*>>()
 
-        fun visit(type: KClass<*>) {
+        fun visit(type: Class<*>) {
             if (!visited.add(type)) return
-            type.superclasses.forEach(::visit)
+            type.superclass?.let(::visit)
+            type.interfaces.forEach(::visit)
         }
 
-        visit(this)
+        visit(java)
 
         return visited
+            .map { it.kotlin }
             .filter { it.isConcreteManagerLookupType() }
             .map { it as KClass<out Manager> }
             .toSet()
