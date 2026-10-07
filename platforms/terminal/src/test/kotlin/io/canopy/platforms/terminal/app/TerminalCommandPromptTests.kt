@@ -119,7 +119,8 @@ class TerminalCommandPromptTests {
     @Test
     fun `line output cursor emits identical bounded replies exactly once and trimming emits nothing`() {
         val output = mutableListOf<String>()
-        val presentation = TerminalCommandPresentation({ true }, output::add, {})
+        var restored = 0
+        val presentation = TerminalCommandPresentation({ true }, output::add, { restored++ })
         val host = CommandPromptHost(terminalApp(), presentation)
         val scenes = SceneManager()
         ManagersRegistry.withScope {
@@ -148,6 +149,7 @@ class TerminalCommandPromptTests {
         host.onUpdate(0f)
         assertEquals(listOf("\n", "same\n", "> "), output)
         assertTrue(output.none { '\u001b' in it })
+        assertEquals(0, restored)
     }
 
     @Test

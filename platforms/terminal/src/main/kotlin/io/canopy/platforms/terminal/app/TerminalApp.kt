@@ -18,10 +18,13 @@ import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.takeWhile
 
 /** Application hosted by the terminal runtime, with queued keyboard input and a synchronous frame loop. */
-class TerminalApp internal constructor() : App<AppConfig>() {
+class TerminalApp internal constructor(
+    private val terminal: Terminal = Terminal(interactive = true),
+    private val output: (String) -> Unit = { terminal.rawPrint(it) },
+) : App<AppConfig>() {
 
     private val log = EngineLogs.app
-    private val terminal = Terminal(interactive = true)
+    private var latestFrame: List<String>? = null
 
     private val inputManager = MordantInputManager()
     private val assetsManager = TerminalAssetsManager()
@@ -32,8 +35,8 @@ class TerminalApp internal constructor() : App<AppConfig>() {
     private val lineInput = TerminalLineInputBridge(inputManager)
     private val commandPresentation = TerminalCommandPresentation(
         lineMode = { lineInputMode },
-        output = { terminal.rawPrint(it) },
-        restoreFrame = {}
+        output = output,
+        restoreFrame = ::restoreFrame
     )
     private val commandHost = CommandPromptHost(this, commandPresentation)
 
@@ -42,11 +45,17 @@ class TerminalApp internal constructor() : App<AppConfig>() {
 
     /**
      * Replaces the interactive screen with one frame, including when [lines] is empty.
-     * Rendering is suspended while command presentation or line input owns the terminal.
+     * Call on the lifecycle thread. Copies [lines] and retains the latest frame while command presentation or
+     * line input owns the terminal. Closing the raw-mode prompt restores that frame without a new world update.
      */
     fun renderFrame(lines: List<String>) {
+        latestFrame = lines.toList()
+        restoreFrame()
+    }
+
+    private fun restoreFrame() {
         if (!lineInputMode && !commandPresentation.isVisible) {
-            terminal.rawPrint(buildTerminalFrame(terminal, lines))
+            latestFrame?.let { output(buildTerminalFrame(terminal, it)) }
         }
     }
 
