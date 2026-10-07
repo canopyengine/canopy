@@ -3,6 +3,7 @@ package io.canopy.engine.core.nodes
 import kotlin.reflect.KClass
 import java.lang.ref.WeakReference
 import java.util.concurrent.atomic.AtomicLong
+import io.canopy.engine.core.CleanupFailures
 import io.canopy.engine.core.exceptions.*
 import io.canopy.engine.core.managers.SceneManager
 import io.canopy.engine.core.managers.manager

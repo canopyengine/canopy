@@ -2,6 +2,7 @@ package io.canopy.engine.core.nodes
 
 import kotlin.reflect.KClass
 import java.util.Collections
+import io.canopy.engine.core.CleanupFailures
 import io.canopy.engine.core.managers.SceneManager
 import io.canopy.engine.core.managers.manager
 import io.canopy.engine.logging.EngineLogs
@@ -89,20 +90,11 @@ abstract class TreeSystem(
 
     /** Releases current matches through the normal removal hook, leaving this system reusable. */
     internal fun clearNodes() {
-        var failure: Throwable? = null
+        val failures = CleanupFailures()
         matchingNodes.forEach { node ->
-            try {
-                unregisterInternal(node)
-            } catch (error: Throwable) {
-                val previous = failure
-                if (previous == null) {
-                    failure = error
-                } else if (previous !== error) {
-                    previous.addSuppressed(error)
-                }
-            }
+            failures.attempt { unregisterInternal(node) }
         }
-        failure?.let { throw it }
+        failures.rethrow()
     }
 
     protected open fun onNodeAdded(node: Node<*>) {}

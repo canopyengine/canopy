@@ -1,6 +1,7 @@
 package io.canopy.engine.app
 
 import kotlin.reflect.KClass
+import io.canopy.engine.core.CleanupFailures
 import io.canopy.engine.core.managers.Manager
 
 /**
@@ -112,27 +113,14 @@ class ScreenManager : Manager {
         current = null
         visitVersion++
         leaving = true
-        var failure: Throwable? = null
+        val failures = CleanupFailures()
         try {
-            try {
-                previous.onInactive()
-            } catch (error: Throwable) {
-                failure = error
-            }
-            try {
-                previous.onExit()
-            } catch (error: Throwable) {
-                val inactiveFailure = failure
-                if (inactiveFailure == null) {
-                    failure = error
-                } else if (inactiveFailure !== error) {
-                    inactiveFailure.addSuppressed(error)
-                }
-            }
+            failures.attempt { previous.onInactive() }
+            failures.attempt { previous.onExit() }
         } finally {
             leaving = false
         }
-        failure?.let { throw it }
+        failures.rethrow()
     }
 
     companion object {

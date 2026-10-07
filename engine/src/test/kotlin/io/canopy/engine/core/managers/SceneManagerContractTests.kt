@@ -322,4 +322,32 @@ class SceneManagerContractTests {
         assertEquals(1, calls.count { it == "system:unregister" })
         assertEquals(1, calls.count { it == "other:unregister" })
     }
+
+    @Test
+    fun `shutdown preserves nested system failures after scene cleanup fails`() {
+        // Arrange
+        val root = scene()
+        val sceneFailure = AssertionError("scene resource")
+        val systemFailure = IllegalStateException("system unregister")
+        val otherFailure = java.util.concurrent.CancellationException("other unregister")
+        root.onRemoval { throw sceneFailure }
+        val system = RecordingSystem(calls).apply { unregistered = { throw systemFailure } }
+        val other = OtherSystem(calls).apply { unregistered = { throw otherFailure } }
+        scenes.addSystem(system)
+        scenes.addSystem(other)
+        calls.clear()
+
+        // Act
+        val failure = assertFailsWith<AssertionError> { scenes.onExit() }
+        scenes.onExit()
+
+        // Assert
+        assertSame(sceneFailure, failure)
+        assertEquals(listOf(systemFailure), failure.suppressed.toList())
+        assertEquals(listOf(otherFailure), systemFailure.suppressed.toList())
+        assertTrue(system.nodes.isEmpty())
+        assertTrue(other.nodes.isEmpty())
+        assertEquals(1, calls.count { it == "system:unregister" })
+        assertEquals(1, calls.count { it == "other:unregister" })
+    }
 }

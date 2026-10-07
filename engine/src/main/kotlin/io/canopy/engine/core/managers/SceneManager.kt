@@ -2,8 +2,8 @@ package io.canopy.engine.core.managers
 
 import kotlin.reflect.KClass
 import io.canopy.engine.app.App
+import io.canopy.engine.core.CleanupFailures
 import io.canopy.engine.core.flows.events.event
-import io.canopy.engine.core.nodes.CleanupFailures
 import io.canopy.engine.core.nodes.Node
 import io.canopy.engine.core.nodes.NodeLifetime
 import io.canopy.engine.core.nodes.NodeState
@@ -371,25 +371,12 @@ class SceneManager(val physicsStep: Float = 1f / 60f, private val block: SceneMa
 
     private fun releaseSystem(system: TreeSystem) {
         val initialized = initializedSystems.remove(system)
-        var failure: Throwable? = null
-        try {
-            system.clearNodes()
-        } catch (error: Throwable) {
-            failure = error
-        }
+        val failures = CleanupFailures()
+        failures.attempt { system.clearNodes() }
         if (initialized) {
-            try {
-                system.onUnregister()
-            } catch (error: Throwable) {
-                val previous = failure
-                if (previous == null) {
-                    failure = error
-                } else if (previous !== error) {
-                    previous.addSuppressed(error)
-                }
-            }
+            failures.attempt { system.onUnregister() }
         }
-        failure?.let { throw it }
+        failures.rethrow()
     }
 
     /** DSL helper: `-MySystem::class` */
@@ -619,20 +606,11 @@ class SceneManager(val physicsStep: Float = 1f / 60f, private val block: SceneMa
         val sceneFailures = CleanupFailures()
         sceneFailures.attempt { currScene?.let { NodeLifetime.withOwner(it) { it.nodeExitTree() } } }
         sceneFailures.attempt { currScene?.releaseResources() }
-        var failure: Throwable? = null
+        val systemFailures = CleanupFailures()
         systemsByClass.values.toList().forEach { system ->
-            try {
-                releaseSystem(system)
-            } catch (error: Throwable) {
-                val previous = failure
-                if (previous == null) {
-                    failure = error
-                } else if (previous !== error) {
-                    previous.addSuppressed(error)
-                }
-            }
+            systemFailures.attempt { releaseSystem(system) }
         }
-        sceneFailures.attempt { failure?.let { throw it } }
+        sceneFailures.attempt { systemFailures.rethrow() }
         sceneFailures.attempt { flushDeletionQueue() }
         sceneFailures.rethrow()
     }
