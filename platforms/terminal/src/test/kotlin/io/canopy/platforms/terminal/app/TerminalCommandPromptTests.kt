@@ -8,6 +8,7 @@ import io.canopy.engine.commands.CommandPromptHost
 import io.canopy.engine.core.managers.ManagersRegistry
 import io.canopy.engine.core.managers.SceneManager
 import io.canopy.engine.input.binds.Key
+import io.canopy.engine.input.events.TextInputEvent
 import org.junit.jupiter.api.AfterEach
 
 class TerminalCommandPromptTests {
@@ -84,6 +85,56 @@ class TerminalCommandPromptTests {
         input.enqueueMordantKeyEvent(KeyboardEvent("w"))
         input.processEvents()
         assertFalse(prompt.isVisible)
+    }
+
+    @Test
+    fun `digit and punctuation toggles suppress only their paired text and modifiers preserve later input`() {
+        val input = MordantInputManager()
+        val scenes = SceneManager()
+        val host = CommandPromptHost(terminalApp(), TerminalCommandPresentation({ false }, {}, {}))
+        ManagersRegistry.withScope {
+            register(input)
+            register(host)
+            register(scenes)
+        }
+        val prompt = CommandPrompt("Console") { toggleKey = Key.NUM_1 }
+        scenes.currScene = prompt
+        input.enqueueMordantKeyEvent(KeyboardEvent("1"))
+        input.enqueueMordantKeyEvent(KeyboardEvent("x"))
+        input.processEvents()
+        assertTrue(prompt.isVisible)
+        assertEquals("x", prompt.draft)
+        prompt.toggleKey = Key.SEMICOLON
+        input.enqueueMordantKeyEvent(KeyboardEvent(";"))
+        input.processEvents()
+        assertFalse(prompt.isVisible)
+        input.enqueueMordantKeyEvent(KeyboardEvent(";"))
+        input.enqueueMordantKeyEvent(KeyboardEvent("y"))
+        input.processEvents()
+        assertTrue(prompt.isVisible)
+        assertEquals("xy", prompt.draft)
+        prompt.hide()
+        prompt.toggleKey = Key.Z
+        input.enqueueMordantKeyEvent(KeyboardEvent("Z", shift = true))
+        input.enqueueMordantKeyEvent(KeyboardEvent("a"))
+        input.processEvents()
+        assertTrue(prompt.isVisible)
+        assertEquals("xya", prompt.draft)
+        prompt.hide()
+        input.enqueueMordantKeyEvent(KeyboardEvent("z", ctrl = true))
+        // A modifier toggle emits no paired text; an independent following text event must survive.
+        input.enqueue(TextInputEvent("z"))
+        input.enqueueMordantKeyEvent(KeyboardEvent("x"))
+        input.processEvents()
+        assertTrue(prompt.isVisible)
+        assertEquals("xyazx", prompt.draft)
+        prompt.hide()
+        prompt.toggleKey = Key.NUM_LOCK
+        input.enqueueMordantKeyEvent(KeyboardEvent("NumLock"))
+        input.enqueue(TextInputEvent("LOCK"))
+        input.processEvents()
+        assertTrue(prompt.isVisible)
+        assertEquals("xyazxLOCK", prompt.draft)
     }
 
     @Test
