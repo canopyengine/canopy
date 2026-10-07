@@ -17,7 +17,7 @@ import io.canopy.engine.math.Vector2
  *
  * Responsibilities:
  * - Own the current scene root ([currScene]) and handle scene replacement
- * - Maintain a flat lookup table of nodes by path (useful for queries/debugging)
+ * - Maintain node identity membership in registration order
  * - Register/unregister nodes into [TreeSystem]s based on node type
  * - Maintain named node groups for broadcasting operations (e.g. "enemies", "ui")
  * - Drive the update loop via [tick] with deterministic phase ordering
@@ -38,15 +38,11 @@ class SceneManager(val physicsStep: Float = 1f / 60f, private val block: SceneMa
     /** Dedicated subsystem logger (routable + consistent). */
     private val log = EngineLogs.subsystem("scene")
 
-    /**
-     * Flat index of nodes keyed by their path.
-     * This is updated when scenes are registered/unregistered.
-     */
-    private val flatTree = mutableMapOf<String, Node<*>>()
-    private val pathsByNode = mutableMapOf<Node<*>, String>()
+    /** Node equality is final identity equality; paths do not define membership. */
+    private val indexedNodes = linkedSetOf<Node<*>>()
     private val ownedStates = mutableMapOf<Long, NodeState>()
     internal val retainedStateCount: Int get() = ownedStates.size
-    internal val indexedNodeCount: Int get() = pathsByNode.size
+    internal val indexedNodeCount: Int get() = indexedNodes.size
     internal var indexRemovalCount: Long = 0
         private set
 
@@ -60,13 +56,6 @@ class SceneManager(val physicsStep: Float = 1f / 60f, private val block: SceneMa
         ownedStates.remove(id)
     }
 
-    @JvmSynthetic
-    internal fun reindex(node: Node<*>) {
-        val previous = pathsByNode[node] ?: return
-        if (flatTree[previous] === node) flatTree.remove(previous)
-        pathsByNode[node] = node.internalPath()
-        flatTree[node.internalPath()] = node
-    }
     private val phaseSnapshots = mutableMapOf<TreeSystem.UpdatePhase, List<TreeSystem>>()
     private fun phaseSnapshot(phase: TreeSystem.UpdatePhase): List<TreeSystem> =
         phaseSnapshots.getOrPut(phase) { systems[phase]?.toList().orEmpty() }
@@ -195,31 +184,40 @@ class SceneManager(val physicsStep: Float = 1f / 60f, private val block: SceneMa
 
     /**
      * Registers all nodes in [root] into:
-     * - [flatTree] lookup table
+     * - the ordered identity membership index
      * - any systems that declared interest in the node's type
      */
     @JvmSynthetic
     internal fun registerSubtree(root: Node<*>? = currScene) {
         root ?: return
 
-        traverseNodes(root) { node ->
-            // Flat lookup by path (assumes node paths are unique within a scene).
-            node.requireValid("register subtree")
-            if (!node.isInsideTree) return@traverseNodes
-            pathsByNode[node]?.let { old -> if (flatTree[old] === node) flatTree.remove(old) }
-            pathsByNode[node] = node.path
-            flatTree[node.path] = node
+        root.requireValid("register subtree")
+        val sceneName = root.name
+        val pending = ArrayDeque<Node<*>>()
+        pending.addLast(root)
+        while (pending.isNotEmpty()) {
+            val node = pending.removeLast()
+            // Earlier system hooks can detach or destroy nodes still in this snapshot.
+            if (!node.isInsideTree) continue
+            val children = node.childSnapshot()
+            for (i in children.indices.reversed()) pending.addLast(children[i])
+            indexedNodes.add(node)
 
-            // Register node into systems interested in its type.
             systemsFor(node).toList().forEach { sys ->
-                LogContext.with(
-                    "scene" to root.name,
-                    "nodePath" to node.path,
-                    "system" to sys::class.simpleName
+                if (
+                    entered &&
+                    sys in initializedSystems &&
+                    systemsByClass[sys::class] === sys &&
+                    node.isInsideTree &&
+                    node in indexedNodes
                 ) {
-                    log.trace("event" to "system.register_node") { "Registering node in system" }
-                }
-                if (entered && sys in initializedSystems && systemsByClass[sys::class] === sys) {
+                    LogContext.with(
+                        "scene" to sceneName,
+                        "nodePath" to node.path,
+                        "system" to sys::class.simpleName
+                    ) {
+                        log.trace("event" to "system.register_node") { "Registering node in system" }
+                    }
                     sys.register(node)
                 }
             }
@@ -227,14 +225,14 @@ class SceneManager(val physicsStep: Float = 1f / 60f, private val block: SceneMa
 
         log.debug(
             "event" to "scene.subtree_registered",
-            "scene" to root.name,
-            "flatTreeSize" to flatTree.size
+            "scene" to sceneName,
+            "indexedNodeCount" to indexedNodes.size
         ) { "Subtree registered" }
     }
 
     /**
      * Unregisters all nodes in [root] from:
-     * - [flatTree]
+     * - the identity membership index
      * - any systems that declared interest in the node's type
      */
     @JvmSynthetic
@@ -244,10 +242,7 @@ class SceneManager(val physicsStep: Float = 1f / 60f, private val block: SceneMa
         traverseNodes(root) { nodes += it }
         val failures = CleanupFailures()
         for (node in nodes) {
-            pathsByNode.remove(node)?.let { key ->
-                if (flatTree[key] === node) flatTree.remove(key)
-                indexRemovalCount++
-            }
+            if (indexedNodes.remove(node)) indexRemovalCount++
             groupsByNode.remove(node)?.forEach { group ->
                 groups[group]?.remove(node)
                 if (groups[group].isNullOrEmpty()) groups.remove(group)
@@ -286,6 +281,9 @@ class SceneManager(val physicsStep: Float = 1f / 60f, private val block: SceneMa
      * - required node types ([TreeSystem.requiredTypes]) for fast node registration
      *
      * When this manager has entered, [TreeSystem.onRegister] runs before existing indexed nodes are added.
+     * Backfill follows node registration order and includes distinct identities even when paths coincide.
+     * Rename and same-tree reparent preserve that order; unregistration and reentry append the node.
+     * Nodes removed or exited by earlier registration hooks are skipped.
      * Otherwise initialization and node backfilling are deferred until [onEnter].
      */
     fun <T : TreeSystem> addSystem(system: T) {
@@ -356,12 +354,13 @@ class SceneManager(val physicsStep: Float = 1f / 60f, private val block: SceneMa
 
     private fun backfillSystem(system: TreeSystem) {
         // Hooks may change scene membership or remove the system while registration is in progress.
-        flatTree.values.toList().forEach { node ->
+        indexedNodes.toList().forEach { node ->
             if (
                 entered &&
                 system in initializedSystems &&
                 systemsByClass[system::class] === system &&
-                flatTree[node.path] === node &&
+                node.isInsideTree &&
+                node in indexedNodes &&
                 system.requiredTypes.any { it.isInstance(node) }
             ) {
                 system.register(node)
