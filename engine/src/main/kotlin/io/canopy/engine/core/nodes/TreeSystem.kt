@@ -8,7 +8,9 @@ import io.canopy.engine.logging.EngineLogs
 import io.canopy.engine.logging.LogContext
 
 /**
- * System that spans the whole node tree and processes [Node]s accordingly
+ * Processes nodes whose own type matches any [requiredTypes] entry, including subclasses.
+ * Requirements use OR semantics. Children never make a nonmatching parent eligible;
+ * an empty requirement list accepts no nodes.
  */
 abstract class TreeSystem(
     internal val phase: UpdatePhase,
@@ -44,7 +46,10 @@ abstract class TreeSystem(
     //         NODE REGISTRATION
     // ===============================
 
-    /** Adds an accepted node once; repeat registrations do not repeat [onNodeAdded]. */
+    /**
+     * Adds a node whose own type matches any requirement, including subclasses.
+     * Child types do not qualify the parent. Repeat registration does not repeat [onNodeAdded].
+     */
     fun register(node: Node<*>) {
         node.requireValid("register system")
         if (node in matches || !acceptsNode(node)) return
@@ -108,9 +113,8 @@ abstract class TreeSystem(
     protected open fun onNodeAdded(node: Node<*>) {}
     protected open fun onNodeRemoved(node: Node<*>) {}
 
-    private fun acceptsNode(node: Node<*>) = requiredTypes.any { type ->
-        type.isInstance(node) || node.hasChildType(type)
-    }
+    @JvmSynthetic
+    internal fun acceptsNode(node: Node<*>) = requiredTypes.any { it.isInstance(node) }
 
     // ===============================
     //           TICK PROCESSING
