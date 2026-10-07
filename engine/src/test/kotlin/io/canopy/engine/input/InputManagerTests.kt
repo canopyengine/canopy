@@ -20,8 +20,12 @@ class InputManagerTests {
     private class TestInputManager : InputManager() {
         val pressed = mutableSetOf<InputBind>()
         val handled = mutableListOf<InputEvent>()
+        var onPoll: (InputBind) -> Unit = {}
 
-        override fun pollPressed(bind: InputBind): Boolean = bind in pressed
+        override fun pollPressed(bind: InputBind): Boolean {
+            onPoll(bind)
+            return bind in pressed
+        }
         override fun handleEvent(event: InputEvent) {
             handled += event
         }
@@ -148,6 +152,59 @@ class InputManagerTests {
         input.clearMappings()
         assertEquals(InputState.Released, input.getActionState("move"))
         assertFalse(input.isActionJustReleased("move"))
+    }
+
+    @Test
+    fun `polling remap preserves current pass bindings and applies replacements on next pass`() {
+        val input = TestInputManager()
+        input.mapActions("first" to listOf(InputBind.A), "second" to listOf(InputBind.D))
+        input.pressed.addAll(listOf(InputBind.A, InputBind.D))
+        var remapped = false
+        input.onPoll = { bind ->
+            if (bind == InputBind.A && !remapped) {
+                remapped = true
+                input.mapActions("second" to listOf(InputBind.S), "later" to listOf(InputBind.W))
+            }
+        }
+
+        input.updateActions()
+        assertEquals(InputState.JustPressed, input.getActionState("second"))
+        assertEquals(InputState.Released, input.getActionState("later"))
+        input.updateActions()
+        assertEquals(InputState.JustReleased, input.getActionState("second"))
+        input.pressed += InputBind.W
+        input.updateActions()
+        assertEquals(InputState.JustPressed, input.getActionState("later"))
+    }
+
+    @Test
+    fun `mapping changes preserve action order and reset or retain cached states as documented`() {
+        val input = TestInputManager()
+        val polled = mutableListOf<InputBind>()
+        input.onPoll = { polled += it }
+        input.mapActions("first" to listOf(InputBind.A), "second" to listOf(InputBind.D))
+        input.pressed += InputBind.A
+        input.updateActions()
+        input.updateActions()
+        assertEquals(InputState.Pressed, input.getActionState("first"))
+        input.mapActions("second" to listOf(InputBind.S), replace = false)
+        assertEquals(InputState.Pressed, input.getActionState("first"))
+        polled.clear()
+        input.updateActions()
+        assertEquals(listOf(InputBind.A, InputBind.D, InputBind.S), polled)
+        input.unmapAction("first")
+        assertEquals(InputState.Released, input.getActionState("first"))
+        assertFalse("first" in input.actionStates)
+        polled.clear()
+        input.updateActions()
+        assertEquals(listOf(InputBind.D, InputBind.S), polled)
+        input.mapActions("second" to listOf(InputBind.W))
+        polled.clear()
+        input.updateActions()
+        assertEquals(listOf(InputBind.W), polled)
+        input.clearMappings()
+        input.updateActions()
+        assertTrue(input.actionStates.isEmpty())
     }
 
     @Test
