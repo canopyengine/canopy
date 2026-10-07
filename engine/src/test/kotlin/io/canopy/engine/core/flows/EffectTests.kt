@@ -1,6 +1,9 @@
 package io.canopy.engine.core.flows
 
 import kotlin.test.Test
+import kotlin.test.assertFailsWith
+import kotlin.test.assertSame
+import io.canopy.engine.core.flows.events.Effect
 import io.canopy.engine.core.flows.events.effect
 import io.canopy.engine.core.flows.events.signal
 import io.canopy.engine.core.flows.events.untrack
@@ -212,5 +215,62 @@ class EffectTests {
         assertEquals(3, runCount)
         assertEquals(3, counter())
         e.dispose()
+    }
+
+    @Test
+    fun `throwing rerun reconciles changed dependencies and restores untracked reads`() {
+        val branch = signal(true)
+        val first = signal(1)
+        val second = signal(2)
+        val ignored = signal(3)
+        val failure = IllegalStateException("effect")
+        var runs = 0
+        var fail = false
+        val e = effect {
+            runs++
+            if (branch()) first() else second()
+            try {
+                untrack {
+                    ignored()
+                    throw failure
+                }
+            } catch (_: IllegalStateException) {
+                // Tracking must be restored before this subsequent read.
+            }
+            second()
+            if (fail) throw failure
+        }
+        second.update { 4 }
+        assertEquals(2, runs)
+        fail = true
+        assertSame(failure, assertFailsWith<IllegalStateException> { branch.update { false } })
+        fail = false
+        first.update { 10 }
+        ignored.update { 30 }
+        assertEquals(3, runs)
+        second.update { 20 }
+        assertEquals(4, runs)
+        e.dispose()
+        second.update { 21 }
+        assertEquals(4, runs)
+    }
+
+    @Test
+    fun `disposal during rerun does not subscribe dependencies read afterwards`() {
+        val trigger = signal(0)
+        val later = signal(0)
+        var runs = 0
+        lateinit var e: Effect
+        e = effect {
+            runs++
+            if (trigger() == 1) {
+                e.dispose()
+                later()
+                later.dispose()
+            }
+        }
+        trigger.update { 1 }
+        trigger.update { 2 }
+        assertEquals(2, runs)
     }
 }
