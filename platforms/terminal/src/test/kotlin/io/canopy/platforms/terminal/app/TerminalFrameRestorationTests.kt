@@ -25,7 +25,7 @@ class TerminalFrameRestorationTests {
         // Arrange: use the real app-installed presentation and host, with no input reader or TTY.
         val (app, host, prompt) = start()
         app.renderFrame(listOf("old frame", "old row"))
-        prompt.show()
+        prompt.open()
         host.onUpdate(0f)
         output.clear()
 
@@ -36,7 +36,7 @@ class TerminalFrameRestorationTests {
         latest[0] = "caller mutation"
         host.onUpdate(0f)
         assertTrue(output.isEmpty())
-        prompt.hide()
+        prompt.close()
         host.onUpdate(0f)
 
         // Assert: the short replacement clears old/prompt rows and uses copied text, without renderFrame again.
@@ -51,12 +51,12 @@ class TerminalFrameRestorationTests {
         val (app, host, prompt) = start()
         app.renderFrame(listOf("paused world"))
         app.pause()
-        prompt.show()
+        prompt.open()
         host.onUpdate(0f)
         output.clear()
 
         // Act
-        prompt.hide()
+        prompt.close()
         host.onUpdate(0f)
 
         // Assert
@@ -70,7 +70,7 @@ class TerminalFrameRestorationTests {
         // Arrange
         val (app, host, prompt) = start()
         app.renderFrame(listOf("old world"))
-        prompt.show()
+        prompt.open()
         host.onUpdate(0f)
         app.renderFrame(emptyList())
         output.clear()
@@ -86,12 +86,12 @@ class TerminalFrameRestorationTests {
     fun `closing prompt without a submitted frame only clears presentation`() {
         // Arrange
         val (_, host, prompt) = start()
-        prompt.show()
+        prompt.open()
         host.onUpdate(0f)
         output.clear()
 
         // Act
-        prompt.hide()
+        prompt.close()
         host.onUpdate(0f)
 
         // Assert
@@ -109,14 +109,14 @@ class TerminalFrameRestorationTests {
             }
             output.add(text)
         }
-        prompt.show()
+        prompt.open()
         host.onUpdate(0f)
         app.renderFrame(listOf("retained"))
         output.clear()
         writesUntilFailure = 1
 
         // Act
-        prompt.hide()
+        prompt.close()
         assertFailsWith<IllegalStateException> { host.onUpdate(0f) }
         writesUntilFailure = null
         app.renderFrame(listOf("recovered"))

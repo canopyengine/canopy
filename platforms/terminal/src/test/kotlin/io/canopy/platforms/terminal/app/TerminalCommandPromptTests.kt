@@ -66,7 +66,7 @@ class TerminalCommandPromptTests {
         input.enqueueMordantKeyEvent(KeyboardEvent("😀"))
         input.processEvents()
         // Assert
-        assertTrue(prompt.isVisible)
+        assertTrue(prompt.isOpen)
         assertEquals("Z😀", prompt.draft)
         assertTrue(input.eventsThisFrame.isEmpty())
         input.enqueueMordantKeyEvent(KeyboardEvent("Backspace"))
@@ -75,15 +75,15 @@ class TerminalCommandPromptTests {
         prompt.toggleKey = Key.SPACE
         input.enqueueMordantKeyEvent(KeyboardEvent(" "))
         input.processEvents()
-        assertFalse(prompt.isVisible)
+        assertFalse(prompt.isOpen)
         input.enqueueMordantKeyEvent(KeyboardEvent(" "))
         input.processEvents()
-        assertTrue(prompt.isVisible)
+        assertTrue(prompt.isOpen)
         assertEquals("Z", prompt.draft)
         prompt.toggleKey = Key.W
         input.enqueueMordantKeyEvent(KeyboardEvent("w"))
         input.processEvents()
-        assertFalse(prompt.isVisible)
+        assertFalse(prompt.isOpen)
     }
 
     @Test
@@ -101,7 +101,7 @@ class TerminalCommandPromptTests {
             command("say") { execute { reply("first\nsecond\u001b[31m") } }
         }
         scenes.currScene = prompt
-        prompt.show()
+        prompt.open()
         prompt.submit("say")
         host.onUpdate(0f)
         assertTrue(output.last().startsWith("\u001b[2J\u001b[H"))
@@ -109,7 +109,7 @@ class TerminalCommandPromptTests {
         val count = output.size
         host.onUpdate(0f)
         assertEquals(count, output.size)
-        prompt.hide()
+        prompt.close()
         host.onUpdate(0f)
         assertEquals("\u001b[2J\u001b[H", output.last())
         assertEquals(1, restored)
@@ -132,7 +132,7 @@ class TerminalCommandPromptTests {
             command("say") { execute { reply("same") } }
         }
         scenes.currScene = prompt
-        prompt.show()
+        prompt.open()
         prompt.submit("say")
         host.onUpdate(0f)
         output.clear()
@@ -143,9 +143,9 @@ class TerminalCommandPromptTests {
         prompt.transcriptLimit = 1
         host.onUpdate(0f)
         assertTrue(output.isEmpty())
-        prompt.hide()
+        prompt.close()
         host.onUpdate(0f)
-        prompt.show()
+        prompt.open()
         host.onUpdate(0f)
         assertEquals(listOf("\n", "same\n", "> "), output)
         assertTrue(output.none { '\u001b' in it })
@@ -165,7 +165,7 @@ class TerminalCommandPromptTests {
         }
         val prompt = CommandPrompt("Console") { command("say") { execute { reply("reply") } } }
         scenes.currScene = prompt
-        prompt.show()
+        prompt.open()
         prompt.submit("say")
         host.onUpdate(0f)
         line = true
