@@ -5,6 +5,7 @@ import com.github.ajalt.mordant.input.KeyboardEvent
 import com.github.ajalt.mordant.input.coroutines.receiveEventsFlow
 import com.github.ajalt.mordant.input.isCtrlC
 import com.github.ajalt.mordant.terminal.Terminal
+import io.canopy.adapters.logback.LogbackLogging
 import io.canopy.adapters.mordant.input.MordantInputManager
 import io.canopy.engine.app.App
 import io.canopy.engine.app.AppConfig
@@ -49,6 +50,8 @@ class TerminalApp internal constructor() : App<AppConfig>() {
             terminal.rawPrint(buildTerminalFrame(terminal, lines))
         }
     }
+
+    override fun defaultLoggingPolicy() = LogbackLogging()
 
     override fun defaultConfig(): AppConfig = AppConfig(
         title = "Terminal Canopy App"

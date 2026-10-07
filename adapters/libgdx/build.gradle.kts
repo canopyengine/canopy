@@ -33,8 +33,6 @@ dependencies {
 
     // Logging
     api(libs.slf4j.api)
-    implementation(libs.logback.classic)
-    implementation(libs.logback.logstash)
 
     // Testing
     testImplementation(libs.kotlin.test.junit5)

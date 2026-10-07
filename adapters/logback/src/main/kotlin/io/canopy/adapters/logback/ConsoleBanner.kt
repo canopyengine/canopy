@@ -1,4 +1,4 @@
-package io.canopy.engine.logging.util
+package io.canopy.adapters.logback
 
 import kotlin.math.roundToInt
 import java.lang.management.ManagementFactory
@@ -6,9 +6,8 @@ import java.lang.management.ManagementFactory
 /**
  * Prints the engine startup banner to the console.
  *
- * The banner is loaded from a resource file (`/logo-banner.txt`) and printed
- * using the logging system so that it integrates with the application's
- * logging configuration.
+ * The banner is loaded from a resource file (`/logo-banner.txt`) and written directly to terminal output.
+ * It is optional cosmetic output, independent of the host's logger configuration.
  *
  * Two rendering modes are supported:
  *
@@ -24,7 +23,7 @@ import java.lang.management.ManagementFactory
  * ANSI escape sequences are used for coloring. If the terminal does not
  * support ANSI colors, the banner will still render as plain text.
  */
-object ConsoleBanner {
+internal object ConsoleBanner {
 
     enum class Mode { SIMPLE, GRADIENT }
 

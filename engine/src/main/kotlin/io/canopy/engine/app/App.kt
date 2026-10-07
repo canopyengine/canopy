@@ -8,9 +8,10 @@ import io.canopy.engine.core.managers.InjectionManager
 import io.canopy.engine.core.managers.Manager
 import io.canopy.engine.core.managers.ManagersRegistry
 import io.canopy.engine.core.managers.SceneManager
-import io.canopy.engine.logging.CanopyLogging
 import io.canopy.engine.logging.EngineLogs
 import io.canopy.engine.logging.LogContext
+import io.canopy.engine.logging.LoggingPolicy
+import io.canopy.engine.logging.LoggingSession
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.withTimeout
 
@@ -24,6 +25,10 @@ abstract class App<C : AppConfig> protected constructor() {
      * Configuration
      * ============================================================ */
     private var _config: C? = null
+    private var loggingPolicy: LoggingPolicy? = null
+
+    @Volatile
+    private var loggingSession: LoggingSession? = null
     protected val config: C
         get() = _config ?: defaultConfig()
 
@@ -144,6 +149,9 @@ abstract class App<C : AppConfig> protected constructor() {
      * Hooks
      * ============================================================ */
 
+    /** Platform logging default; core applications use host-owned logging. */
+    protected open fun defaultLoggingPolicy(): LoggingPolicy = LoggingPolicy.Host
+
     protected open fun afterEnter() = Unit
     protected open fun beforeUpdate(delta: Float) = Unit
     protected open fun afterResize(width: Int, height: Int) = Unit
@@ -172,38 +180,36 @@ abstract class App<C : AppConfig> protected constructor() {
     private fun performEnter() {
         var ownsManagerScope = false
         try {
-            CanopyLogging.init(
-                CanopyLogging.Config(
-                    engineVersion = CanopyBuildInfo.projectVersion
-                )
-            )
+            loggingSession = (loggingPolicy ?: defaultLoggingPolicy()).start(CanopyBuildInfo.projectVersion)
 
             val backendName = this::class.simpleName ?: "unknown"
-            LogContext.with("backend" to backendName) {
-                EngineLogs.lifecycle.info { "Booting Canopy..." }
+            withLoggingContext {
+                LogContext.with("backend" to backendName) {
+                    EngineLogs.lifecycle.info { "Booting Canopy..." }
 
-                var sceneManager: SceneManager? = null
-                ownsManagerScope = true
-                ManagersRegistry.withScope {
-                    provideManagers().forEach(::register)
-                    +InjectionManager()
-                    +ScreenManager()
-                    +SceneManager().also {
-                        sceneManager = it
-                        it.pauseState = { isPaused }
-                        it.configureSceneManager()
+                    var sceneManager: SceneManager? = null
+                    ownsManagerScope = true
+                    ManagersRegistry.withScope {
+                        provideManagers().forEach(::register)
+                        +InjectionManager()
+                        +ScreenManager()
+                        +SceneManager().also {
+                            sceneManager = it
+                            it.pauseState = { isPaused }
+                            it.configureSceneManager()
+                        }
+                        managerBuilder()
                     }
-                    managerBuilder()
-                }
-                sceneManager?.let { engineLoop.configurePhysicsStep(it.physicsStep) }
+                    sceneManager?.let { engineLoop.configurePhysicsStep(it.physicsStep) }
 
-                onEnter(this@App)
-                afterEnter()
+                    onEnter(this@App)
+                    afterEnter()
 
-                onStarted.safeComplete()
+                    onStarted.safeComplete()
 
-                EngineLogs.lifecycle.info("event" to "app.launch.init") {
-                    "Application started."
+                    EngineLogs.lifecycle.info("event" to "app.launch.init") {
+                        "Application started."
+                    }
                 }
             }
         } catch (t: Throwable) {
@@ -212,7 +218,7 @@ abstract class App<C : AppConfig> protected constructor() {
         }
     }
 
-    private fun performUpdate(delta: Float) {
+    private fun performUpdate(delta: Float) = withLoggingContext {
         updateSequence++
         if (!isPaused) gameplayFrames.incrementAndGet()
 
@@ -225,12 +231,12 @@ abstract class App<C : AppConfig> protected constructor() {
         ManagersRegistry.update(delta, isPaused)
     }
 
-    private fun performPhysicsUpdate(delta: Float) {
+    private fun performPhysicsUpdate(delta: Float) = withLoggingContext {
         if (!isPaused) onPhysicsUpdate(this@App, delta)
         ManagersRegistry.physicsUpdate(delta, isPaused)
     }
 
-    private fun performResize(width: Int, height: Int) {
+    private fun performResize(width: Int, height: Int) = withLoggingContext {
         ManagersRegistry.resize(width, height)
 
         onResize(this, width, height)
@@ -245,7 +251,7 @@ abstract class App<C : AppConfig> protected constructor() {
 
     private fun performExit() = teardown()
 
-    /** Attempts every cleanup stage before completing the stopped signal. */
+    /** Attempts every cleanup stage; failed context setup falls back to host context for that stage. */
     private fun teardown(initialFailure: Throwable? = null, ownsManagerScope: Boolean = true) {
         var failure = initialFailure
         fun attempt(block: () -> Unit) {
@@ -261,11 +267,26 @@ abstract class App<C : AppConfig> protected constructor() {
             }
         }
 
-        attempt { EngineLogs.lifecycle.info("event" to "app.dispose") { "Disposing app" } }
-        attempt { beforeExit() }
-        if (ownsManagerScope) attempt { ManagersRegistry.exit() }
-        attempt { CanopyLogging.end(reason = if (failure == null) "normal" else "crash", t = failure) }
-        attempt { onExit(this) }
+        fun scopedAttempt(block: () -> Unit) {
+            var invoked = false
+            attempt {
+                withLoggingContext {
+                    invoked = true
+                    block()
+                }
+            }
+            // A custom session may fail before entering its scope; cleanup must still run.
+            if (!invoked) attempt(block)
+        }
+
+        scopedAttempt { EngineLogs.lifecycle.info("event" to "app.dispose") { "Disposing app" } }
+        scopedAttempt { beforeExit() }
+        if (ownsManagerScope) scopedAttempt { ManagersRegistry.exit() }
+        scopedAttempt { loggingSession?.end(reason = if (failure == null) "normal" else "crash", failure = failure) }
+        scopedAttempt { onExit(this) }
+        val session = loggingSession
+        loggingSession = null
+        attempt { session?.close() }
         val error = failure
         if (error == null) {
             onStopped.safeComplete()
@@ -313,6 +334,25 @@ abstract class App<C : AppConfig> protected constructor() {
     /* ============================================================
      * DSL
      * ============================================================ */
+
+    /**
+     * Selects the logging policy for entry; call before launch or [enter].
+     * This is application lifecycle configuration, independent of platform [AppConfig].
+     * Existing loggers and providers are unchanged.
+     */
+    fun logging(policy: LoggingPolicy) {
+        check(!onStarted.isCompleted && loggingSession == null) { "Configure logging before application entry" }
+        loggingPolicy = policy
+    }
+
+    /**
+     * Runs work with the active application's logging context on the calling thread.
+     * Context is restored afterward; background work must opt in explicitly. Before entry or after close, uses host context.
+     */
+    fun <T> withLoggingContext(block: () -> T): T {
+        val session = loggingSession
+        return if (session == null) block() else session.withContext(block)
+    }
 
     /** Replaces the configuration used for subsequent launch and lifecycle setup. */
     fun config(newConfig: C) {
