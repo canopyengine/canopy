@@ -15,17 +15,26 @@ object HeadlessHost {
     /** Creates the headless backend; its callbacks drive the application lifecycle. */
     fun launch(app: App<*>) {
         val host = object : KtxGame<KtxScreen>() {
-            override fun create() {
+            override fun create() = dispatch {
                 super.create()
                 app.engineLoop.enter()
             }
 
-            override fun render() {
+            override fun render() = dispatch {
                 app.engineLoop.update(Gdx.graphics.deltaTime)
             }
 
-            override fun resize(width: Int, height: Int) {
+            override fun resize(width: Int, height: Int) = dispatch {
                 app.engineLoop.resize(width, height)
+            }
+
+            private fun dispatch(block: () -> Unit) {
+                try {
+                    block()
+                } catch (error: Throwable) {
+                    // LibGDX does not guarantee dispose after a callback crashes.
+                    app.fail(error)
+                }
             }
 
             override fun dispose() {

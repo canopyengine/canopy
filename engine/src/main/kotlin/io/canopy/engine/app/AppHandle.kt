@@ -10,15 +10,15 @@ interface AppHandle {
     /** Invokes backend force-close behavior; without a backend callback this can halt the JVM. */
     fun forceClose()
 
-    /** Waits for teardown; propagates a failed lifecycle completion. */
+    /** Waits until all teardown stages finish; propagates the first runtime or cleanup failure. */
     suspend fun join()
 
-    /** Returns true when teardown completes; false on timeout or a failed wait. */
+    /** Returns true when teardown succeeds; false on timeout or lifecycle failure. Caller cancellation propagates. */
     suspend fun join(timeout: Duration): Boolean
 
     /** Waits for initialization; propagates startup failure. */
     suspend fun awaitStarted()
 
-    /** Returns true when initialization completes; false on timeout or a failed wait. */
+    /** Returns true when initialization succeeds; false on timeout or startup failure. Caller cancellation propagates. */
     suspend fun awaitStarted(timeout: Duration): Boolean
 }
