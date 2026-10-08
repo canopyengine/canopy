@@ -4,6 +4,7 @@ import kotlin.time.Duration
 import java.util.concurrent.atomic.AtomicLong
 import java.util.concurrent.atomic.AtomicReference
 import io.canopy.engine.core.CanopyBuildInfo
+import io.canopy.engine.core.CleanupFailures
 import io.canopy.engine.core.managers.InjectionManager
 import io.canopy.engine.core.managers.Manager
 import io.canopy.engine.core.managers.ManagersRegistry
@@ -247,26 +248,17 @@ abstract class App<C : AppConfig> protected constructor() {
 
     /** Attempts every cleanup stage before completing the stopped signal. */
     private fun teardown(initialFailure: Throwable? = null, ownsManagerScope: Boolean = true) {
-        var failure = initialFailure
-        fun attempt(block: () -> Unit) {
-            try {
-                block()
-            } catch (error: Throwable) {
-                val first = failure
-                if (first == null) {
-                    failure = error
-                } else if (first !== error) {
-                    first.addSuppressed(error)
-                }
-            }
-        }
+        val failures = CleanupFailures(initialFailure)
 
-        attempt { EngineLogs.lifecycle.info("event" to "app.dispose") { "Disposing app" } }
-        attempt { beforeExit() }
-        if (ownsManagerScope) attempt { ManagersRegistry.exit() }
-        attempt { CanopyLogging.end(reason = if (failure == null) "normal" else "crash", t = failure) }
-        attempt { onExit(this) }
-        val error = failure
+        failures.attempt { EngineLogs.lifecycle.info("event" to "app.dispose") { "Disposing app" } }
+        failures.attempt { beforeExit() }
+        if (ownsManagerScope) failures.attempt { ManagersRegistry.exit() }
+        failures.attempt {
+            val reason = if (failures.failure == null) "normal" else "crash"
+            CanopyLogging.end(reason = reason, t = failures.failure)
+        }
+        failures.attempt { onExit(this) }
+        val error = failures.failure
         if (error == null) {
             onStopped.safeComplete()
         } else {
