@@ -226,16 +226,16 @@ class AutomaticNodePropertyTests {
     }
 
     @Test
-    fun `initializer failures run once stop later initializers and preserve existing scope cleanup`() {
+    fun `initializer failures run once stop later initializers and release partial state`() {
         val trace = mutableListOf<String>()
         assertFailsWith<IllegalStateException> { Failing(trace) }
         assertEquals(listOf("first"), trace)
-        // Constructor failure is not transactional: the manager still owns base-constructor state.
-        assertEquals(1, scenes.retainedStateCount)
+        // The compiler-generated construction boundary releases partially initialized payloads.
+        assertEquals(0, scenes.retainedStateCount)
         trace.clear()
         assertFailsWith<IllegalStateException> { ExplicitFailing(trace) }
         assertEquals(listOf("first"), trace)
-        assertEquals(2, scenes.retainedStateCount)
+        assertEquals(0, scenes.retainedStateCount)
         ManagersRegistry.exit()
         assertNull(ManagersRegistry.getManagerOrNull(SceneManager::class))
     }

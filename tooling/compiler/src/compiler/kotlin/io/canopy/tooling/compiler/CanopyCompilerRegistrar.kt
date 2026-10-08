@@ -31,6 +31,7 @@ class CanopyCompilerRegistrar : CompilerPluginRegistrar() {
         IrGenerationExtension.registerExtension(NodePropertyTransform(messages))
         IrGenerationExtension.registerExtension(CanopyRuleRunner(messages, rules))
         IrGenerationExtension.registerExtension(UiExpressionTransform(messages))
+        IrGenerationExtension.registerExtension(NodeConstructionTransform(messages))
     }
 }
 

@@ -38,17 +38,23 @@ class ConsumerGradleTests {
                 """
                 package io.canopy.engine.core.nodes
                 import kotlin.reflect.KProperty
+                var constructionDepth = 0
+                inline fun <T> nodeConstruction(factory: () -> T): T {
+                    constructionDepth++
+                    try { return factory() } finally { constructionDepth-- }
+                }
                 abstract class Node<N : Node<N>> {
+                    init { check(constructionDepth > 0) }
                     private val slots = mutableMapOf<String, Any?>()
                     @Suppress("UNCHECKED_CAST")
                     protected fun <T> compilerPropertyGet(key: String, default: T): T =
                         if (slots.containsKey(key)) slots[key] as T else default
                     protected fun <T> compilerPropertySet(key: String, value: T) { slots[key] = value }
-                    protected fun <T> nodeProperty(value: T): NodeProperty<T> = TODO()
+                    protected fun <T> nodeProperty(value: T): NodeProperty<T> = NodeProperty(value)
                 }
-                class NodeProperty<T> {
-                    operator fun getValue(node: Node<*>, property: KProperty<*>): T = TODO()
-                    operator fun setValue(node: Node<*>, property: KProperty<*>, value: T) = Unit
+                class NodeProperty<T>(private var value: T) {
+                    operator fun getValue(node: Node<*>, property: KProperty<*>): T = value
+                    operator fun setValue(node: Node<*>, property: KProperty<*>, value: T) { this.value = value }
                 }
                 """.trimIndent()
             )
@@ -93,6 +99,21 @@ class ConsumerGradleTests {
                 System.getProperty("canopy.gradle.home")
             ).build()
             assertTrue(directory.resolve("verified.txt").readText() == "automatic state works")
+            directory.resolve("build.gradle.kts").appendText(
+                """
+
+                tasks.register<JavaExec>("verifyMainConstruction") {
+                    classpath = sourceSets["main"].runtimeClasspath
+                    mainClass.set("EnemyNodeKt")
+                }
+                tasks.register<JavaExec>("verifyTestConstruction") {
+                    classpath = sourceSets["test"].runtimeClasspath
+                    mainClass.set("SafeTestNodeKt")
+                }
+                """.trimIndent().let {
+                    "\n" + it
+                }
+            )
             val tests = directory.resolve("src/test/kotlin").apply { mkdirs() }
             tests.resolve("UnsafeTestNode.kt").writeText(
                 """
@@ -108,12 +129,17 @@ class ConsumerGradleTests {
                 System.getProperty("canopy.gradle.home")
             ).buildAndFail()
             assertTrue("CANOPY_UNMANAGED_NODE_STATE" in unsafeTest.output, unsafeTest.output)
-            tests.resolve("UnsafeTestNode.kt").writeText(
-                "import io.canopy.engine.core.nodes.Node\n" +
-                    "class SafeTestNode : Node<SafeTestNode>() { val retained = Any() }"
+            tests.resolve("UnsafeTestNode.kt").delete()
+            tests.resolve("SafeTestNode.kt").writeText(
+                """
+                import io.canopy.engine.core.nodes.Node
+                class SafeTestNode : Node<SafeTestNode>() { val retained = Any() }
+                fun main() { SafeTestNode() }
+                """.trimIndent()
             )
             runner.withArguments(
-                "compileTestKotlin",
+                "verifyMainConstruction",
+                "verifyTestConstruction",
                 "--offline",
                 "--stacktrace",
                 "--gradle-user-home",

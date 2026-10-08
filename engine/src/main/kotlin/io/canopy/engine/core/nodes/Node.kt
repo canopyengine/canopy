@@ -62,13 +62,15 @@ abstract class Node<N : Node<N>> protected constructor(
         val payload = NodeState(owner, name) { block(this as N) }
         reference = WeakReference(payload)
         owner.retainState(nodeId, payload)
+        NodeConstruction.record(this)
         try {
             currentParent.get()?.attach(this)
         } catch (failure: Throwable) {
-            payload.builder = null
-            owner.releaseState(nodeId)
-            reference.clear()
-            lifecycle = Lifecycle.Destroyed
+            try {
+                owner.rollbackConstruction(this, setOf(this))
+            } catch (cleanup: Throwable) {
+                if (cleanup !== failure) failure.addSuppressed(cleanup)
+            }
             throw failure
         }
     }
@@ -580,9 +582,11 @@ abstract class Node<N : Node<N>> protected constructor(
             currentParent.set(this)
             s.initializing = true
             try {
-                callback("initialize") {
-                    nodeInit()
-                    s.builder?.invoke()
+                nodeConstruction {
+                    callback("initialize") {
+                        nodeInit()
+                        s.builder?.invoke()
+                    }
                 }
             } finally {
                 currentParent.set(previous)
