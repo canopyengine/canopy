@@ -38,7 +38,10 @@ abstract class Screen {
     open fun onPhysicsUpdate(delta: Float) {}
 
     /**
-     * Called when the screen is resized.
+     * Called for host resize notifications while current, and after activation when the manager has
+     * retained host dimensions from a previous notification. Units are backend-specific (terminal cells
+     * or graphical pixels). Navigation from this callback is allowed; obsolete visits receive no replay.
+     * A failed activation replay can be retried by starting the same current screen without re-entering it.
      */
     open fun onResize(width: Int, height: Int) {}
 

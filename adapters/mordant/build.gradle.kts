@@ -18,14 +18,7 @@ dependencies {
     api(libs.mordant.core)
     api(libs.mordant.coroutines)
 
-    // Logging
-    api(libs.slf4j.api)
-    implementation(libs.logback.classic)
-    implementation(libs.logback.logstash)
-
     // Testing
     testImplementation(libs.kotlin.test.junit5)
     testImplementation(libs.junit.jupiter)
-    testImplementation(libs.assertj.core)
-    testImplementation(libs.mockk)
 }

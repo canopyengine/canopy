@@ -1,6 +1,8 @@
 package io.canopy.engine.core.flows
 
 import kotlin.test.Test
+import kotlin.test.assertFailsWith
+import kotlin.test.assertSame
 import io.canopy.engine.core.flows.events.computed
 import io.canopy.engine.core.flows.events.signal
 import io.canopy.engine.core.flows.events.untrack
@@ -176,5 +178,36 @@ class ComputedTests {
         a.update { 1 }
 
         assert(recomputeCount <= 2) { "Recompute count should be bounded, was $recomputeCount" }
+    }
+
+    @Test
+    fun `lazy nested computation retains new dependencies after a throwing recomputation`() {
+        val branch = signal(true)
+        val first = signal(1)
+        val second = signal(2)
+        val inner = computed { second() * 2 }
+        val failure = IllegalStateException("computed")
+        var runs = 0
+        var fail = false
+        val outer = computed {
+            runs++
+            val value = if (branch()) first() else inner()
+            if (fail) throw failure
+            value
+        }
+        assertEquals(0, runs)
+        assertEquals(1, outer())
+        fail = true
+        assertSame(failure, assertFailsWith<IllegalStateException> { branch.update { false } })
+        fail = false
+        first.update { 10 }
+        assertEquals(2, runs)
+        second.update { 3 }
+        assertEquals(3, runs)
+        assertEquals(6, outer())
+        outer.dispose()
+        second.update { 4 }
+        assertEquals(3, runs)
+        inner.dispose()
     }
 }

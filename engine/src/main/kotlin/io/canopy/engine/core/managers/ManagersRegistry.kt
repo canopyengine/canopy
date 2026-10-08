@@ -1,7 +1,7 @@
 package io.canopy.engine.core.managers
 
 import kotlin.reflect.KClass
-import kotlin.reflect.full.superclasses
+import io.canopy.engine.core.CleanupFailures
 import io.canopy.engine.logging.EngineLogs
 import io.canopy.engine.logging.LogContext
 
@@ -191,24 +191,17 @@ object ManagersRegistry {
         if (exiting) return
         checkCanExit()
         exiting = true
-        var failure: Throwable? = null
+        val failures = CleanupFailures()
         try {
             log.info("event" to "managers.teardown", "registered" to managers.size) {
                 "Tearing down managers"
             }
             managers.values.toList().forEach { manager ->
-                try {
+                failures.attempt {
                     val name = manager::class.simpleName ?: "UnknownManager"
                     LogContext.with("manager" to name) {
                         log.debug { "teardown()" }
                         manager.onExit()
-                    }
-                } catch (error: Throwable) {
-                    val first = failure
-                    if (first == null) {
-                        failure = error
-                    } else if (first !== error) {
-                        first.addSuppressed(error)
                     }
                 }
             }
@@ -218,7 +211,7 @@ object ManagersRegistry {
             exiting = false
         }
         log.info("event" to "managers.teardown.done") { "Finished tearing down managers" }
-        failure?.let { throw it }
+        failures.rethrow()
     }
 
     /** Replaces the global scope and enters the new registrations; rejected during lifecycle dispatch and teardown. */
@@ -307,16 +300,18 @@ object ManagersRegistry {
 
     @Suppress("UNCHECKED_CAST")
     private fun KClass<out Manager>.managerTypeClosure(): Set<KClass<out Manager>> {
-        val visited = linkedSetOf<KClass<*>>()
+        val visited = linkedSetOf<Class<*>>()
 
-        fun visit(type: KClass<*>) {
+        fun visit(type: Class<*>) {
             if (!visited.add(type)) return
-            type.superclasses.forEach(::visit)
+            type.superclass?.let(::visit)
+            type.interfaces.forEach(::visit)
         }
 
-        visit(this)
+        visit(java)
 
         return visited
+            .map { it.kotlin }
             .filter { it.isConcreteManagerLookupType() }
             .map { it as KClass<out Manager> }
             .toSet()

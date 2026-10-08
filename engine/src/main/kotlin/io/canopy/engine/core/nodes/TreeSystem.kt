@@ -2,13 +2,16 @@ package io.canopy.engine.core.nodes
 
 import kotlin.reflect.KClass
 import java.util.Collections
+import io.canopy.engine.core.CleanupFailures
 import io.canopy.engine.core.managers.SceneManager
 import io.canopy.engine.core.managers.manager
 import io.canopy.engine.logging.EngineLogs
 import io.canopy.engine.logging.LogContext
 
 /**
- * System that spans the whole node tree and processes [Node]s accordingly
+ * Processes nodes whose own type matches any [requiredTypes] entry, including subclasses.
+ * Requirements use OR semantics. Children never make a nonmatching parent eligible;
+ * an empty requirement list accepts no nodes.
  */
 abstract class TreeSystem(
     internal val phase: UpdatePhase,
@@ -44,7 +47,10 @@ abstract class TreeSystem(
     //         NODE REGISTRATION
     // ===============================
 
-    /** Adds an accepted node once; repeat registrations do not repeat [onNodeAdded]. */
+    /**
+     * Adds a node whose own type matches any requirement, including subclasses.
+     * Child types do not qualify the parent. Repeat registration does not repeat [onNodeAdded].
+     */
     fun register(node: Node<*>) {
         node.requireValid("register system")
         if (node in matches || !acceptsNode(node)) return
@@ -89,28 +95,18 @@ abstract class TreeSystem(
 
     /** Releases current matches through the normal removal hook, leaving this system reusable. */
     internal fun clearNodes() {
-        var failure: Throwable? = null
+        val failures = CleanupFailures()
         matchingNodes.forEach { node ->
-            try {
-                unregisterInternal(node)
-            } catch (error: Throwable) {
-                val previous = failure
-                if (previous == null) {
-                    failure = error
-                } else if (previous !== error) {
-                    previous.addSuppressed(error)
-                }
-            }
+            failures.attempt { unregisterInternal(node) }
         }
-        failure?.let { throw it }
+        failures.rethrow()
     }
 
     protected open fun onNodeAdded(node: Node<*>) {}
     protected open fun onNodeRemoved(node: Node<*>) {}
 
-    private fun acceptsNode(node: Node<*>) = requiredTypes.any { type ->
-        type.isInstance(node) || node.hasChildType(type)
-    }
+    @JvmSynthetic
+    internal fun acceptsNode(node: Node<*>) = requiredTypes.any { it.isInstance(node) }
 
     // ===============================
     //           TICK PROCESSING

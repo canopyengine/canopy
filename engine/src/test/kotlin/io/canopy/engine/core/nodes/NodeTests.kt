@@ -455,6 +455,8 @@ class NodeTests {
 
         verifyPhase(TreeSystem.UpdatePhase.FramePre) { scenes.onUpdate(0f) }
         verifyPhase(TreeSystem.UpdatePhase.PhysicsPre) { scenes.onPhysicsUpdate(1f / 60f) }
+        verifyPhase(TreeSystem.UpdatePhase.FramePost) { scenes.onUpdate(0f) }
+        verifyPhase(TreeSystem.UpdatePhase.PhysicsPost) { scenes.onPhysicsUpdate(1f / 60f) }
     }
 
     @Test

@@ -13,6 +13,8 @@ class ScreenManagerTests {
 
     private open class RecordingScreen(val label: String, val calls: MutableList<String>) : Screen() {
         var enter: () -> Unit = {}
+        var active: () -> Unit = {}
+        var resize: () -> Unit = {}
         var inactive: () -> Unit = {}
         var exit: () -> Unit = {}
 
@@ -23,6 +25,7 @@ class ScreenManagerTests {
 
         override fun onActive() {
             calls += "$label:active"
+            active()
         }
 
         override fun onInactive() {
@@ -45,6 +48,7 @@ class ScreenManagerTests {
 
         override fun onResize(width: Int, height: Int) {
             calls += "$label:resize:$width,$height"
+            resize()
         }
     }
 
@@ -324,5 +328,142 @@ class ScreenManagerTests {
         // Assert
         assertNull(manager.current)
         assertEquals(listOf("first:inactive", "first:exit"), calls)
+    }
+
+    @Test
+    fun `new visits replay latest geometry after activation without a native resize`() {
+        manager.register(First(calls))
+        manager.register(Second(calls))
+        manager.onResize(80, 24)
+        manager.start(First::class)
+        manager.start(Second::class)
+        manager.start(Second::class)
+        assertEquals(
+            listOf(
+                "first:enter",
+                "first:active",
+                "first:resize:80,24",
+                "first:inactive",
+                "first:exit",
+                "second:enter",
+                "second:active",
+                "second:resize:80,24"
+            ),
+            calls
+        )
+        manager.onResize(40, 12)
+        manager.start(First::class)
+        assertEquals("first:resize:40,12", calls.last())
+    }
+
+    @Test
+    fun `activation redirect and round trip replay only the new current visit`() {
+        val first = First(calls)
+        val second = Second(calls)
+        first.active = {
+            first.active = {}
+            manager.start(Second::class)
+        }
+        second.active = { manager.start(First::class) }
+        manager.register(first)
+        manager.register(second)
+        manager.onResize(60, 20)
+        manager.start(First::class)
+        assertSame(first, manager.current)
+        assertEquals(listOf("first:resize:60,20"), calls.filter { ":resize:" in it })
+    }
+
+    @Test
+    fun `resize redirect gives fresh geometry to destination without repeating obsolete visit`() {
+        val first = First(calls)
+        val second = Second(calls)
+        first.resize = { manager.start(Second::class) }
+        manager.register(first)
+        manager.register(second)
+        manager.start(First::class)
+        manager.onResize(50, 10)
+        manager.start(Second::class)
+        assertSame(second, manager.current)
+        assertEquals(listOf("first:resize:50,10", "second:resize:50,10"), calls.filter { ":resize:" in it })
+    }
+
+    @Test
+    fun `failed replay retries geometry without repeating enter or activation`() {
+        val first = First(calls)
+        var fail = true
+        first.resize = { check(!fail) { "layout failed" } }
+        manager.register(first)
+        manager.onResize(30, 8)
+        assertFailsWith<IllegalStateException> { manager.start(First::class) }
+        assertSame(first, manager.current)
+        fail = false
+        manager.start(First::class)
+        manager.start(First::class)
+        assertEquals(listOf("first:enter", "first:active", "first:resize:30,8", "first:resize:30,8"), calls)
+    }
+
+    @Test
+    fun `zero geometry is retained and teardown clears replay even after cleanup failure`() {
+        val first = First(calls)
+        first.exit = { error("cleanup failed") }
+        manager.register(first)
+        manager.onResize(0, 0)
+        manager.start(First::class)
+        assertEquals("first:resize:0,0", calls.last())
+        assertFailsWith<IllegalStateException> { manager.onExit() }
+        calls.clear()
+        manager.register(Second(calls))
+        manager.start(Second::class)
+        assertEquals(listOf("second:enter", "second:active"), calls)
+    }
+
+    @Test
+    fun `invalid geometry is forwarded but not retained for a later screen`() {
+        manager.register(First(calls))
+        manager.register(Second(calls))
+        manager.start(First::class)
+        manager.onResize(-1, -2)
+        manager.start(Second::class)
+        assertEquals(listOf("first:resize:-1,-2"), calls.filter { ":resize:" in it })
+    }
+
+    @Test
+    fun `failed activation and nested start current do not replay before activation finishes`() {
+        val first = First(calls)
+        first.active = {
+            manager.start(First::class)
+            error("activation failed")
+        }
+        manager.register(first)
+        manager.onResize(40, 10)
+        assertFailsWith<IllegalStateException> { manager.start(First::class) }
+        manager.start(First::class)
+        assertEquals(listOf("first:enter", "first:active"), calls)
+    }
+
+    @Test
+    fun `resize callback starting current is a no-op during delivery and failure still retries`() {
+        val first = First(calls)
+        var fail = true
+        first.resize = {
+            manager.start(First::class)
+            check(!fail) { "resize failed" }
+        }
+        manager.register(first)
+        manager.onResize(40, 10)
+        assertFailsWith<IllegalStateException> { manager.start(First::class) }
+        fail = false
+        manager.start(First::class)
+        manager.onResize(50, 20)
+        assertEquals(
+            listOf(
+                "first:enter",
+                "first:active",
+                "first:resize:40,10",
+                "first:resize:40,10",
+                "first:resize:50,20"
+            ),
+            calls
+        )
     }
 }

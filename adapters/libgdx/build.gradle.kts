@@ -26,19 +26,7 @@ dependencies {
     implementation(libs.ktx.app)
     implementation(libs.ktx.assets)
 
-    // Serialization
-    api(libs.kotlinx.serialization.core)
-    api(libs.kotlinx.serialization.json)
-    implementation(libs.tomlkt)
-
-    // Logging
-    api(libs.slf4j.api)
-    implementation(libs.logback.classic)
-    implementation(libs.logback.logstash)
-
     // Testing
     testImplementation(libs.kotlin.test.junit5)
     testImplementation(libs.junit.jupiter)
-    testImplementation(libs.assertj.core)
-    testImplementation(libs.mockk)
 }

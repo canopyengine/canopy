@@ -17,7 +17,19 @@ class CanopyCompilerTests {
     private val api = """
         package io.canopy.engine.core.nodes
         import kotlin.reflect.KProperty
+        var constructionDepth = 0
+        var boundaries = 0
+        inline fun <T> nodeConstruction(factory: () -> T): T {
+            boundaries++
+            constructionDepth++
+            try { return factory() } finally { constructionDepth-- }
+        }
         abstract class Node<N : Node<N>> {
+            private val slots = mutableMapOf<String, Any?>()
+            @Suppress("UNCHECKED_CAST")
+            protected fun <T> compilerPropertyGet(key: String, default: T): T =
+                if (slots.containsKey(key)) slots[key] as T else default
+            protected fun <T> compilerPropertySet(key: String, value: T) { slots[key] = value }
             protected fun <T> nodeProperty(initial: T): NodeProperty<T> = NodeProperty.create(initial)
         }
         class NodeProperty<T> private constructor(private var value: T) {
@@ -30,25 +42,141 @@ class CanopyCompilerTests {
     @Test
     fun `consumer node state declarations fail with actionable diagnostic`() {
         listOf(
-            "class Enemy : Node<Enemy>() { var health = 100 }",
-            "class Enemy : Node<Enemy>() { val health = 100 }",
-            "class Enemy(val health: Int) : Node<Enemy>()",
             "class Enemy : Node<Enemy>() { lateinit var resource: String }",
             "class Enemy : Node<Enemy>() { val health by lazy { 100 } }",
             "class Enemy : Node<Enemy>() { var health by kotlin.properties.Delegates.observable(100) { _, _, _ -> } }",
             "class Enemy : Node<Enemy>() { @JvmField var health = 100 }",
+            "class Enemy : Node<Enemy>() { @Volatile var health = 100 }",
+            "class Enemy : Node<Enemy>() { @Transient var health = 100 }",
             "fun make() { var health = 100; class Enemy : Node<Enemy>() { fun damage() { health-- } } }",
             "class Outer { inner class Enemy : Node<Enemy>() }",
             "class Enemy : Node<Enemy>(), Runnable by (java.lang.Runnable { })",
-            "open class Base<N : Base<N>> : Node<N>() { var health = 100 }; class Enemy : Base<Enemy>()"
+            "fun make() { val retained = Any(); class Enemy : Node<Enemy>() { val payload = retained } }",
+            "fun make() { val retained = Any(); val node = object : Node<Nothing>() { val payload = retained } }"
         ).forEach { declaration ->
             compileConsumer(declaration) { code, output ->
                 assertEquals(ExitCode.COMPILATION_ERROR, code, declaration + output)
-                assertTrue("CANOPY_UNMANAGED_NODE_STATE" in output, output)
+                assertTrue(
+                    "CANOPY_UNMANAGED_NODE_STATE" in output || "CANOPY_UNSUPPORTED_NODE_PROPERTY" in output,
+                    output
+                )
                 assertTrue("nodeProperty" in output, output)
                 assertTrue(Regex("Game\\.kt:[0-9]+:[0-9]+").containsMatchIn(output), output)
             }
         }
+    }
+
+    @Test
+    fun `automatic properties preserve constructors custom accessors overrides and defaults without payload fields`() {
+        compileConsumer(
+            """
+            val events = mutableListOf<String>()
+            open class Base<N : Base<N>>(value: Int) : Node<N>() {
+                private var same = value.also { events += "base" }
+                open val overridden: Int = 10
+                val beforeOverride = overridden
+                fun baseValue() = same
+            }
+            class Enemy(val constructorValue: Int) : Base<Enemy>(constructorValue) {
+                private var same = constructorValue.also { events += "child" }
+                override val overridden = 20
+                var custom = constructorValue
+                    get() = field + 1
+                    set(value) { field = value * 2 }
+                val earlier = same + constructorValue
+                fun copyFrom(other: Enemy) { same = other.same }
+                init { events += "init"; same += 1 }
+                fun values() = listOf(baseValue(), same, beforeOverride, overridden, custom, earlier)
+            }
+            class Generic<T>(val payload: T) : Node<Generic<T>>()
+            fun result(): String {
+                val enemy = Enemy(5)
+                check(enemy.values() == listOf(5, 6, 0, 20, 6, 10))
+                enemy.custom = 3
+                check(enemy.custom == 7)
+                check(Generic("generic").payload == "generic")
+                check(events == listOf("base", "child", "init"))
+                val other = Enemy(7)
+                enemy.copyFrom(other)
+                check(enemy.values()[1] == 8)
+                return "okay"
+            }
+            """.trimIndent(),
+            inspectOutput = { output, apiOutput ->
+                java.net.URLClassLoader(
+                    arrayOf(output.toURI().toURL(), apiOutput.toURI().toURL()),
+                    this.javaClass.classLoader
+                ).use { loader ->
+                    listOf("Base", "Enemy", "Generic").forEach { name ->
+                        val payload = loader.loadClass(name).declaredFields.filter {
+                            !java.lang.reflect.Modifier.isStatic(it.modifiers)
+                        }
+                        assertTrue(payload.isEmpty(), "$name retained fields: $payload")
+                    }
+                    assertEquals("okay", loader.loadClass("GameKt").getMethod("result").invoke(null))
+                }
+            }
+        ) { code, output -> assertEquals(ExitCode.OK, code, output) }
+    }
+
+    @Test
+    fun `missing runtime automatic storage ABI fails with precise compatibility diagnostic`() {
+        listOf(
+            """
+                package io.canopy.engine.core.nodes
+                abstract class Node<N : Node<N>>
+            """.trimIndent(),
+            api.replace("protected fun <T> compilerProperty", "private fun <T> compilerProperty"),
+            api.replace("protected fun <T> compilerProperty", "protected open fun <T> compilerProperty")
+        ).forEach { incompatibleApi ->
+            compileConsumer(
+                "class Enemy : Node<Enemy>() { var health = 100 }",
+                apiSource = incompatibleApi
+            ) { code, output ->
+                assertEquals(ExitCode.COMPILATION_ERROR, code, output)
+                assertTrue("CANOPY_NODE_PROPERTY_ABI" in output, output)
+            }
+        }
+    }
+
+    @Test
+    fun `automatic properties preserve initializer failures and static no storage properties`() {
+        compileConsumer(
+            """
+            var evaluations = 0
+            class Enemy : Node<Enemy>() {
+                val first = (++evaluations)
+                val failed: String = error("initializer failed")
+                val never = (++evaluations)
+                val computed get() = first + 1
+                companion object { const val CONSTANT = 5; var shared = 10 }
+            }
+            class Plain { var retained = "plain" }
+            object Ordinary { var retained = "object" }
+            fun result(): String {
+                try { Enemy(); error("expected failure") }
+                catch (failure: IllegalStateException) { check(failure.message == "initializer failed") }
+                check(evaluations == 1)
+                check(Enemy.CONSTANT == 5 && Enemy.shared == 10)
+                check(Plain().retained == "plain" && Ordinary.retained == "object")
+                return "okay"
+            }
+            """.trimIndent(),
+            inspectOutput = { output, apiOutput ->
+                java.net.URLClassLoader(
+                    arrayOf(output.toURI().toURL(), apiOutput.toURI().toURL()),
+                    this.javaClass.classLoader
+                ).use { loader ->
+                    assertEquals("okay", loader.loadClass("GameKt").getMethod("result").invoke(null))
+                    assertTrue(loader.loadClass("Plain").declaredFields.any { it.name == "retained" })
+                    assertTrue(
+                        loader.loadClass("Enemy").declaredFields.none {
+                            !java.lang.reflect.Modifier.isStatic(it.modifiers)
+                        }
+                    )
+                }
+            }
+        ) { code, output -> assertEquals(ExitCode.OK, code, output) }
     }
 
     @Test
@@ -66,7 +194,7 @@ class CanopyCompilerTests {
     }
 
     @Test
-    fun `consumer typed dependency delegates compile but storing query descriptors does not`() {
+    fun `consumer typed dependency delegates and automatic descriptor storage compile`() {
         // Arrange / Act / Assert
         compileConsumer(
             """
@@ -79,14 +207,11 @@ class CanopyCompilerTests {
             import io.canopy.engine.core.queries.child
             class Enemy : Node<Enemy>() { val query = child<Enemy>() }
             """.trimIndent()
-        ) { code, output ->
-            assertEquals(ExitCode.COMPILATION_ERROR, code, output)
-            assertTrue("CANOPY_UNMANAGED_NODE_STATE" in output, output)
-        }
+        ) { code, output -> assertEquals(ExitCode.OK, code, output) }
     }
 
     @Test
-    fun `global delegates compile in node and ordinary scopes while stored descriptors fail`() {
+    fun `global delegates compile in node and ordinary scopes alongside stored descriptors`() {
         // Arrange / Act / Assert
         compileConsumer(
             """
@@ -107,10 +232,7 @@ class CanopyCompilerTests {
             import io.canopy.engine.core.queries.manager
             class Enemy : Node<Enemy>() { val descriptor = manager<Any>() }
             """.trimIndent()
-        ) { code, output ->
-            assertEquals(ExitCode.COMPILATION_ERROR, code, output)
-            assertTrue("CANOPY_UNMANAGED_NODE_STATE" in output, output)
-        }
+        ) { code, output -> assertEquals(ExitCode.OK, code, output) }
     }
 
     @Test
@@ -132,7 +254,7 @@ class CanopyCompilerTests {
     }
 
     @Test
-    fun `consumer asset delegates compile while unmanaged descriptors and non asset types fail`() {
+    fun `consumer asset delegates and automatic descriptors compile while non asset types fail`() {
         // Arrange / Act / Assert
         compileConsumer(
             """
@@ -147,10 +269,7 @@ class CanopyCompilerTests {
             class Rules : CanopyAsset { override fun close() = Unit }
             class Level : Node<Level>() { val rules = asset<Rules>("rules") }
             """.trimIndent()
-        ) { code, output ->
-            assertEquals(ExitCode.COMPILATION_ERROR, code, output)
-            assertTrue("CANOPY_UNMANAGED_NODE_STATE" in output, output)
-        }
+        ) { code, output -> assertEquals(ExitCode.OK, code, output) }
         compileConsumer(
             """
             import io.canopy.engine.data.assets.*
@@ -170,9 +289,12 @@ class CanopyCompilerTests {
                 assertEquals(ExitCode.COMPILATION_ERROR, code, output)
                 assertTrue("CANOPY_TEST_NAMING" in output, output)
             }
-            compileConsumer("class Enemy : Node<Enemy>() { var health = 100 }", jar.path) { code, output ->
+            compileConsumer("class Enemy : Node<Enemy>() { lateinit var health: String }", jar.path) { code, output ->
                 assertEquals(ExitCode.COMPILATION_ERROR, code, output)
-                assertTrue("CANOPY_UNMANAGED_NODE_STATE" in output, output)
+                assertTrue(
+                    "CANOPY_UNMANAGED_NODE_STATE" in output || "CANOPY_UNSUPPORTED_NODE_PROPERTY" in output,
+                    output
+                )
             }
             compileConsumer("class Enemy : Node<Enemy>() { var health by nodeProperty(100) }", jar.path) {
                     code,
@@ -207,10 +329,154 @@ class CanopyCompilerTests {
     @Test
     fun `rule providers cannot replace mandatory safety through duplicate IDs`() {
         withRuleJar(TestDuplicateRule::class.java) { jar ->
-            compileConsumer("class Enemy : Node<Enemy>() { var health = 100 }", jar.path) { code, output ->
+            compileConsumer("class Enemy : Node<Enemy>() { lateinit var health: String }", jar.path) { code, output ->
                 assertTrue(code != ExitCode.OK, output)
                 assertTrue("Canopy compiler rule IDs must be unique" in output, output)
             }
+        }
+    }
+
+    @Test
+    fun `constructor calls protect arguments nested local generic and anonymous nodes`() {
+        compileConsumer(
+            """
+            val events = mutableListOf<String>()
+            open class Base<N : Base<N>>(value: Int) : Node<N>() {
+                init { check(constructionDepth > 0); events += "base${'$'}value" }
+            }
+            class Leaf(value: Int = 3) : Base<Leaf>(value) {
+                init { events += "leaf" }
+            }
+            class Generic<T>(value: T) : Node<Generic<T>>() {
+                init { check(constructionDepth > 0) }
+            }
+            fun argument(): Int { check(constructionDepth > 0); events += "argument"; Leaf(2); return 1 }
+            fun verify(): String {
+                Leaf(argument())
+                Leaf()
+                Generic("value")
+                class Local : Node<Local>() { init { check(constructionDepth > 0) } }
+                Local()
+                val anonymous = object : Node<Nothing>() { init { check(constructionDepth > 0) } }
+                check(constructionDepth == 0)
+                check(boundaries == 6) { "boundaries=${'$'}boundaries" }
+                return events.joinToString(",")
+            }
+            """.trimIndent(),
+            execute = { loader ->
+                assertEquals(
+                    "argument,base2,leaf,base1,leaf,base3,leaf",
+                    loader.loadClass("GameKt").getMethod("verify").invoke(null)
+                )
+            }
+        ) { code, output -> assertEquals(ExitCode.OK, code, output) }
+    }
+
+    @Test
+    fun `constructor failures leave boundary and preserve original throwable`() {
+        compileConsumer(
+            """
+            val failure = IllegalStateException("initialization")
+            class Broken : Node<Broken>() { init { check(constructionDepth > 0); throw failure } }
+            inline fun make(factory: () -> Broken) = factory()
+            fun verify(): Boolean {
+                try { make { Broken() } } catch (caught: Throwable) {
+                    return caught === failure && constructionDepth == 0 && boundaries == 1
+                }
+                return false
+            }
+            """.trimIndent(),
+            execute = { loader -> assertEquals(true, loader.loadClass("GameKt").getMethod("verify").invoke(null)) }
+        ) { code, output -> assertEquals(ExitCode.OK, code, output) }
+    }
+
+    @Test
+    fun `constructor references report an actionable source diagnostic`() {
+        compileConsumer("class Leaf : Node<Leaf>(); val factory = ::Leaf") { code, output ->
+            assertEquals(ExitCode.COMPILATION_ERROR, code, output)
+            assertTrue("CANOPY_NODE_CONSTRUCTION_REFERENCE" in output, output)
+            assertTrue(Regex("Game\\.kt:[0-9]+:[0-9]+").containsMatchIn(output), output)
+        }
+    }
+
+    @Test
+    fun `inline construction preserves nonlocal returns from arguments`() {
+        compileConsumer(
+            """
+            class Leaf(value: Int) : Node<Leaf>()
+            fun early(): Int { Leaf(if (true) return 7 else 1); return 0 }
+            fun verify(): Boolean = early() == 7 && constructionDepth == 0 && boundaries == 1
+            """.trimIndent(),
+            execute = { loader -> assertEquals(true, loader.loadClass("GameKt").getMethod("verify").invoke(null)) }
+        ) { code, output -> assertEquals(ExitCode.OK, code, output) }
+    }
+
+    @Test
+    fun `suspend argument evaluation is rejected while stored suspend callbacks compile`() {
+        listOf(
+            "suspend fun make() = Leaf(fetch())",
+            "suspend fun make() = Leaf(run { fetch() })",
+            "suspend fun make() = nodeConstruction { fetch(); Leaf(1) }",
+            "suspend fun make() = nodeConstruction { val value = fetch(); Leaf(value) }"
+        ).forEach { declaration ->
+            compileConsumer(
+                """
+                class Leaf(value: Int) : Node<Leaf>()
+                suspend fun fetch(): Int = 1
+                $declaration
+                """.trimIndent()
+            ) { code, output ->
+                assertEquals(ExitCode.COMPILATION_ERROR, code, output)
+                assertTrue("CANOPY_NODE_CONSTRUCTION_SUSPEND" in output, output)
+                assertTrue(Regex("Game\\.kt:[0-9]+:[0-9]+").containsMatchIn(output), output)
+            }
+        }
+        compileConsumer(
+            """
+            class Leaf(callback: suspend () -> Int) : Node<Leaf>()
+            suspend fun fetch(): Int = 1
+            fun make() = Leaf { fetch() }
+            inline fun stash(noinline callback: suspend () -> Int): Int = 1
+            class NumberLeaf(value: Int) : Node<NumberLeaf>()
+            fun stored() = NumberLeaf(stash { fetch() })
+            """.trimIndent()
+        ) { code, output -> assertEquals(ExitCode.OK, code, output) }
+    }
+
+    @Test
+    fun `anonymous object super arguments cannot suspend during construction`() {
+        compileConsumer(
+            """
+            open class Base<N : Base<N>>(value: Int) : Node<N>()
+            suspend fun fetch(): Int = 1
+            suspend fun make() = object : Base<Nothing>(fetch()) {}
+            """.trimIndent()
+        ) { code, output ->
+            assertEquals(ExitCode.COMPILATION_ERROR, code, output)
+            assertTrue("suspension functions can only be called within coroutine body" in output.lowercase(), output)
+        }
+    }
+
+    @Test
+    fun `construction ABI diagnostics require matching inline helper only at node calls`() {
+        compileConsumer(
+            "class Leaf : Node<Leaf>(); fun make() = Leaf()",
+            apiSource = api.replace("inline fun <T> nodeConstruction", "fun <T> nodeConstruction")
+        ) {
+                code,
+                output,
+            ->
+            assertEquals(ExitCode.COMPILATION_ERROR, code, output)
+            assertTrue("CANOPY_NODE_CONSTRUCTION_ABI" in output, output)
+        }
+        compileConsumer(
+            "class Leaf : Node<Leaf>()",
+            apiSource = api.replace("inline fun <T> nodeConstruction", "fun <T> nodeConstruction")
+        ) {
+                code,
+                output,
+            ->
+            assertEquals(ExitCode.OK, code, output)
         }
     }
 
@@ -243,11 +509,14 @@ class CanopyCompilerTests {
     private fun compileConsumer(
         source: String,
         additionalPlugin: String? = null,
+        apiSource: String = api,
+        inspectOutput: ((java.io.File, java.io.File) -> Unit)? = null,
+        execute: ((ClassLoader) -> Unit)? = null,
         assertResult: (ExitCode, String) -> Unit,
     ) {
         val directory = Files.createTempDirectory("canopy-consumer-compiler").toFile()
         try {
-            val apiFile = directory.resolve("Api.kt").apply { writeText(api) }
+            val apiFile = directory.resolve("Api.kt").apply { writeText(apiSource) }
             val apiOutput = directory.resolve("api")
             val standardLibrary = java.io.File(
                 kotlin.Unit::class.java.protectionDomain.codeSource.location.toURI()
@@ -332,6 +601,13 @@ class CanopyCompilerTests {
                 ExitCode.entries.first { it.code == result }
             }
             assertResult(code, bytes.toString())
+            if (code == ExitCode.OK) inspectOutput?.invoke(directory.resolve("game"), apiOutput)
+            if (code == ExitCode.OK && execute != null) {
+                java.net.URLClassLoader(
+                    arrayOf(apiOutput.toURI().toURL(), directory.resolve("game").toURI().toURL()),
+                    javaClass.classLoader
+                ).use(execute)
+            }
         } finally {
             directory.deleteRecursively()
         }

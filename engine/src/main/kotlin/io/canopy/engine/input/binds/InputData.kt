@@ -14,7 +14,7 @@ import kotlinx.serialization.Serializable
  *   "mappings": [
  *     {
  *       "name": "move_left",
- *       "binds": [ { "type": "KeyBind", "code": 21 } ]
+ *       "binds": [ "A", "LEFT" ]
  *     }
  *   ]
  * }
