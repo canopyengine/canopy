@@ -6,7 +6,9 @@ package io.canopy.engine.app
  * Platform drivers should forward lifecycle events to this class. Frame updates
  * run fixed-step physics updates first, followed by one variable-step update.
  * Nested entry, frame, resize and exit calls during entry or frame dispatch are rejected.
- * Repeated exit during teardown is harmless.
+ * Calls from different threads are serialized; callbacks must still run on the host thread.
+ * Repeated exit during teardown is harmless. The first uncaught callback failure is retained
+ * for application teardown. Hosts must report failures outside dispatch before calling [exit].
  */
 class EngineLoop(
     private val onEnter: () -> Unit,
@@ -25,6 +27,9 @@ class EngineLoop(
     private var physicsAccumulator = 0f
     private var wasPaused = false
 
+    internal var failure: Throwable? = null
+        private set
+
     internal var validateExit: () -> Unit = {}
 
     var physicsStep: Float = physicsStep
@@ -36,6 +41,7 @@ class EngineLoop(
     }
 
     /** Failed entry cannot be retried; the entry callback owns rollback of partial initialization. */
+    @Synchronized
     fun enter() {
         check(!entering && !dispatching) { "Cannot enter EngineLoop during lifecycle dispatch" }
         if (entered || exited) return
@@ -56,48 +62,89 @@ class EngineLoop(
      * Callers decide which work remains eligible. Pause transitions discard the fractional physics
      * remainder so gameplay and paused processing do not share accumulated time.
      */
-    fun update(delta: Float) = dispatch {
+    @Synchronized
+    fun update(delta: Float) {
+        checkDispatchAllowed()
         checkActive()
         require(delta.isFinite() && delta >= 0f) { "delta must be finite and non-negative" }
+        dispatch {
+            val paused = isPaused()
+            if (paused != wasPaused) physicsAccumulator = 0f
+            wasPaused = paused
 
-        val paused = isPaused()
-        if (paused != wasPaused) physicsAccumulator = 0f
-        wasPaused = paused
+            physicsAccumulator += delta
+            var steps = 0
+            while (
+                physicsAccumulator + PHYSICS_STEP_EPSILON >= physicsStep &&
+                steps < maxPhysicsStepsPerFrame
+            ) {
+                physicsAccumulator = (physicsAccumulator - physicsStep).coerceAtLeast(0f)
+                onPhysicsUpdate(physicsStep)
+                steps++
+            }
 
-        physicsAccumulator += delta
-        var steps = 0
-        while (
-            physicsAccumulator + PHYSICS_STEP_EPSILON >= physicsStep &&
-            steps < maxPhysicsStepsPerFrame
-        ) {
-            physicsAccumulator = (physicsAccumulator - physicsStep).coerceAtLeast(0f)
-            onPhysicsUpdate(physicsStep)
-            steps++
+            onUpdate(delta)
         }
-
-        onUpdate(delta)
     }
 
     /** Dispatches one physics tick. Normally called by [update]. */
-    fun physicsUpdate(delta: Float) = dispatch {
+    @Synchronized
+    fun physicsUpdate(delta: Float) {
+        checkDispatchAllowed()
         checkActive()
         require(delta.isFinite() && delta >= 0f) { "delta must be finite and non-negative" }
-        onPhysicsUpdate(delta)
+        dispatch { onPhysicsUpdate(delta) }
     }
 
-    fun resize(width: Int, height: Int) = dispatch {
+    @Synchronized
+    fun resize(width: Int, height: Int) {
+        checkDispatchAllowed()
         checkActive()
-        onResize(width, height)
+        dispatch { onResize(width, height) }
     }
 
-    fun exit() {
+    /**
+     * Tears down once, retaining [failure] before shutdown callbacks run. Hosts should pass an
+     * uncaught runtime error here, or call [reportFailure] before their finally block calls exit.
+     * A failure before entry permanently stops the loop without running exit callbacks.
+     */
+    @JvmOverloads
+    @Synchronized
+    fun exit(failure: Throwable? = null) {
         check(!entering && !dispatching) { "Cannot exit EngineLoop during lifecycle dispatch" }
-        if (!entered || exited) return
+        if (exited) return
+        if (failure != null) reportFailure(failure)
+        if (!entered) {
+            if (failure != null) exited = true
+            return
+        }
         validateExit()
         exited = true
         onExit()
     }
 
+    /**
+     * Retains the first runtime failure before teardown; later distinct failures are suppressed
+     * in reporting order. Reporting after exit cannot change an already completed handle.
+     * Cancellation and interruption are failures unless the host explicitly treats them as a normal stop.
+     */
+    @Synchronized
+    fun reportFailure(error: Throwable) {
+        if (exited) return
+        val first = failure
+        if (first == null) {
+            failure = error
+        } else if (first !== error && first.suppressed.none { it === error }) {
+            first.addSuppressed(error)
+        }
+    }
+
+    @Synchronized
+    internal fun checkHostFailureAllowed() {
+        check(!entering && !dispatching) { "Cannot fail EngineLoop during lifecycle dispatch" }
+    }
+
+    @Synchronized
     internal fun configurePhysicsStep(physicsStep: Float) {
         require(physicsStep.isFinite() && physicsStep > 0f) { "physicsStep must be finite and positive" }
         this.physicsStep = physicsStep
@@ -105,13 +152,20 @@ class EngineLoop(
     }
 
     private inline fun dispatch(block: () -> Unit) {
-        check(!entering && !dispatching) { "Cannot redispatch EngineLoop during lifecycle dispatch" }
+        checkDispatchAllowed()
         dispatching = true
         try {
             block()
+        } catch (error: Throwable) {
+            reportFailure(error)
+            throw error
         } finally {
             dispatching = false
         }
+    }
+
+    private fun checkDispatchAllowed() {
+        check(!entering && !dispatching) { "Cannot redispatch EngineLoop during lifecycle dispatch" }
     }
 
     private fun checkActive() {

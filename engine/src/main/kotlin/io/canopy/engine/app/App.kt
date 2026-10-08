@@ -11,13 +11,17 @@ import io.canopy.engine.core.managers.SceneManager
 import io.canopy.engine.logging.CanopyLogging
 import io.canopy.engine.logging.EngineLogs
 import io.canopy.engine.logging.LogContext
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.withTimeout
 
 /**
  * Shared application lifecycle and configuration, driven by a platform through [engineLoop].
  * Failed startup rolls back the manager scope and runs shutdown hooks. Teardown attempts all stages,
- * preserving the first failure with later failures suppressed before completing [handle].
+ * preserving the first runtime failure with later cleanup failures suppressed before completing [handle].
+ * Hosts must call [EngineLoop.reportFailure] before exit for failures outside loop dispatch.
  */
 abstract class App<C : AppConfig> protected constructor() {
     /* ============================================================
@@ -122,7 +126,11 @@ abstract class App<C : AppConfig> protected constructor() {
                 onStopped.await()
                 true
             }
-        } catch (_: Exception) {
+        } catch (_: CancellationException) {
+            currentCoroutineContext().ensureActive()
+            false
+        } catch (_: Throwable) {
+            currentCoroutineContext().ensureActive()
             false
         }
 
@@ -135,7 +143,11 @@ abstract class App<C : AppConfig> protected constructor() {
                 onStarted.await()
                 true
             }
-        } catch (_: Exception) {
+        } catch (_: CancellationException) {
+            currentCoroutineContext().ensureActive()
+            false
+        } catch (_: Throwable) {
+            currentCoroutineContext().ensureActive()
             false
         }
     }
@@ -152,6 +164,12 @@ abstract class App<C : AppConfig> protected constructor() {
     protected open fun provideManagers(): List<Manager> = emptyList()
     protected open fun SceneManager.configureSceneManager() = Unit
 
+    /**
+     * Drives the platform lifecycle. Report uncaught host failures through [EngineLoop.reportFailure]
+     * before finally calling [EngineLoop.exit]; failure after stopped completion cannot replace its result.
+     * A host may handle an intentional interrupt as graceful shutdown; unhandled interruption or
+     * cancellation is a failed launch.
+     */
     protected abstract fun internalLaunch(config: C, vararg args: String)
 
     /* ============================================================
@@ -243,7 +261,7 @@ abstract class App<C : AppConfig> protected constructor() {
         ) { "Screen resized." }
     }
 
-    private fun performExit() = teardown()
+    private fun performExit(): Unit = teardown(engineLoop.failure)
 
     /** Attempts every cleanup stage before completing the stopped signal. */
     private fun teardown(initialFailure: Throwable? = null, ownsManagerScope: Boolean = true) {
@@ -281,14 +299,14 @@ abstract class App<C : AppConfig> protected constructor() {
 
     /** Launches the platform on the calling thread; blocking behavior depends on the backend. */
     fun launch(vararg args: String) {
-        internalLaunch(config, *args)
+        launchHost(args)
     }
 
     /** Launches the platform on a non-daemon thread and returns lifecycle controls. */
     fun launchAsync(threadName: String = "canopy-app", vararg args: String): AppHandle {
         val thread = Thread({
             try {
-                internalLaunch(config, *args)
+                launchHost(args)
             } catch (t: Throwable) {
                 onStarted.safeFail(t)
                 onStopped.safeFail(t)
@@ -302,6 +320,35 @@ abstract class App<C : AppConfig> protected constructor() {
         thread.start()
 
         return handle
+    }
+
+    private fun launchHost(args: Array<out String>) {
+        try {
+            internalLaunch(config, *args)
+        } catch (error: Throwable) {
+            fail(error)
+        }
+    }
+
+    /**
+     * Stops a failed host, completes pending lifecycle signals and rethrows the first runtime failure.
+     * If an earlier failure was retained, [error] is suppressed on it. Call this on
+     * the host lifecycle thread when a backend callback crashes and may not receive a later exit.
+     * Cleanup is attempted exactly once. Hosts using a finally exit must report failure before it;
+     * an already completed stopped signal cannot be replaced.
+     */
+    fun fail(error: Throwable): Nothing {
+        engineLoop.checkHostFailureAllowed()
+        try {
+            engineLoop.exit(error)
+        } catch (cleanup: Throwable) {
+            val primary = engineLoop.failure ?: error
+            if (cleanup !== primary && primary.suppressed.none { it === cleanup }) primary.addSuppressed(cleanup)
+        }
+        val primary = engineLoop.failure ?: error
+        onStarted.safeFail(primary)
+        onStopped.safeFail(primary)
+        throw primary
     }
 
     /** Installs backend shutdown callbacks; a missing force-close callback uses requestExit. */

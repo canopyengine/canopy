@@ -155,6 +155,12 @@ class TerminalApp internal constructor() : App<AppConfig>() {
             }
 
             // 🔹 Shutdown
+        } catch (_: InterruptedException) {
+            // Interrupted frame-limiting sleep is a graceful stop. Callback failures remain retained.
+            Thread.currentThread().interrupt()
+        } catch (error: Throwable) {
+            engineLoop.reportFailure(error)
+            throw error
         } finally {
             inputJob.cancel()
             appScope.cancel()

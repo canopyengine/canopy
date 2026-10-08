@@ -159,7 +159,10 @@ class AppFailureTests {
         var closed = 0
         val app = TestApp().apply {
             managers { +Service(close = { closed++ }) }
-            onUpdate { assertFailsWith<IllegalStateException> { exit() } }
+            onUpdate {
+                assertFailsWith<IllegalStateException> { exit() }
+                assertFailsWith<IllegalStateException> { fail(IllegalArgumentException("nested")) }
+            }
         }
         app.enter()
         app.update(0f)
