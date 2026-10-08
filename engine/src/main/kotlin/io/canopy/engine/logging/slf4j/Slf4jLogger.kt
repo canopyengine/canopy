@@ -15,30 +15,13 @@ internal class Slf4jLogger(private val delegate: Slf4j) : Logger {
     override fun isWarnEnabled(): Boolean = delegate.isWarnEnabled
     override fun isErrorEnabled(): Boolean = delegate.isErrorEnabled
 
-    /**
-     * Formats structured fields for display in log messages.
-     *
-     * Fields are formatted as key=value pairs without ANSI colors.
-     * Colors are applied by the Logback encoder configuration (Console vs File).
-     * This ensures colors appear in the terminal but not in log files.
-     */
-    private fun formatFields(fields: Array<out Pair<String, Any?>>): String {
-        if (fields.isEmpty()) return ""
-
-        val formatted = fields.joinToString(separator = ", ") { (k, v) ->
-            val valueStr = v?.toString() ?: "null"
-            "$k=$valueStr"
-        }
-
-        return "[$formatted]"
-    }
-
     override fun log(level: LogLevel, t: Throwable?, vararg fields: Pair<String, Any?>, msg: () -> String) {
-        if (!isEnabled(level)) return
+        val slf4jLevel = org.slf4j.event.Level.valueOf(level.name)
+        if (!delegate.isEnabledForLevel(slf4jLevel)) return
 
         val baseMessage = msg()
-        val fieldsPrefix = formatFields(fields)
-        val message = if (fieldsPrefix.isEmpty()) baseMessage else "$fieldsPrefix $baseMessage"
+        val formattedFields = fields.joinToString(", ") { (key, value) -> "$key=${value?.toString() ?: "null"}" }
+        val message = if (fields.isEmpty()) baseMessage else "[$formattedFields] $baseMessage"
 
         val mergedMdc = LinkedHashMap<String, Any?>()
 
@@ -52,31 +35,11 @@ internal class Slf4jLogger(private val delegate: Slf4j) : Logger {
 
         // Put per-event fields into one dedicated MDC entry
         if (fields.isNotEmpty()) {
-            mergedMdc["fields"] = fields.joinToString(", ") { (k, v) ->
-                "$k=${v?.toString() ?: "null"}"
-            }
+            mergedMdc["fields"] = formattedFields
         }
 
         withTemporaryMdcContext(mergedMdc) {
-            emit(level, message, t)
-        }
-    }
-
-    private fun isEnabled(level: LogLevel): Boolean = when (level) {
-        LogLevel.TRACE -> delegate.isTraceEnabled
-        LogLevel.DEBUG -> delegate.isDebugEnabled
-        LogLevel.INFO -> delegate.isInfoEnabled
-        LogLevel.WARN -> delegate.isWarnEnabled
-        LogLevel.ERROR -> delegate.isErrorEnabled
-    }
-
-    private fun emit(level: LogLevel, message: String, t: Throwable?) {
-        when (level) {
-            LogLevel.TRACE -> if (t != null) delegate.trace(message, t) else delegate.trace(message)
-            LogLevel.DEBUG -> if (t != null) delegate.debug(message, t) else delegate.debug(message)
-            LogLevel.INFO -> if (t != null) delegate.info(message, t) else delegate.info(message)
-            LogLevel.WARN -> if (t != null) delegate.warn(message, t) else delegate.warn(message)
-            LogLevel.ERROR -> if (t != null) delegate.error(message, t) else delegate.error(message)
+            delegate.atLevel(slf4jLevel).setCause(t).log(message)
         }
     }
 }
