@@ -4,133 +4,142 @@ import kotlinx.serialization.Serializable
 
 /** Backend-independent physical bindings; code values are Canopy identifiers, not native backend key codes. */
 @Serializable
-enum class InputBind(val type: Type, val code: Int) {
+enum class InputBind private constructor(
+    /** Physical device category used when polling this binding. */
+    val type: Type,
+    /** Stable Canopy identifier; existing names and codes remain compatible with saved configurations. */
+    val code: Int,
+    /** Canonical keyboard identity, or null for mouse buttons. */
+    val key: Key?,
+) {
     // Letters
-    A(Type.Keyboard, 1),
-    B(Type.Keyboard, 2),
-    C(Type.Keyboard, 3),
-    D(Type.Keyboard, 4),
-    E(Type.Keyboard, 5),
-    F(Type.Keyboard, 6),
-    G(Type.Keyboard, 7),
-    H(Type.Keyboard, 8),
-    I(Type.Keyboard, 9),
-    J(Type.Keyboard, 10),
-    K(Type.Keyboard, 11),
-    L(Type.Keyboard, 12),
-    M(Type.Keyboard, 13),
-    N(Type.Keyboard, 14),
-    O(Type.Keyboard, 15),
-    P(Type.Keyboard, 16),
-    Q(Type.Keyboard, 17),
-    R(Type.Keyboard, 18),
-    S(Type.Keyboard, 19),
-    T(Type.Keyboard, 20),
-    U(Type.Keyboard, 21),
-    V(Type.Keyboard, 22),
-    W(Type.Keyboard, 23),
-    X(Type.Keyboard, 24),
-    Y(Type.Keyboard, 25),
-    Z(Type.Keyboard, 26),
+    A(Key.A),
+    B(Key.B),
+    C(Key.C),
+    D(Key.D),
+    E(Key.E),
+    F(Key.F),
+    G(Key.G),
+    H(Key.H),
+    I(Key.I),
+    J(Key.J),
+    K(Key.K),
+    L(Key.L),
+    M(Key.M),
+    N(Key.N),
+    O(Key.O),
+    P(Key.P),
+    Q(Key.Q),
+    R(Key.R),
+    S(Key.S),
+    T(Key.T),
+    U(Key.U),
+    V(Key.V),
+    W(Key.W),
+    X(Key.X),
+    Y(Key.Y),
+    Z(Key.Z),
 
     // Top-row digits
-    NUM_0(Type.Keyboard, 100),
-    NUM_1(Type.Keyboard, 101),
-    NUM_2(Type.Keyboard, 102),
-    NUM_3(Type.Keyboard, 103),
-    NUM_4(Type.Keyboard, 104),
-    NUM_5(Type.Keyboard, 105),
-    NUM_6(Type.Keyboard, 106),
-    NUM_7(Type.Keyboard, 107),
-    NUM_8(Type.Keyboard, 108),
-    NUM_9(Type.Keyboard, 109),
+    NUM_0(Key.NUM_0),
+    NUM_1(Key.NUM_1),
+    NUM_2(Key.NUM_2),
+    NUM_3(Key.NUM_3),
+    NUM_4(Key.NUM_4),
+    NUM_5(Key.NUM_5),
+    NUM_6(Key.NUM_6),
+    NUM_7(Key.NUM_7),
+    NUM_8(Key.NUM_8),
+    NUM_9(Key.NUM_9),
 
     // Arrows
-    LEFT(Type.Keyboard, 200),
-    RIGHT(Type.Keyboard, 201),
-    UP(Type.Keyboard, 202),
-    DOWN(Type.Keyboard, 203),
+    LEFT(Key.LEFT),
+    RIGHT(Key.RIGHT),
+    UP(Key.UP),
+    DOWN(Key.DOWN),
 
     // Common controls
-    SPACE(Type.Keyboard, 300),
-    ENTER(Type.Keyboard, 301),
-    ESCAPE(Type.Keyboard, 302),
-    TAB(Type.Keyboard, 303),
-    BACKSPACE(Type.Keyboard, 304),
-    INSERT(Type.Keyboard, 305),
-    DELETE(Type.Keyboard, 306),
-    HOME(Type.Keyboard, 307),
-    END(Type.Keyboard, 308),
-    PAGE_UP(Type.Keyboard, 309),
-    PAGE_DOWN(Type.Keyboard, 310),
+    SPACE(Key.SPACE),
+    ENTER(Key.ENTER),
+    ESCAPE(Key.ESCAPE),
+    TAB(Key.TAB),
+    BACKSPACE(Key.BACKSPACE),
+    INSERT(Key.INSERT),
+    DELETE(Key.DELETE),
+    HOME(Key.HOME),
+    END(Key.END),
+    PAGE_UP(Key.PAGE_UP),
+    PAGE_DOWN(Key.PAGE_DOWN),
 
     // Modifiers
-    SHIFT_LEFT(Type.Keyboard, 400),
-    SHIFT_RIGHT(Type.Keyboard, 401),
-    CTRL_LEFT(Type.Keyboard, 402),
-    CTRL_RIGHT(Type.Keyboard, 403),
-    ALT_LEFT(Type.Keyboard, 404),
-    ALT_RIGHT(Type.Keyboard, 405),
-    META_LEFT(Type.Keyboard, 406),
-    META_RIGHT(Type.Keyboard, 407),
-    CAPS_LOCK(Type.Keyboard, 408),
-    NUM_LOCK(Type.Keyboard, 409),
-    SCROLL_LOCK(Type.Keyboard, 410),
-    PRINT_SCREEN(Type.Keyboard, 411),
-    PAUSE(Type.Keyboard, 412),
+    SHIFT_LEFT(Key.SHIFT_LEFT),
+    SHIFT_RIGHT(Key.SHIFT_RIGHT),
+    CTRL_LEFT(Key.CTRL_LEFT),
+    CTRL_RIGHT(Key.CTRL_RIGHT),
+    ALT_LEFT(Key.ALT_LEFT),
+    ALT_RIGHT(Key.ALT_RIGHT),
+    META_LEFT(Key.META_LEFT),
+    META_RIGHT(Key.META_RIGHT),
+    CAPS_LOCK(Key.CAPS_LOCK),
+    NUM_LOCK(Key.NUM_LOCK),
+    SCROLL_LOCK(Key.SCROLL_LOCK),
+    PRINT_SCREEN(Key.PRINT_SCREEN),
+    PAUSE(Key.PAUSE),
 
     // Punctuation / symbols
-    GRAVE(Type.Keyboard, 500),
-    MINUS(Type.Keyboard, 501),
-    EQUALS(Type.Keyboard, 502),
-    LEFT_BRACKET(Type.Keyboard, 503),
-    RIGHT_BRACKET(Type.Keyboard, 504),
-    BACKSLASH(Type.Keyboard, 505),
-    SEMICOLON(Type.Keyboard, 506),
-    APOSTROPHE(Type.Keyboard, 507),
-    COMMA(Type.Keyboard, 508),
-    PERIOD(Type.Keyboard, 509),
-    SLASH(Type.Keyboard, 510),
+    GRAVE(Key.GRAVE),
+    MINUS(Key.MINUS),
+    EQUALS(Key.EQUALS),
+    LEFT_BRACKET(Key.LEFT_BRACKET),
+    RIGHT_BRACKET(Key.RIGHT_BRACKET),
+    BACKSLASH(Key.BACKSLASH),
+    SEMICOLON(Key.SEMICOLON),
+    APOSTROPHE(Key.APOSTROPHE),
+    COMMA(Key.COMMA),
+    PERIOD(Key.PERIOD),
+    SLASH(Key.SLASH),
 
     // Function keys
-    F1(Type.Keyboard, 600),
-    F2(Type.Keyboard, 601),
-    F3(Type.Keyboard, 602),
-    F4(Type.Keyboard, 603),
-    F5(Type.Keyboard, 604),
-    F6(Type.Keyboard, 605),
-    F7(Type.Keyboard, 606),
-    F8(Type.Keyboard, 607),
-    F9(Type.Keyboard, 608),
-    F10(Type.Keyboard, 609),
-    F11(Type.Keyboard, 610),
-    F12(Type.Keyboard, 611),
+    F1(Key.F1),
+    F2(Key.F2),
+    F3(Key.F3),
+    F4(Key.F4),
+    F5(Key.F5),
+    F6(Key.F6),
+    F7(Key.F7),
+    F8(Key.F8),
+    F9(Key.F9),
+    F10(Key.F10),
+    F11(Key.F11),
+    F12(Key.F12),
 
     // Numpad
-    NUMPAD_0(Type.Keyboard, 700),
-    NUMPAD_1(Type.Keyboard, 701),
-    NUMPAD_2(Type.Keyboard, 702),
-    NUMPAD_3(Type.Keyboard, 703),
-    NUMPAD_4(Type.Keyboard, 704),
-    NUMPAD_5(Type.Keyboard, 705),
-    NUMPAD_6(Type.Keyboard, 706),
-    NUMPAD_7(Type.Keyboard, 707),
-    NUMPAD_8(Type.Keyboard, 708),
-    NUMPAD_9(Type.Keyboard, 709),
-    NUMPAD_ADD(Type.Keyboard, 710),
-    NUMPAD_SUBTRACT(Type.Keyboard, 711),
-    NUMPAD_MULTIPLY(Type.Keyboard, 712),
-    NUMPAD_DIVIDE(Type.Keyboard, 713),
-    NUMPAD_DECIMAL(Type.Keyboard, 714),
-    NUMPAD_ENTER(Type.Keyboard, 715),
+    NUMPAD_0(Key.NUMPAD_0),
+    NUMPAD_1(Key.NUMPAD_1),
+    NUMPAD_2(Key.NUMPAD_2),
+    NUMPAD_3(Key.NUMPAD_3),
+    NUMPAD_4(Key.NUMPAD_4),
+    NUMPAD_5(Key.NUMPAD_5),
+    NUMPAD_6(Key.NUMPAD_6),
+    NUMPAD_7(Key.NUMPAD_7),
+    NUMPAD_8(Key.NUMPAD_8),
+    NUMPAD_9(Key.NUMPAD_9),
+    NUMPAD_ADD(Key.NUMPAD_ADD),
+    NUMPAD_SUBTRACT(Key.NUMPAD_SUBTRACT),
+    NUMPAD_MULTIPLY(Key.NUMPAD_MULTIPLY),
+    NUMPAD_DIVIDE(Key.NUMPAD_DIVIDE),
+    NUMPAD_DECIMAL(Key.NUMPAD_DECIMAL),
+    NUMPAD_ENTER(Key.NUMPAD_ENTER),
 
     // Mouse
-    LEFT_MOUSE(Type.Mouse, 1000),
-    RIGHT_MOUSE(Type.Mouse, 1001),
-    MIDDLE_MOUSE(Type.Mouse, 1002),
-    BACK_MOUSE(Type.Mouse, 1003),
-    FORWARD_MOUSE(Type.Mouse, 1004),
+    LEFT_MOUSE(Type.Mouse, 1000, null),
+    RIGHT_MOUSE(Type.Mouse, 1001, null),
+    MIDDLE_MOUSE(Type.Mouse, 1002, null),
+    BACK_MOUSE(Type.Mouse, 1003, null),
+    FORWARD_MOUSE(Type.Mouse, 1004, null),
     ;
+
+    private constructor(key: Key) : this(Type.Keyboard, requireNotNull(key.code), key)
 
     /** The physical device category used when polling a binding. */
     @Serializable
@@ -145,101 +154,8 @@ enum class InputBind(val type: Type, val code: Int) {
     }
 }
 
-/**
- * Maps InputBind to Key enum for KeyInputEvent creation.
- */
-fun InputBind.toKey(): Key = when (this) {
-    InputBind.A -> Key.A_KEY
-    InputBind.B -> Key.B_KEY
-    InputBind.C -> Key.C_KEY
-    InputBind.D -> Key.D_KEY
-    InputBind.E -> Key.E_KEY
-    InputBind.F -> Key.F_KEY
-    InputBind.G -> Key.G_KEY
-    InputBind.H -> Key.H_KEY
-    InputBind.I -> Key.I_KEY
-    InputBind.J -> Key.J_KEY
-    InputBind.K -> Key.K_KEY
-    InputBind.L -> Key.L_KEY
-    InputBind.M -> Key.M_KEY
-    InputBind.N -> Key.N_KEY
-    InputBind.O -> Key.O_KEY
-    InputBind.P -> Key.P_KEY
-    InputBind.Q -> Key.Q_KEY
-    InputBind.R -> Key.R_KEY
-    InputBind.S -> Key.S_KEY
-    InputBind.T -> Key.T_KEY
-    InputBind.U -> Key.U_KEY
-    InputBind.V -> Key.V_KEY
-    InputBind.W -> Key.W_KEY
-    InputBind.X -> Key.X_KEY
-    InputBind.Y -> Key.Y_KEY
-    InputBind.Z -> Key.Z_KEY
+/** Returns the canonical keyboard identity; mouse buttons have no keyboard identity and return [Key.UNKNOWN]. */
+fun InputBind.toKey(): Key = key ?: Key.UNKNOWN
 
-    InputBind.NUM_0 -> Key.UNKNOWN
-    InputBind.NUM_1 -> Key.UNKNOWN
-    InputBind.NUM_2 -> Key.UNKNOWN
-    InputBind.NUM_3 -> Key.UNKNOWN
-    InputBind.NUM_4 -> Key.UNKNOWN
-    InputBind.NUM_5 -> Key.UNKNOWN
-    InputBind.NUM_6 -> Key.UNKNOWN
-    InputBind.NUM_7 -> Key.UNKNOWN
-    InputBind.NUM_8 -> Key.UNKNOWN
-    InputBind.NUM_9 -> Key.UNKNOWN
-
-    InputBind.LEFT -> Key.LEFT
-    InputBind.RIGHT -> Key.RIGHT
-    InputBind.UP -> Key.UP
-    InputBind.DOWN -> Key.DOWN
-
-    InputBind.SPACE -> Key.SPACE
-    InputBind.ENTER -> Key.ENTER
-    InputBind.ESCAPE -> Key.ESCAPE
-    InputBind.BACKSPACE -> Key.BACKSPACE
-
-    else -> Key.UNKNOWN
-}
-
-/**
- * Maps Key enum to InputBind for KeyInputEvent handling.
- */
-fun Key.toInputBind(): InputBind? = when (this) {
-    Key.A_KEY -> InputBind.A
-    Key.B_KEY -> InputBind.B
-    Key.C_KEY -> InputBind.C
-    Key.D_KEY -> InputBind.D
-    Key.E_KEY -> InputBind.E
-    Key.F_KEY -> InputBind.F
-    Key.G_KEY -> InputBind.G
-    Key.H_KEY -> InputBind.H
-    Key.I_KEY -> InputBind.I
-    Key.J_KEY -> InputBind.J
-    Key.K_KEY -> InputBind.K
-    Key.L_KEY -> InputBind.L
-    Key.M_KEY -> InputBind.M
-    Key.N_KEY -> InputBind.N
-    Key.O_KEY -> InputBind.O
-    Key.P_KEY -> InputBind.P
-    Key.Q_KEY -> InputBind.Q
-    Key.R_KEY -> InputBind.R
-    Key.S_KEY -> InputBind.S
-    Key.T_KEY -> InputBind.T
-    Key.U_KEY -> InputBind.U
-    Key.V_KEY -> InputBind.V
-    Key.W_KEY -> InputBind.W
-    Key.X_KEY -> InputBind.X
-    Key.Y_KEY -> InputBind.Y
-    Key.Z_KEY -> InputBind.Z
-
-    Key.LEFT -> InputBind.LEFT
-    Key.RIGHT -> InputBind.RIGHT
-    Key.UP -> InputBind.UP
-    Key.DOWN -> InputBind.DOWN
-
-    Key.SPACE -> InputBind.SPACE
-    Key.ENTER -> InputBind.ENTER
-    Key.ESCAPE -> InputBind.ESCAPE
-    Key.BACKSPACE -> InputBind.BACKSPACE
-
-    else -> null
-}
+/** Returns the physical keyboard binding, or null for unsided modifiers and [Key.UNKNOWN]. */
+fun Key.toInputBind(): InputBind? = InputBind.entries.firstOrNull { it.key == this }

@@ -24,6 +24,8 @@ Please follow the instructions in the template when you do.
 
 > [!CAUTION]
 > Check whether the bug is reproducible on current `main` (0.1.0-dev2).
+> If testing a pending integration branch, include its commit and PR; do not
+> describe unmerged behavior as already available on `main`.
 > This development snapshot is not a stable release.
 
 If you run into a bug which wasn't present in an earlier Canopy version (what we call a _regression_), please mention it 

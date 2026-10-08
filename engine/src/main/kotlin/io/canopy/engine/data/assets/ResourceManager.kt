@@ -3,8 +3,8 @@ package io.canopy.engine.data.assets
 import kotlin.reflect.KClass
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.nanoseconds
+import io.canopy.engine.core.CleanupFailures
 import io.canopy.engine.core.managers.Manager
-import io.canopy.engine.core.nodes.CleanupFailures
 
 /**
  * Shares synchronous exact-type resources on the serialized engine lifecycle thread.

@@ -12,5 +12,4 @@ dependencies {
     implementation(projects.adapters.libgdx)
 
     // Logging
-    runtimeOnly(libs.logback.classic)
 }

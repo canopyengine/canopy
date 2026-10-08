@@ -10,7 +10,9 @@
 
 **Canopy 0.1.0-dev2** is an experimental Kotlin/JVM engine built around node
 trees, composable behaviors and reactive state. This is a development snapshot;
-public APIs may change before stable 0.1.0.
+public APIs may change before stable 0.1.0. This README describes the combined
+implementation proposed in [PR #208](https://github.com/canopyengine/canopy/pull/208),
+not a published stable release.
 
 ## Current capabilities
 
@@ -19,19 +21,28 @@ public APIs may change before stable 0.1.0.
 - Events, signals, computed values and synchronous effects.
 - Immutable Vector2 values and 2D transforms.
 - Shared frame/physics lifecycle, pause/resume and shutdown handles.
+- Backend-neutral declarative Row/Column/Box layouts, Text, Button, keyed
+  structural updates and shared focus; terminal measurement and rendering.
+- Node visibility, compiler-managed property storage and failed-construction rollback.
+- Adaptive terminal geometry and a bottom command overlay that captures gameplay
+  input while simulation continues; pause/resume remains explicit by default.
 - Interactive terminal hosting with queued keyboard input, plus a separate
   LibGDX headless host.
 - Backend-neutral file handles, JSON/TOML codecs, ID registries and modular saves.
 - Structured logging, ktlint, CodeQL and aggregate coverage reporting.
 
 Desktop sources are present but excluded from the build. The enabled platforms
-do not currently provide a supported graphical sprite/UI/collision workflow.
+do not currently provide a supported graphical sprite or collision workflow.
+The minimum declarative UI is available on terminal; no supported desktop UI
+backend is claimed.
 Fixed physics callbacks do not themselves supply a physics simulation.
-There is no supported `canopy new` CLI. The ecosystem demo remains a scaffold.
+There is no supported `canopy new` CLI. The ecosystem demo remains a scaffold;
+its agreed 0.1.0 target uses rabbits and foxes with nine abstract day phases.
 
 ## Build from source
 
-Use **JDK25**, the checked-in **Gradle9.8.0** wrapper and **Kotlin2.4.10**.
+Use **JDK25** for the engine, **JDK17** for the compiler/Gradle tooling, the
+checked-in **Gradle9.8.0** wrapper and **Kotlin2.4.10**.
 
 ```sh
 ./gradlew assemble
@@ -43,13 +54,16 @@ On Windows use `gradlew.bat`. For contributors, the full verification commands
 are `./gradlew test ktlintCheck build coverageReport`. The aggregate coverage
 gate is 60%. Desktop is excluded from these commands.
 
-Enabled modules are `:engine`, `:adapters:libgdx`, `:adapters:mordant`,
+Enabled modules are `:engine`, `:adapters:libgdx`, `:adapters:mordant`, `:adapters:logback`,
 `:platforms:headless`, `:platforms:terminal`, `:tooling:utils`, and
-`:tooling:devtools`. Core, data and input are packages in `:engine`.
+`:tooling:devtools`. `tooling/compiler` is an included build. Core, data,
+input, commands and shared UI are packages in `:engine`.
 
 ## Use the snapshot
 
-Publish locally first, then configure a terminal application:
+Publish locally first, then configure a terminal application. Apply the matching
+[compiler plugin](tooling/compiler/README.md) to Kotlin modules declaring custom
+nodes or using reactive declarative UI:
 
 ```kotlin
 repositories {
@@ -100,8 +114,9 @@ includes the application plugin, entry point and JVM options.
 Vector arithmetic returns immutable values; assign results back to node
 properties. Signal reads use `state()` and writes use `state.update { ... }`.
 Scene trees, manager registries and reactive updates expect serialized engine
-thread access. Event callbacks are weakly referenced; retain ownership and
-disconnect subscriptions/dispose effects during cleanup.
+thread access. Event callbacks are weakly referenced. Prefer node-owned subscriptions
+and effects, or explicitly disconnect/dispose shared lifetimes. Construction rollback
+is synchronous; it does not roll back arbitrary mutations to existing objects.
 
 ## Documentation and contributions
 

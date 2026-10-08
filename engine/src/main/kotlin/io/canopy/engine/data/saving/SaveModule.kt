@@ -53,6 +53,7 @@ interface SaveModule<T : @Serializable Any> {
  * )
  * ```
  *
+ * @throws IllegalArgumentException if another module with the same ID is registered for this destination
  * @throws IllegalStateException if [SaveManager] is not registered in [ManagersRegistry]
  */
 fun <T : @Serializable Any> registerSaveModule(

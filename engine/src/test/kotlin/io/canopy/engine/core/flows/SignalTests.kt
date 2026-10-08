@@ -1,8 +1,15 @@
 package io.canopy.engine.core.flows
 
 import kotlin.test.Test
+import kotlin.test.assertFailsWith
+import kotlin.test.assertSame
+import kotlin.test.assertTrue
+import io.canopy.engine.core.exceptions.CanopyException
 import io.canopy.engine.core.flows.events.asSignal
 import io.canopy.engine.core.flows.events.signal
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.CoroutineStart
+import kotlinx.coroutines.flow.take
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.yield
@@ -129,5 +136,73 @@ class SignalTests {
         value.update { 1 }
 
         assertEquals(1, value())
+    }
+
+    @Test
+    fun `late flow replays only emissions completed after synchronous callbacks`() {
+        val value = signal(0)
+        val failure = IllegalStateException("listener")
+        val handle = value.connect { throw failure }
+        assertSame(failure, assertFailsWith<IllegalStateException> { value.update { 1 } })
+        assertEquals(1, value())
+        assertEquals(listOf(0), value.flow.replayCache)
+        handle.disconnect()
+        value.update { 2 }
+        assertEquals(listOf(2), value.flow.replayCache)
+        value.dispose()
+    }
+
+    @Test
+    fun `first flow access during nested callback uses committed replay rather than current value`() {
+        val value = signal(0)
+        val failure = IllegalStateException("nested listener")
+        val handle = value.connect { next ->
+            if (next == 2) throw failure
+            if (next == 1) {
+                assertSame(failure, assertFailsWith<IllegalStateException> { value.update { 2 } })
+                assertEquals(2, value())
+                assertEquals(listOf(0), value.flow.replayCache)
+            }
+            if (next == 3) value.update { 4 }
+        }
+        value.update { 1 }
+        assertEquals(2, value())
+        assertEquals(listOf(1), value.flow.replayCache)
+        value.update { 3 }
+        assertEquals(4, value())
+        assertEquals(listOf(3), value.flow.replayCache)
+        handle.disconnect()
+        value.dispose()
+    }
+
+    @Test
+    fun `nullable late replay and held flow are cleared by disposal during callback`() {
+        val value = signal<String?>("initial")
+        value.update { null }
+        val held = value.flow
+        assertEquals(listOf<String?>(null), held.replayCache)
+        val handle = value.connect { value.dispose() }
+        value.update { "disposed" }
+        assertTrue(held.replayCache.isEmpty())
+        assertFailsWith<CanopyException> { value.flow }
+        handle.disconnect()
+    }
+
+    @Test
+    fun `slow collector retains replay plus 64 extra values and drops oldest`() = runBlocking {
+        val value = signal(0)
+        val release = CompletableDeferred<Unit>()
+        val collected = mutableListOf<Int>()
+        val job = launch(start = CoroutineStart.UNDISPATCHED) {
+            value.flow.take(66).collect {
+                collected += it
+                if (it == 0) release.await()
+            }
+        }
+        for (next in 1..100) value.update { next }
+        release.complete(Unit)
+        job.join()
+        assertEquals(listOf(0) + (36..100), collected)
+        value.dispose()
     }
 }

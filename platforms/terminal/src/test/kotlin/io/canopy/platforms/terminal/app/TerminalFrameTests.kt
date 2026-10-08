@@ -3,6 +3,7 @@ package io.canopy.platforms.terminal.app
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import com.github.ajalt.mordant.rendering.AnsiLevel
+import com.github.ajalt.mordant.rendering.Size
 import com.github.ajalt.mordant.terminal.Terminal
 
 class TerminalFrameTests {
@@ -11,16 +12,18 @@ class TerminalFrameTests {
     @Test
     fun `shorter frame clears old text and removed rows`() {
         val screen = Screen()
-        screen.apply(buildTerminalFrame(terminal, listOf("long old line", "old second row", "old third row")))
-        screen.apply(buildTerminalFrame(terminal, listOf("new")))
+        val surface = surface(screen)
+        surface.renderWorld(listOf("long old line", "old second row", "old third row"))
+        surface.renderWorld(listOf("new"))
         assertEquals(listOf("new"), screen.lines())
     }
 
     @Test
     fun `empty frame clears all prior content and resets cursor`() {
         val screen = Screen()
-        screen.apply(buildTerminalFrame(terminal, listOf("old", "other")))
-        screen.apply(buildTerminalFrame(terminal, emptyList()))
+        val surface = surface(screen)
+        surface.renderWorld(listOf("old", "other"))
+        surface.renderWorld(emptyList())
         assertEquals(emptyList(), screen.lines())
         assertEquals(0 to 0, screen.cursor())
     }
@@ -28,11 +31,19 @@ class TerminalFrameTests {
     @Test
     fun `replacement erases wrapped rows and command output`() {
         val screen = Screen(width = 8)
-        screen.apply(buildTerminalFrame(terminal, listOf("long line wraps across rows")))
+        val surface = surface(screen, width = 8)
+        surface.renderWorld(listOf("long line wraps across rows"))
         screen.apply("command output\nother output")
-        screen.apply(buildTerminalFrame(terminal, listOf("next")))
+        surface.renderWorld(listOf("next"))
         assertEquals(listOf("next"), screen.lines())
     }
+
+    private fun surface(screen: Screen, width: Int = 40) = TerminalSurface(
+        terminal,
+        { Size(width, 10) },
+        screen::apply,
+        { false }
+    )
 
     /** Small screen model interprets cursor positioning, erase operations, newlines and wrapping. */
     private class Screen(private val width: Int = 40) {

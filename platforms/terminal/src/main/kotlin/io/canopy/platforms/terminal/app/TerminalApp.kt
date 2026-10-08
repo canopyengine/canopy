@@ -4,24 +4,59 @@ import java.util.concurrent.atomic.AtomicBoolean
 import com.github.ajalt.mordant.input.KeyboardEvent
 import com.github.ajalt.mordant.input.coroutines.receiveEventsFlow
 import com.github.ajalt.mordant.input.isCtrlC
+import com.github.ajalt.mordant.rendering.Size
 import com.github.ajalt.mordant.terminal.Terminal
+import io.canopy.adapters.logback.LogbackLogging
 import io.canopy.adapters.mordant.input.MordantInputManager
 import io.canopy.engine.app.App
 import io.canopy.engine.app.AppConfig
 import io.canopy.engine.commands.CommandPromptHost
 import io.canopy.engine.core.managers.SceneManager
+import io.canopy.engine.core.managers.manager
 import io.canopy.engine.input.InputSystem
 import io.canopy.engine.logging.EngineLogs
+import io.canopy.engine.ui.UiManager
 import io.canopy.platforms.terminal.data.assets.TerminalAssetsManager
 import io.canopy.tooling.utils.UnstableApi
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.takeWhile
 
 /** Application hosted by the terminal runtime, with queued keyboard input and a synchronous frame loop. */
-class TerminalApp internal constructor() : App<AppConfig>() {
+class TerminalApp internal constructor(
+    private val terminal: Terminal = Terminal(interactive = true),
+    private val output: (String) -> Unit = { terminal.rawPrint(it) },
+    private val viewport: () -> Size = { terminal.updateSize() },
+) : App<AppConfig>() {
 
     private val log = EngineLogs.app
-    private val terminal = Terminal(interactive = true)
+    private var notifiedViewport: Pair<Int, Int>? = null
+
+    /**
+     * Maximum bottom-panel height in terminal rows, including its editor row; defaults to 8.
+     * Must be positive. Clamped to leave a world row when the viewport has at least two rows.
+     * Together with [commandPanelHeightFraction], changes take effect on the next lifecycle-thread frame;
+     * ignored in line mode.
+     */
+    var commandPanelRows: Int = 8
+        set(value) {
+            require(value > 0) { "commandPanelRows must be positive" }
+            field = value
+        }
+
+    /**
+     * Fraction of terminal height allocated to the open command panel, defaulting to one third.
+     * Must be finite and in `(0, 1]`. Rounded up to whole rows, capped by [commandPanelRows], and clamped
+     * to keep the editor visible and leave a world row whenever the viewport has at least two rows.
+     * Raw terminal resizing is observed each lifecycle-thread frame, including while gameplay is paused.
+     * Resizing preserves command focus, draft and transcript. Ignored in line mode.
+     */
+    var commandPanelHeightFraction: Double = 1.0 / 3.0
+        set(value) {
+            require(value.isFinite() && value > 0.0 && value <= 1.0) {
+                "commandPanelHeightFraction must be finite and in (0, 1]"
+            }
+            field = value
+        }
 
     private val inputManager = MordantInputManager()
     private val assetsManager = TerminalAssetsManager()
@@ -30,10 +65,16 @@ class TerminalApp internal constructor() : App<AppConfig>() {
     private var lineInputMode = false
 
     private val lineInput = TerminalLineInputBridge(inputManager)
+    private val surface = TerminalSurface(
+        terminal,
+        viewport,
+        output,
+        { lineInputMode }
+    )
     private val commandPresentation = TerminalCommandPresentation(
         lineMode = { lineInputMode },
-        output = { terminal.rawPrint(it) },
-        restoreFrame = {}
+        output = output,
+        ui = TerminalCommandUi(terminal, viewport, surface, { commandPanelRows }, { commandPanelHeightFraction })
     )
     private val commandHost = CommandPromptHost(this, commandPresentation)
 
@@ -41,14 +82,38 @@ class TerminalApp internal constructor() : App<AppConfig>() {
     private val appScope = CoroutineScope(Dispatchers.Default + SupervisorJob())
 
     /**
-     * Replaces the interactive screen with one frame, including when [lines] is empty.
-     * Rendering is suspended while command presentation or line input owns the terminal.
+     * Submits a copied world frame on the lifecycle thread. In raw mode, the open command panel overlays the
+     * bottom rows while world updates remain visible above it. Closing restores the latest copied world.
+     * Rows and text cells are clipped to the viewport; the final column is reserved to prevent scrolling.
+     * SGR styling is preserved; cursor and other control input is sanitized.
+     * Line input suppresses screen output so it cannot overwrite the blocking editor.
      */
     fun renderFrame(lines: List<String>) {
-        if (!lineInputMode && !commandPresentation.isVisible) {
-            terminal.rawPrint(buildTerminalFrame(terminal, lines))
-        }
+        surface.renderWorld(lines)
     }
+
+    override fun defaultLoggingPolicy() = LogbackLogging()
+
+    /** Native host boundary: forward geometry before entering frame dispatch, never from a manager callback. */
+    internal fun updateTerminalFrame(delta: Float) {
+        val size = if (lineInputMode) {
+            null
+        } else {
+            viewport().let {
+                Size(it.width.coerceAtLeast(0), it.height.coerceAtLeast(0))
+            }
+        }
+        if (size != null && (size.width to size.height) != notifiedViewport) {
+            engineLoop.resize(size.width, size.height)
+            // Retry unchanged geometry if a resize listener failed.
+            notifiedViewport = size.width to size.height
+        }
+        val processedLine = lineInput.processEvents()
+        engineLoop.update(delta)
+        processedLine?.complete(Unit)
+    }
+
+    internal fun prepareLineInputPresentation() = lineInput.preparePresentation { lineInputMode = true }
 
     override fun defaultConfig(): AppConfig = AppConfig(
         title = "Terminal Canopy App"
@@ -57,12 +122,17 @@ class TerminalApp internal constructor() : App<AppConfig>() {
     override fun provideManagers() = listOf(
         inputManager,
         assetsManager,
-        commandHost
+        commandHost,
+        surface
     )
 
     @OptIn(UnstableApi::class)
     override fun SceneManager.configureSceneManager() {
         addSystem(InputSystem())
+    }
+
+    override fun afterEnter() {
+        manager<UiManager>().backend = TerminalUiBackend(terminal, surface::renderUi)
     }
 
     override fun beforeExit() {
@@ -107,7 +177,7 @@ class TerminalApp internal constructor() : App<AppConfig>() {
             } catch (t: Throwable) {
                 log.info { "Raw terminal input unavailable; switching to line input: ${t.message}" }
                 try {
-                    lineInput.preparePresentation { lineInputMode = true }.await()
+                    prepareLineInputPresentation().await()
                     while (true) {
                         if (!running.get()) break
                         val line = withContext(Dispatchers.IO) { readLine() } ?: break
@@ -136,12 +206,8 @@ class TerminalApp internal constructor() : App<AppConfig>() {
 
                 val delta = deltaNanos / 1_000_000_000f
 
-                // Process input FIRST (drains queue → updates action states)
-                val processedLine = lineInput.processEvents()
-
-                // Process frame
-                engineLoop.update(delta)
-                processedLine?.complete(Unit)
+                // Notify geometry, then drain input and process the frame before acknowledging a submitted line.
+                updateTerminalFrame(delta)
 
                 // Frame limiting
                 val elapsed = System.nanoTime() - now
@@ -155,6 +221,12 @@ class TerminalApp internal constructor() : App<AppConfig>() {
             }
 
             // 🔹 Shutdown
+        } catch (_: InterruptedException) {
+            // Interrupted frame-limiting sleep is a graceful stop. Callback failures remain retained.
+            Thread.currentThread().interrupt()
+        } catch (error: Throwable) {
+            engineLoop.reportFailure(error)
+            throw error
         } finally {
             inputJob.cancel()
             appScope.cancel()
@@ -166,22 +238,3 @@ class TerminalApp internal constructor() : App<AppConfig>() {
 
 /** Constructs and configures an application without launching it. */
 fun terminalApp(builder: TerminalApp.() -> Unit = {}): TerminalApp = TerminalApp().apply(builder)
-
-/** Full-screen replacement also erases rows occupied by wrapped output in the previous frame. */
-internal fun buildTerminalFrame(terminal: Terminal, lines: List<String>): String = buildString {
-    append(
-        terminal.cursor.getMoves {
-            clearScreen()
-            setPosition(0, 0)
-        }
-    )
-    lines.forEachIndexed { index, line ->
-        append(
-            terminal.cursor.getMoves {
-                setPosition(0, index)
-                clearLine()
-            }
-        )
-        append(line).append('\n')
-    }
-}

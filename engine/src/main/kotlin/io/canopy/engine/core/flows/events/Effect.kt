@@ -44,8 +44,7 @@ class Effect(block: () -> Unit) {
 
     private var action: (() -> Unit)? = block
 
-    private var dependencies: Set<Signal<*>> = emptySet()
-    private val disconnectHandlers: MutableMap<Signal<*>, EventDisconnectHandler> = mutableMapOf()
+    private val subscriptions = DependencySubscriptions()
 
     @Volatile private var disposed = false
     private var running = false
@@ -77,9 +76,7 @@ class Effect(block: () -> Unit) {
         action = null
         cancelOwnership?.invoke()
         cancelOwnership = null
-        disconnectHandlers.values.forEach { it.disconnect() }
-        disconnectHandlers.clear()
-        dependencies = emptySet()
+        subscriptions.clear()
     }
 
     // -------------------------------------------------------------------------
@@ -109,19 +106,7 @@ class Effect(block: () -> Unit) {
 
     private fun updateDependencies(newDeps: Set<Signal<*>>) {
         if (disposed) return
-        val added = newDeps - dependencies
-        val removed = dependencies - newDeps
-
-        for (dep in removed) {
-            disconnectHandlers.remove(dep)?.disconnect()
-        }
-        for (dep in added) {
-            val handler = NodeLifetime.withOwner(null) {
-                dep connect { _ -> if (!disposed) run() }
-            }
-            disconnectHandlers[dep] = handler
-        }
-        dependencies = newDeps
+        subscriptions.reconcile(newDeps) { if (!disposed) run() }
     }
 }
 

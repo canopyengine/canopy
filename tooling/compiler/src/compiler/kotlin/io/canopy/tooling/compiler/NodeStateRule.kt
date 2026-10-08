@@ -10,7 +10,8 @@ import org.jetbrains.kotlin.ir.visitors.acceptChildrenVoid
 
 /**
  * Mandatory storage and capture checks for direct and indirect custom Node subclasses.
- * Only final engine-managed delegates may retain instance storage; companion state is exempt.
+ * Automatic properties have already become engine slots; only approved delegates retain instance storage.
+ * Companion state is exempt.
  * This rule validates declarations without rewriting code, while runtime validation protects precompiled classes.
  */
 class NodeStateRule : CanopyCompilerRule {
@@ -61,12 +62,28 @@ class NodeStateRule : CanopyCompilerRule {
             }
         }
         // Capture fields appear during later JVM lowering; inspect outer value reads before they are synthesized.
-        val functions = declaration.declarations.filterIsInstance<IrSimpleFunction>() +
-            declaration.declarations.filterIsInstance<IrProperty>().flatMap {
-                listOfNotNull(it.getter, it.setter)
+        val bodies = declaration.declarations.flatMap { member ->
+            when (member) {
+                is IrFunction -> listOfNotNull(member.body)
+                is IrAnonymousInitializer -> listOf(member.body)
+                is IrProperty -> listOfNotNull(
+                    member.backingField?.initializer,
+                    member.getter?.body,
+                    member.setter?.body
+                )
+                else -> emptyList()
+            }.map { body ->
+                Triple(
+                    member,
+                    body,
+                    member is IrConstructor ||
+                        member is IrAnonymousInitializer ||
+                        (member is IrProperty && body === member.backingField?.initializer)
+                )
             }
-        functions.forEach { function ->
-            function.body?.acceptChildrenVoid(object : IrVisitorVoid() {
+        }
+        bodies.forEach { (member, body, initializing) ->
+            body.acceptChildrenVoid(object : IrVisitorVoid() {
                 override fun visitElement(element: IrElement) {
                     element.acceptChildrenVoid(this)
                 }
@@ -81,11 +98,14 @@ class NodeStateRule : CanopyCompilerRule {
                         }
                         container = container.parent
                     }
-                    if (!belongsToNode) {
+                    val constructorCapture = !initializing &&
+                        value.parent is IrConstructor &&
+                        (value as? IrValueParameter)?.kind == IrParameterKind.Regular
+                    if (!belongsToNode || constructorCapture) {
                         context.report(
                             id,
-                            function,
-                            "${declaration.name}.${function.name} captures '${value.name}'; " +
+                            member,
+                            "${declaration.name} captures '${value.name}'; " +
                                 "pass it explicitly and store it using 'by nodeProperty(...)'"
                         )
                     }

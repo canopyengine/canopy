@@ -1,5 +1,6 @@
 package io.canopy.platforms.terminal.app
 
+import io.canopy.engine.commands.CommandPrompt
 import io.canopy.engine.commands.CommandPromptPresentation
 import io.canopy.engine.commands.CommandPromptSnapshot
 
@@ -7,8 +8,10 @@ import io.canopy.engine.commands.CommandPromptSnapshot
 internal class TerminalCommandPresentation(
     private val lineMode: () -> Boolean,
     private val output: (String) -> Unit,
-    private val restoreFrame: () -> Unit,
+    private val ui: TerminalCommandUi,
 ) : CommandPromptPresentation {
+    override fun bind(owner: CommandPrompt?) = ui.bind(owner)
+
     override val isLineInput: Boolean get() = lineMode()
     private var previousLines = emptyList<String>()
     private var previousDraft: String? = null
@@ -28,30 +31,36 @@ internal class TerminalCommandPresentation(
             prefix != previousPrefix ||
             previousLineMode != isLineInput ||
             outputSequence != snapshot.outputSequence
-        if (!changed) return
-        if (isLineInput) {
-            val added = if (!isVisible || !previousLineMode) {
-                lines.size
-            } else {
-                (snapshot.outputSequence - outputSequence).coerceIn(0, lines.size.toLong()).toInt()
-            }
-            val newLines = lines.takeLast(added)
-            if (newLines.isNotEmpty()) output(newLines.joinToString("\n", postfix = "\n", transform = ::safe))
-            // No cursor commands or frame output may overwrite the blocking readLine editor.
-            if (!isVisible || newLines.isNotEmpty() || prefix != previousPrefix) output(safe(prefix) + safe(draft))
-        } else {
-            output(
-                buildString {
-                    append("\u001b[2J\u001b[H")
-                    lines.forEach { append(safe(it)).append('\n') }
-                    append(safe(prefix)).append(safe(draft))
-                }
-            )
+        // The shared surface must see unchanged snapshots too: the viewport may have resized.
+        if (!isLineInput) {
+            ui.render(snapshot)
+            remember(snapshot)
+            return
         }
+        if (!changed) return
+        val added = if (!isVisible || !previousLineMode) {
+            lines.size
+        } else {
+            (snapshot.outputSequence - outputSequence).coerceIn(0, lines.size.toLong()).toInt()
+        }
+        val newLines = lines.takeLast(added)
+        if (newLines.isNotEmpty()) output(newLines.joinToString("\n", postfix = "\n", transform = ::safe))
+        // No cursor commands or frame output may overwrite the blocking readLine editor.
+        if (!isVisible ||
+            !previousLineMode ||
+            newLines.isNotEmpty() ||
+            prefix != previousPrefix
+        ) {
+            output(safe(prefix) + safe(draft))
+        }
+        remember(snapshot)
+    }
+
+    private fun remember(snapshot: CommandPromptSnapshot) {
         isVisible = true
-        previousLines = lines
-        previousDraft = draft
-        previousPrefix = prefix
+        previousLines = snapshot.transcript
+        previousDraft = snapshot.draft
+        previousPrefix = snapshot.prefix
         previousLineMode = isLineInput
         outputSequence = snapshot.outputSequence
     }
@@ -62,8 +71,8 @@ internal class TerminalCommandPresentation(
         previousLines = emptyList()
         previousDraft = null
         previousPrefix = null
-        output(if (isLineInput) "\n" else "\u001b[2J\u001b[H")
-        restoreFrame()
+        ui.hide()
+        if (isLineInput) output("\n")
     }
 
     private fun safe(text: String): String = text.filter { !it.isISOControl() || it == '\n' || it == '\t' }
