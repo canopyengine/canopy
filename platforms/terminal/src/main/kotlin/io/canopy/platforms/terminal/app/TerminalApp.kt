@@ -4,6 +4,7 @@ import java.util.concurrent.atomic.AtomicBoolean
 import com.github.ajalt.mordant.input.KeyboardEvent
 import com.github.ajalt.mordant.input.coroutines.receiveEventsFlow
 import com.github.ajalt.mordant.input.isCtrlC
+import com.github.ajalt.mordant.rendering.Size
 import com.github.ajalt.mordant.terminal.Terminal
 import io.canopy.adapters.mordant.input.MordantInputManager
 import io.canopy.engine.app.App
@@ -21,10 +22,21 @@ import kotlinx.coroutines.flow.takeWhile
 class TerminalApp internal constructor(
     private val terminal: Terminal = Terminal(interactive = true),
     private val output: (String) -> Unit = { terminal.rawPrint(it) },
+    private val viewport: () -> Size = { terminal.updateSize() },
 ) : App<AppConfig>() {
 
     private val log = EngineLogs.app
-    private var latestFrame: List<String>? = null
+
+    /**
+     * Maximum bottom-panel height in terminal rows, including its editor row; defaults to 8.
+     * Must be positive. Clamped to leave a world row when the viewport has at least two rows.
+     * Changes take effect on the next lifecycle-thread presentation or world render; ignored in line mode.
+     */
+    var commandPanelRows: Int = 8
+        set(value) {
+            require(value > 0) { "commandPanelRows must be positive" }
+            field = value
+        }
 
     private val inputManager = MordantInputManager()
     private val assetsManager = TerminalAssetsManager()
@@ -33,10 +45,12 @@ class TerminalApp internal constructor(
     private var lineInputMode = false
 
     private val lineInput = TerminalLineInputBridge(inputManager)
+    private val surface = TerminalSurface(terminal, viewport, output, { commandPanelRows }, { lineInputMode })
     private val commandPresentation = TerminalCommandPresentation(
         lineMode = { lineInputMode },
         output = output,
-        restoreFrame = ::restoreFrame
+        restoreFrame = surface::hidePrompt,
+        renderOverlay = surface::renderPrompt
     )
     private val commandHost = CommandPromptHost(this, commandPresentation)
 
@@ -44,19 +58,14 @@ class TerminalApp internal constructor(
     private val appScope = CoroutineScope(Dispatchers.Default + SupervisorJob())
 
     /**
-     * Replaces the interactive screen with one frame, including when [lines] is empty.
-     * Call on the lifecycle thread. Copies [lines] and retains the latest frame while command presentation or
-     * line input owns the terminal. Closing the raw-mode prompt restores that frame without a new world update.
+     * Submits a copied world frame on the lifecycle thread. In raw mode, the open command panel overlays the
+     * bottom rows while world updates remain visible above it. Closing restores the latest copied world.
+     * Rows and text cells are clipped to the viewport; the final column is reserved to prevent scrolling.
+     * SGR styling is preserved; cursor and other control input is sanitized.
+     * Line input suppresses screen output so it cannot overwrite the blocking editor.
      */
     fun renderFrame(lines: List<String>) {
-        latestFrame = lines.toList()
-        restoreFrame()
-    }
-
-    private fun restoreFrame() {
-        if (!lineInputMode && !commandPresentation.isVisible) {
-            latestFrame?.let { output(buildTerminalFrame(terminal, it)) }
-        }
+        surface.renderWorld(lines)
     }
 
     override fun defaultConfig(): AppConfig = AppConfig(
@@ -175,22 +184,3 @@ class TerminalApp internal constructor(
 
 /** Constructs and configures an application without launching it. */
 fun terminalApp(builder: TerminalApp.() -> Unit = {}): TerminalApp = TerminalApp().apply(builder)
-
-/** Full-screen replacement also erases rows occupied by wrapped output in the previous frame. */
-internal fun buildTerminalFrame(terminal: Terminal, lines: List<String>): String = buildString {
-    append(
-        terminal.cursor.getMoves {
-            clearScreen()
-            setPosition(0, 0)
-        }
-    )
-    lines.forEachIndexed { index, line ->
-        append(
-            terminal.cursor.getMoves {
-                setPosition(0, index)
-                clearLine()
-            }
-        )
-        append(line).append('\n')
-    }
-}

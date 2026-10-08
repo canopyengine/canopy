@@ -2,6 +2,9 @@ package io.canopy.platforms.terminal.app
 
 import kotlin.test.*
 import com.github.ajalt.mordant.input.KeyboardEvent
+import com.github.ajalt.mordant.rendering.AnsiLevel
+import com.github.ajalt.mordant.rendering.Size
+import com.github.ajalt.mordant.terminal.Terminal
 import io.canopy.adapters.mordant.input.MordantInputManager
 import io.canopy.engine.commands.CommandPrompt
 import io.canopy.engine.commands.CommandPromptHost
@@ -49,7 +52,7 @@ class TerminalCommandPromptTests {
         // Arrange
         val input = MordantInputManager()
         val scenes = SceneManager()
-        val presentation = TerminalCommandPresentation({ false }, {}, {})
+        val presentation = presentation({ false }, {}, {})
         val host = CommandPromptHost(terminalApp(), presentation)
         ManagersRegistry.withScope {
             register(input)
@@ -90,7 +93,7 @@ class TerminalCommandPromptTests {
     fun `raw presentation clears rows on redraw and hide while filtering control sequences`() {
         val output = mutableListOf<String>()
         var restored = 0
-        val presentation = TerminalCommandPresentation({ false }, output::add, { restored++ })
+        val presentation = presentation({ false }, output::add, { restored++ })
         val host = CommandPromptHost(terminalApp(), presentation)
         val scenes = SceneManager()
         ManagersRegistry.withScope {
@@ -105,7 +108,8 @@ class TerminalCommandPromptTests {
         prompt.submit("say")
         host.onUpdate(0f)
         assertTrue(output.last().startsWith("\u001b[2J\u001b[H"))
-        assertTrue(output.last().contains("first\nsecond[31m"))
+        assertTrue(output.last().contains("first"))
+        assertTrue(output.last().contains("second"))
         val count = output.size
         host.onUpdate(0f)
         assertEquals(count, output.size)
@@ -120,7 +124,7 @@ class TerminalCommandPromptTests {
     fun `line output cursor emits identical bounded replies exactly once and trimming emits nothing`() {
         val output = mutableListOf<String>()
         var restored = 0
-        val presentation = TerminalCommandPresentation({ true }, output::add, { restored++ })
+        val presentation = presentation({ true }, output::add, { restored++ })
         val host = CommandPromptHost(terminalApp(), presentation)
         val scenes = SceneManager()
         ManagersRegistry.withScope {
@@ -156,7 +160,7 @@ class TerminalCommandPromptTests {
     fun `switching from raw to line mode redraws retained transcript without cursor movement`() {
         var line = false
         val output = mutableListOf<String>()
-        val presentation = TerminalCommandPresentation({ line }, output::add, {})
+        val presentation = presentation({ line }, output::add, {})
         val host = CommandPromptHost(terminalApp(), presentation)
         val scenes = SceneManager()
         ManagersRegistry.withScope {
@@ -174,5 +178,17 @@ class TerminalCommandPromptTests {
         assertEquals(listOf("> say\nreply\n", "> "), output)
         host.onUpdate(0f)
         assertEquals(2, output.size)
+    }
+    private fun presentation(
+        line: () -> Boolean,
+        output: (String) -> Unit,
+        restored: () -> Unit,
+    ): TerminalCommandPresentation {
+        val terminal = Terminal(ansiLevel = AnsiLevel.TRUECOLOR, interactive = true)
+        val surface = TerminalSurface(terminal, { Size(40, 5) }, output, { 3 }, line)
+        return TerminalCommandPresentation(line, output, {
+            surface.hidePrompt()
+            if (!line()) restored()
+        }, surface::renderPrompt)
     }
 }
