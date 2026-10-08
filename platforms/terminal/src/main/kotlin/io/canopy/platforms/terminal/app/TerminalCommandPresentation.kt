@@ -63,7 +63,7 @@ internal class TerminalCommandPresentation(
         previousDraft = null
         previousPrefix = null
         output(if (isLineInput) "\n" else "\u001b[2J\u001b[H")
-        restoreFrame()
+        if (!isLineInput) restoreFrame()
     }
 
     private fun safe(text: String): String = text.filter { !it.isISOControl() || it == '\n' || it == '\t' }
