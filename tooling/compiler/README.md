@@ -1,6 +1,6 @@
 # Canopy compiler tooling
 
-`tooling/compiler` is one included-build module containing compiler checks and
+`tooling/compiler` is one included-build module containing compiler storage transformation, checks and
 Gradle integration. Both share the `io.canopy.tooling.compiler` package root;
 Gradle-specific classes live in its `gradle` subpackage.
 
@@ -37,10 +37,53 @@ compiler artifact to all main and test compilations. A library dependency cannot
 apply the plugin to another build. Use the Kotlin version pinned in the matching
 engine version catalog; incompatible versions fail configuration.
 
-Checks need no per-class annotation and apply to indirect Node subclasses.
-Unmanaged backing fields produce `CANOPY_UNMANAGED_NODE_STATE`; use engine-managed
-`by nodeProperty(...)` storage instead. Runtime validation remains necessary for
-Java, precompiled classes and builds missing this integration.
+Automatic storage needs no annotation and applies to direct and indirect custom
+`Node` subclasses. Ordinary instance properties become guarded slots in `NodeState`:
+
+```kotlin
+class Enemy(name: String, val initialHealth: Int = 100) : Node<Enemy>(name) {
+    var health = initialHealth
+    val status = signal(this, "idle")
+    val alive get() = health > 0
+}
+```
+
+The transformation removes physical backing fields and rewrites their reads and
+writes, including custom accessors using `field`. It preserves constructor
+parameters, initializer evaluation once in declaration order, init blocks,
+inheritance, generic values and source property visibility/mutability. Slots are
+qualified by their declaring class, so same-name base/subclass properties stay
+independent. Reads before a subclass initializer (for example, a superclass
+calling an overridden getter) receive the original JVM zero/null default.
+
+Existing `NodeProperty`, `NodeDependency`, `GlobalDependency` and `AssetDelegate`
+delegates are unchanged. Computed properties without backing fields and ordinary
+companion/object/static state remain unchanged. Instance fields of a custom singleton extending
+`Node` still undergo storage transformation/validation; static fields remain outside
+that instance-storage guarantee. Unsupported `lateinit`, value-class
+backing storage, field annotations (including `@JvmField`, `@Volatile` and
+`@Transient`), third-party delegates and captured outer references fail with
+source-located diagnostics. Use ordinary nullable state or explicit
+`by nodeProperty(...)` where applicable; inner nodes must become nested classes.
+
+Automatic storage changes storage only. It does not make ordinary values
+reactive, attach Signal/Effect ownership, or dispose arbitrary resources.
+Explicit owners, ownership scopes and existing lifetime registrations retain
+their meaning. Access uses the same lifecycle guards as `nodeProperty`: detachment
+preserves state; destruction invalidates access and clears engine-owned payload.
+Constructor failures retain the engine's existing cleanup contract; a compiler
+transformation does not automatically destroy partially constructed objects.
+The existing partial-state cleanup gap is tracked in [#205](https://github.com/canopyengine/canopy/issues/205).
+
+Physical-field reflection, Java field access and serializers that depend on
+backing fields must migrate to property accessors or explicit serialization.
+Recompile consumers when adopting this feature; a previous public field ABI is
+not preserved. Getter/setter names and Kotlin source property types remain the
+same. Untransformed Java/precompiled consumers still undergo strict runtime
+field validation: there is no trusted marker or validation exemption. Missing
+runtime helper ABI fails compilation with `CANOPY_NODE_PROPERTY_ABI`; upgrade
+compiler and engine together. Incompatible Kotlin versions still fail plugin
+configuration.
 
 ## Verification
 
@@ -61,7 +104,7 @@ Implement `CanopyCompilerRule` with a public no-argument constructor and a uniqu
 `id`. `check` receives every source declaration, including classes, properties and functions. Use
 a declaration type check and `context.isNodeSubclass` when a rule applies only to custom nodes, and
 `context.report(id, declaration, explanation)` for source-located errors. The shared
-context caches Node symbol resolution for the compilation. Rules validate IR;
+context caches Node symbol resolution for the compilation. The internal storage transformation runs before mandatory checks and providers. Rules validate IR;
 they must not transform it or retain compilation objects between builds.
 
 ```kotlin
@@ -90,5 +133,6 @@ There is no application opt-out from the cleanup storage guarantee.
 
 The SPI depends on Kotlin compiler IR APIs and must be built against the pinned
 Kotlin version; it is not a version-independent binary API. Consumer compilation
-fixtures verify unsafe declarations, managed storage and an independent provider
+fixtures verify supported automatic properties, unsupported declarations, payload-free JVM classes,
+managed delegates and an independent provider
 running alongside the mandatory rule.

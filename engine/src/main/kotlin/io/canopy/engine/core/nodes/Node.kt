@@ -14,9 +14,10 @@ import kotlinx.coroutines.Job
  * Typed, guarded node facade preserving class-named Kotlin construction and concrete DSL receivers.
  * Engine-owned state is referenced weakly. Destruction invalidates state access, releases owned work,
  * and leaves only immutable identity/diagnostics in retained facades. All operations are game-thread confined.
- * Custom stored values must use [nodeProperty]; runtime queries use the concrete
+ * The matching Canopy compiler stores ordinary custom properties in engine state.
+ * Without the plugin, custom stored values must use [nodeProperty]; runtime queries use the concrete
  * [io.canopy.engine.core.queries.NodeDependency] or [io.canopy.engine.core.queries.GlobalDependency] delegates.
- * The Canopy compiler plugin rejects unmanaged fields.
+ * Unsupported unmanaged fields are rejected by the compiler and runtime validation.
  */
 @CanopyDsl
 @Suppress("UNCHECKED_CAST")
@@ -88,11 +89,14 @@ abstract class Node<N : Node<N>> protected constructor(
     }
 
     @JvmSynthetic
-    internal fun propertyState(property: kotlin.reflect.KProperty<*>, writing: Boolean): NodeState {
+    internal fun propertyState(property: kotlin.reflect.KProperty<*>, writing: Boolean): NodeState =
+        propertyState(property.name, writing)
+
+    private fun propertyState(propertyName: String, writing: Boolean): NodeState {
         val current = reference.get()
         if (current == null || lifecycle == "Destroying" || lifecycle == "Destroyed") {
             val operation = if (writing) "write" else "read"
-            throw NodeDestroyedException(diagnostic("$operation property '${property.name}'"))
+            throw NodeDestroyedException(diagnostic("$operation property '$propertyName'"))
         }
         return current
     }
@@ -201,6 +205,30 @@ abstract class Node<N : Node<N>> protected constructor(
         val key = Any()
         state("create property").properties[key] = initial
         return NodeProperty.create(key)
+    }
+
+    /**
+     * Compiler storage ABI: reads a declaring-class-qualified slot without retaining its value on the facade.
+     * [default] reproduces JVM zero/null reads before the property's initializer has run; a stored null is distinct
+     * from an absent slot. Generated access uses the same destruction guards as [nodeProperty].
+     * This hook is for the matching compiler plugin, not manual application storage. Access is game-thread confined.
+     */
+    @JvmSynthetic
+    @Suppress("UNCHECKED_CAST")
+    protected fun <T> compilerPropertyGet(key: String, default: T): T {
+        val properties = propertyState(key, false).properties
+        return if (properties.containsKey(key)) properties[key] as T else default
+    }
+
+    /**
+     * Compiler storage ABI: initializes or updates a declaring-class-qualified slot in engine-owned state.
+     * Values acquire no additional resource ownership or reactive behavior. Generated access uses the same
+     * destruction guards as [nodeProperty]. This hook is for the matching compiler plugin;
+     * access is game-thread confined.
+     */
+    @JvmSynthetic
+    protected fun <T> compilerPropertySet(key: String, value: T) {
+        propertyState(key, true).properties[key] = value
     }
 
     /** Generic internal ownership boundary; facade delegates retain only immutable lookup metadata. */
