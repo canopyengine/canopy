@@ -46,7 +46,7 @@ subprojects {
         pluginManager.apply("io.canopy.compiler")
 
         // Use the shared Jar base type so both Java and Kotlin source archives keep this metadata.
-        if (project.path in setOf(":engine", ":adapters:libgdx", ":adapters:mordant")) {
+        if (project.path in setOf(":engine", ":adapters:libgdx", ":adapters:mordant", ":adapters:logback")) {
             tasks.withType<Jar>().configureEach {
                 manifest {
                     attributes(

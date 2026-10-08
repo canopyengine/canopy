@@ -3,6 +3,8 @@ package io.canopy.engine.app
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
+import kotlin.test.assertNull
+import kotlin.test.assertSame
 
 class EngineLoopTests {
 
@@ -95,5 +97,58 @@ class EngineLoopTests {
         loop.enter()
         loop.exit()
         assertFailsWith<IllegalStateException> { loop.update(1f / 60f) }
+    }
+
+    @Test
+    fun `physics resize and frame callback failures are retained`() {
+        listOf("frame", "physics", "resize").forEach { stage ->
+            val error = IllegalStateException(stage)
+            val loop = EngineLoop(
+                {},
+                { if (stage == "frame") throw error },
+                { if (stage == "physics") throw error },
+                { _, _ -> if (stage == "resize") throw error },
+                {}
+            )
+            loop.enter()
+            assertSame(
+                error,
+                assertFailsWith<IllegalStateException> {
+                    when (stage) {
+                        "frame" -> loop.update(0f)
+                        "physics" -> loop.physicsUpdate(0f)
+                        else -> loop.resize(80, 24)
+                    }
+                }
+            )
+            assertSame(error, loop.failure)
+            loop.exit()
+        }
+    }
+
+    @Test
+    fun `precondition misuse does not poison lifecycle completion`() {
+        val loop = EngineLoop({}, {}, {}, { _, _ -> }, {})
+        assertFailsWith<IllegalStateException> { loop.update(0f) }
+        loop.enter()
+        assertFailsWith<IllegalArgumentException> { loop.update(-1f) }
+        assertFailsWith<IllegalArgumentException> { loop.physicsUpdate(Float.NaN) }
+        assertNull(loop.failure)
+        loop.exit()
+    }
+
+    @Test
+    fun `host reporting preserves first error and ignores duplicate and late reports`() {
+        val first = IllegalStateException("first")
+        val second = IllegalArgumentException("second")
+        val loop = EngineLoop({}, {}, {}, { _, _ -> }, {})
+        loop.enter()
+        loop.reportFailure(first)
+        loop.reportFailure(first)
+        loop.reportFailure(second)
+        loop.exit(first)
+        loop.reportFailure(IllegalStateException("late"))
+        assertSame(first, loop.failure)
+        assertEquals(listOf(second), first.suppressed.toList())
     }
 }

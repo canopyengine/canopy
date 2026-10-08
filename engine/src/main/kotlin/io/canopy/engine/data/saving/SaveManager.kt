@@ -4,6 +4,8 @@ import kotlin.reflect.KClass
 import io.canopy.engine.core.managers.Manager
 import io.canopy.engine.data.assets.WritableAssetEntry
 import io.canopy.engine.data.parsers.Json
+import kotlinx.serialization.json.Json as SerializationJson
+import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
 
 /**
@@ -27,22 +29,54 @@ class SaveManager(vararg destinations: Pair<String, (slot: Int) -> WritableAsset
     private val destinationsMap: MutableMap<String, (slot: Int) -> WritableAssetEntry> =
         mutableMapOf(*destinations)
 
-    /**
-     * destination -> (module -> lastLoadedData)
-     */
-    private val dataRegistry: MutableMap<String, MutableMap<SaveModule<*>, Any>> =
-        mutableMapOf()
+    /** A module retains its payload type through decoding, callbacks and encoding. Null means not loaded. */
+    private class ModuleEntry<T : Any>(val module: SaveModule<T>) {
+        var loaded: T? = null
+            private set
 
-    internal fun registerSaveModule(destination: String, module: SaveModule<*>) {
-        val registry = dataRegistry.getOrPut(destination) { mutableMapOf() }
-        registry[module] = Unit
+        fun reset() {
+            loaded = null
+        }
+
+        fun load(element: JsonElement) {
+            val decoded = SerializationJson.decodeFromJsonElement(module.serializer, element)
+            loaded = decoded
+            module.onLoad(decoded)
+        }
+
+        fun save(): Pair<String, JsonElement> {
+            val data = module.onSave()
+            return module.id to SerializationJson.encodeToJsonElement(module.serializer, data)
+        }
     }
 
+    private val dataRegistry = mutableMapOf<String, MutableMap<SaveModule<*>, ModuleEntry<*>>>()
+
+    internal fun <T : Any> registerSaveModule(destination: String, module: SaveModule<T>) {
+        val registry = dataRegistry.getOrPut(destination) { mutableMapOf() }
+        val existing = registry[module]
+        if (existing == null) {
+            val id = module.id
+            require(
+                registry.keys.none {
+                    it.id == id
+                }
+            ) { "Save module ID '$id' is already registered for destination $destination" }
+            registry[module] = ModuleEntry(module)
+        } else {
+            existing.reset()
+        }
+    }
+
+    /** Removes registered modules and their cached loaded data for this destination. */
     fun cleanModules(destination: String) {
         dataRegistry[destination] = mutableMapOf()
     }
 
-    @Suppress("UNCHECKED_CAST")
+    /**
+     * Loads registered modules in registration order. Missing files and module IDs retain prior loaded data.
+     * Decoded data is cached before onLoad; a decoding or callback failure stops subsequent modules.
+     */
     fun load(destination: String, slot: Int) {
         val registry = dataRegistry[destination] ?: return
         if (registry.isEmpty()) return
@@ -52,26 +86,23 @@ class SaveManager(vararg destinations: Pair<String, (slot: Int) -> WritableAsset
 
         val jsonData = Json.rawParseFile(file)
 
-        registry.keys.forEach { module ->
-            val jsonElement = jsonData[module.id] ?: return@forEach
-
-            val typedModule = module as SaveModule<Any>
-            val decodedData = Json.decodeJsonElement(typedModule.serializer, jsonElement)
-
-            registry[typedModule] = decodedData
-            typedModule.onLoad(decodedData)
+        registry.values.forEach { entry ->
+            val jsonElement = jsonData[entry.module.id] ?: return@forEach
+            entry.load(jsonElement)
         }
     }
 
-    @Suppress("UNCHECKED_CAST")
+    /** Returns the first loaded payload of exactly [clazz]; uninitialized modules do not provide data, including Unit. */
     fun <T : Any> loadData(destination: String, clazz: KClass<T>): T {
         val registry =
             dataRegistry[destination] ?: error("No registry for destination $destination")
 
-        return registry.values.firstOrNull { it::class == clazz } as? T
+        val loaded = registry.values.firstNotNullOfOrNull { entry -> entry.loaded?.takeIf { it::class == clazz } }
             ?: error("No loaded data of type ${clazz.simpleName} for destination $destination")
+        return clazz.javaObjectType.cast(loaded)
     }
 
+    /** Encodes modules in registration order; writes the destination only after all callbacks and encoding succeed. */
     fun save(destination: String, slot: Int) {
         val registry = dataRegistry[destination] ?: return
         if (registry.isEmpty()) return
@@ -79,15 +110,9 @@ class SaveManager(vararg destinations: Pair<String, (slot: Int) -> WritableAsset
         val file = destinationsMap[destination]?.invoke(slot) ?: return
 
         val jsonMap = buildMap {
-            registry.keys.forEach { module ->
-                @Suppress("UNCHECKED_CAST")
-                val typedModule = module as SaveModule<Any>
-
-                val data = typedModule.onSave()
-                put(
-                    typedModule.id,
-                    Json.encodeJsonElement(typedModule.serializer, data)
-                )
+            registry.values.forEach { entry ->
+                val (id, data) = entry.save()
+                put(id, data)
             }
         }
 

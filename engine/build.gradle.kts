@@ -12,7 +12,6 @@ dependencies {
 
     // Kotlin
     api(libs.coroutines.core)
-    api(libs.kotlin.reflect)
 
     // Serialization
     api(libs.kotlinx.serialization.core)
@@ -21,12 +20,10 @@ dependencies {
 
     // Logging
     api(libs.slf4j.api)
-    implementation(libs.logback.classic)
-    implementation(libs.logback.logstash)
 
     // Testing
+    // Exercise the core SLF4J bridge against the existing host provider without exporting it at runtime.
+    testImplementation(libs.logback.classic)
     testImplementation(libs.kotlin.test.junit5)
     testImplementation(libs.junit.jupiter)
-    testImplementation(libs.assertj.core)
-    testImplementation(libs.mockk)
 }

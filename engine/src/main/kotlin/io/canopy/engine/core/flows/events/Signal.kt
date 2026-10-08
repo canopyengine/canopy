@@ -53,24 +53,30 @@ class Signal<T>(initial: T, owner: Node<*>? = NodeLifetime.current()) {
 
     private val valueChanged = event<T>(owner = null)
 
-    /**
-     * Kotlin Flow of value changes (replay = 1).
-     *
-     * New collectors immediately receive the current value.
-     */
-    private val changes = MutableSharedFlow<T>(
-        replay = 1,
-        extraBufferCapacity = 64,
-        onBufferOverflow = BufferOverflow.DROP_OLDEST
-    )
+    private val flowLock = Any()
+    private var changes: MutableSharedFlow<T>? = null
+
+    // Replay follows successful callback completion, independently of the current value, including null.
+    private var flowReplay: Any? = initial
 
     /** Read-only stream; owned collectors must register their job for cancellation. */
-    val flow get() = changes.asSharedFlow().also { lifetime.check("read signal flow") }
+    val flow get() = synchronized(flowLock) {
+        lifetime.check("read signal flow")
+        val stream = changes ?: MutableSharedFlow<T>(
+            replay = 1,
+            extraBufferCapacity = 64,
+            onBufferOverflow = BufferOverflow.DROP_OLDEST
+        ).also {
+            @Suppress("UNCHECKED_CAST")
+            it.tryEmit(flowReplay as T)
+            changes = it
+        }
+        stream.asSharedFlow()
+    }
 
     @Volatile private var value: Any? = initial
 
     init {
-        changes.tryEmit(initial)
         lifetime.bind(::dispose)
     }
 
@@ -107,7 +113,12 @@ class Signal<T>(initial: T, owner: Node<*>? = NodeLifetime.current()) {
         if (old != new) {
             value = new
             valueChanged.emit(new)
-            if (!lifetime.disposed) changes.tryEmit(new)
+            synchronized(flowLock) {
+                if (!lifetime.disposed) {
+                    flowReplay = new
+                    changes?.tryEmit(new)
+                }
+            }
         }
     }
 
@@ -133,11 +144,13 @@ class Signal<T>(initial: T, owner: Node<*>? = NodeLifetime.current()) {
     }
 
     /** Permanently releases listeners, cached value and replay contents. Shared signals require explicit disposal. */
-    fun dispose() {
-        if (!lifetime.dispose()) return
+    fun dispose() = synchronized(flowLock) {
+        if (!lifetime.dispose()) return@synchronized
         valueChanged.dispose()
         value = null
-        changes.resetReplayCache()
+        flowReplay = null
+        changes?.resetReplayCache()
+        changes = null
     }
 }
 
