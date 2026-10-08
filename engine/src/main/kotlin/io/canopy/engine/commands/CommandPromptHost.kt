@@ -90,16 +90,12 @@ class CommandPromptHost(val app: App<*>, private val presentation: CommandPrompt
         }
         if (!presentation.isLineInput &&
             event is KeyInputEvent &&
-            prompt.toggleKey?.let { event.key.name.removeSuffix("_KEY") == it.name.removeSuffix("_KEY") } == true &&
+            event.key == prompt.toggleKey &&
             event.state == InputState.JustPressed
         ) {
             prompt.toggle()
             capturedThisFrame = true
-            toggleText = when {
-                event.key == Key.SPACE -> " "
-                event.key.name.removeSuffix("_KEY").length == 1 -> event.key.name.removeSuffix("_KEY")
-                else -> null
-            }
+            toggleText = if (event.ctrl || event.alt) null else event.key.toggleCharacter()
             event.consume()
             return true
         }
@@ -155,5 +151,26 @@ class CommandPromptHost(val app: App<*>, private val presentation: CommandPrompt
         if (!presented) return
         presented = false
         presentation.hide()
+    }
+}
+
+// Only suppress the printable event paired with a toggle, never an unrelated later editor event.
+private fun Key.toggleCharacter(): String? = when {
+    name.length == 1 -> name
+    name.startsWith("NUM_") && name.length == 5 -> name.takeLast(1)
+    else -> when (this) {
+        Key.SPACE -> " "
+        Key.GRAVE -> "`"
+        Key.MINUS -> "-"
+        Key.EQUALS -> "="
+        Key.LEFT_BRACKET -> "["
+        Key.RIGHT_BRACKET -> "]"
+        Key.BACKSLASH -> "\\"
+        Key.SEMICOLON -> ";"
+        Key.APOSTROPHE -> "'"
+        Key.COMMA -> ","
+        Key.PERIOD -> "."
+        Key.SLASH -> "/"
+        else -> null
     }
 }

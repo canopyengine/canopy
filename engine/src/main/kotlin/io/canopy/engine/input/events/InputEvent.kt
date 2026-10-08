@@ -56,7 +56,7 @@ data class KeyInputEvent(
 
     fun isCtrlCombo(target: Key): Boolean = key == target && ctrl && isPressedEvent()
 
-    fun isCtrlC(): Boolean = isCtrlCombo(Key.C_KEY)
+    fun isCtrlC(): Boolean = isCtrlCombo(Key.C)
 }
 
 /** Held, released, transition, or non-button state. Transition states describe the latest input update. */
