@@ -8,6 +8,7 @@ plugins {
 dependencies {
     // Canopy core only
     implementation(projects.engine)
+    api(projects.adapters.logback)
     implementation(projects.tooling.utils)
 
     // Terminal adapter ONLY (no headless, no libgdx)
@@ -17,7 +18,6 @@ dependencies {
     testImplementation(projects.tooling.devtools)
 
     // Logging
-    runtimeOnly(libs.logback.classic)
 
     // Test dependencies
     testImplementation(libs.kotlin.test.junit5)

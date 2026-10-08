@@ -40,6 +40,7 @@ include(":engine")
 // Adapters
 include(
     ":adapters:libgdx",
+    ":adapters:logback",
     ":adapters:mordant"
 )
 

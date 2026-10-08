@@ -26,6 +26,7 @@ dependencies {
     implementation(libs.ktx.app)
     implementation(libs.ktx.assets)
 
+
     // Testing
     testImplementation(libs.kotlin.test.junit5)
     testImplementation(libs.junit.jupiter)
