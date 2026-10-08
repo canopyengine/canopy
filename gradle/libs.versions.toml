@@ -20,8 +20,6 @@ ktx = "1.13.1-rc1"
 # Testing
 coroutines = "1.11.0"
 junit = "5.14.4"
-assertj = "3.27.7"
-mockk = "1.14.11"
 mockitoKotlin = "5.4.0"
 
 # Logging
@@ -74,8 +72,6 @@ ktx-graphics = { module = "io.github.libktx:ktx-graphics", version.ref = "ktx" }
 
 # Testing
 junit-jupiter = { module = "org.junit.jupiter:junit-jupiter", version.ref = "junit" }
-assertj-core = { module = "org.assertj:assertj-core", version.ref = "assertj" }
-mockk = { module = "io.mockk:mockk", version.ref = "mockk" }
 mockito-kotlin = { module = "org.mockito.kotlin:mockito-kotlin", version.ref = "mockitoKotlin" }
 kotlin-test-junit5 = { module = "org.jetbrains.kotlin:kotlin-test-junit5", version.ref = "kotlin" }
 

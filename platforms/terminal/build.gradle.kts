@@ -22,8 +22,6 @@ dependencies {
     // Test dependencies
     testImplementation(libs.kotlin.test.junit5)
     testImplementation(libs.junit.jupiter)
-    testImplementation(libs.assertj.core)
-    testImplementation(libs.mockk)
 }
 
 tasks.register<JavaExec>("commandPromptSmoke") {
