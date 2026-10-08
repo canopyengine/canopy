@@ -95,10 +95,12 @@ abstract class InputManager : Manager {
     }
 
     /**
-     * Recomputes all mapped action states for the current frame.
+     * Recomputes action states using the mappings captured at the start of this pass.
+     * Mapping changes made while polling are used by the next pass; mapping methods still
+     * reset or remove cached action states immediately as documented.
      */
     fun updateActions() {
-        mapper.actions.forEach { (action, binds) ->
+        mapper.forEachAction { action, binds ->
             val rawPressed = !blocksGameplay && binds.any(::pollPressed)
             val previousState = _actionStates[action] ?: InputState.Released
 
