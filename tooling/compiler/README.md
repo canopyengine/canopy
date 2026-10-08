@@ -85,6 +85,25 @@ runtime helper ABI fails compilation with `CANOPY_NODE_PROPERTY_ABI`; upgrade
 compiler and engine together. Incompatible Kotlin versions still fail plugin
 configuration.
 
+## Failed node construction
+
+An internal transform runs after mandatory validation and protects source constructor
+calls to direct and indirect Node subclasses with the matching inline runtime
+`nodeConstruction` boundary. Arguments evaluate once, in their original order, inside
+that boundary; delegating superclass constructor calls are not wrapped. This applies
+to consumer main and test compilations without annotations.
+
+Constructor references receive `CANOPY_NODE_CONSTRUCTION_REFERENCE`: use an explicit
+lambda calling the constructor instead. Suspending argument evaluation receives
+`CANOPY_NODE_CONSTRUCTION_SUSPEND`; evaluate suspend values before construction.
+Stored suspend callbacks are accepted because creating them does not suspend.
+Construction boundaries are synchronous and confined to the calling thread. Java,
+reflection, precompiled factories, first access to a named Node singleton and builds
+without the plugin need an explicit
+runtime boundary around their factory invocation. The compiler and runtime must both
+provide this version's inline boundary; incompatible runtimes produce
+`CANOPY_NODE_CONSTRUCTION_ABI` at actual node constructor calls.
+
 ## Verification
 
 From the engine root run:

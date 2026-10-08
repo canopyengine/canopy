@@ -30,6 +30,7 @@ class CanopyCompilerRegistrar : CompilerPluginRegistrar() {
         require(rules.map { it.id }.distinct().size == rules.size) { "Canopy compiler rule IDs must be unique" }
         IrGenerationExtension.registerExtension(NodePropertyTransform(messages))
         IrGenerationExtension.registerExtension(CanopyRuleRunner(messages, rules))
+        IrGenerationExtension.registerExtension(NodeConstructionTransform(messages))
     }
 }
 

@@ -17,6 +17,13 @@ class CanopyCompilerTests {
     private val api = """
         package io.canopy.engine.core.nodes
         import kotlin.reflect.KProperty
+        var constructionDepth = 0
+        var boundaries = 0
+        inline fun <T> nodeConstruction(factory: () -> T): T {
+            boundaries++
+            constructionDepth++
+            try { return factory() } finally { constructionDepth-- }
+        }
         abstract class Node<N : Node<N>> {
             private val slots = mutableMapOf<String, Any?>()
             @Suppress("UNCHECKED_CAST")
@@ -329,6 +336,150 @@ class CanopyCompilerTests {
         }
     }
 
+    @Test
+    fun `constructor calls protect arguments nested local generic and anonymous nodes`() {
+        compileConsumer(
+            """
+            val events = mutableListOf<String>()
+            open class Base<N : Base<N>>(value: Int) : Node<N>() {
+                init { check(constructionDepth > 0); events += "base${'$'}value" }
+            }
+            class Leaf(value: Int = 3) : Base<Leaf>(value) {
+                init { events += "leaf" }
+            }
+            class Generic<T>(value: T) : Node<Generic<T>>() {
+                init { check(constructionDepth > 0) }
+            }
+            fun argument(): Int { check(constructionDepth > 0); events += "argument"; Leaf(2); return 1 }
+            fun verify(): String {
+                Leaf(argument())
+                Leaf()
+                Generic("value")
+                class Local : Node<Local>() { init { check(constructionDepth > 0) } }
+                Local()
+                val anonymous = object : Node<Nothing>() { init { check(constructionDepth > 0) } }
+                check(constructionDepth == 0)
+                check(boundaries == 6) { "boundaries=${'$'}boundaries" }
+                return events.joinToString(",")
+            }
+            """.trimIndent(),
+            execute = { loader ->
+                assertEquals(
+                    "argument,base2,leaf,base1,leaf,base3,leaf",
+                    loader.loadClass("GameKt").getMethod("verify").invoke(null)
+                )
+            }
+        ) { code, output -> assertEquals(ExitCode.OK, code, output) }
+    }
+
+    @Test
+    fun `constructor failures leave boundary and preserve original throwable`() {
+        compileConsumer(
+            """
+            val failure = IllegalStateException("initialization")
+            class Broken : Node<Broken>() { init { check(constructionDepth > 0); throw failure } }
+            inline fun make(factory: () -> Broken) = factory()
+            fun verify(): Boolean {
+                try { make { Broken() } } catch (caught: Throwable) {
+                    return caught === failure && constructionDepth == 0 && boundaries == 1
+                }
+                return false
+            }
+            """.trimIndent(),
+            execute = { loader -> assertEquals(true, loader.loadClass("GameKt").getMethod("verify").invoke(null)) }
+        ) { code, output -> assertEquals(ExitCode.OK, code, output) }
+    }
+
+    @Test
+    fun `constructor references report an actionable source diagnostic`() {
+        compileConsumer("class Leaf : Node<Leaf>(); val factory = ::Leaf") { code, output ->
+            assertEquals(ExitCode.COMPILATION_ERROR, code, output)
+            assertTrue("CANOPY_NODE_CONSTRUCTION_REFERENCE" in output, output)
+            assertTrue(Regex("Game\\.kt:[0-9]+:[0-9]+").containsMatchIn(output), output)
+        }
+    }
+
+    @Test
+    fun `inline construction preserves nonlocal returns from arguments`() {
+        compileConsumer(
+            """
+            class Leaf(value: Int) : Node<Leaf>()
+            fun early(): Int { Leaf(if (true) return 7 else 1); return 0 }
+            fun verify(): Boolean = early() == 7 && constructionDepth == 0 && boundaries == 1
+            """.trimIndent(),
+            execute = { loader -> assertEquals(true, loader.loadClass("GameKt").getMethod("verify").invoke(null)) }
+        ) { code, output -> assertEquals(ExitCode.OK, code, output) }
+    }
+
+    @Test
+    fun `suspend argument evaluation is rejected while stored suspend callbacks compile`() {
+        listOf(
+            "suspend fun make() = Leaf(fetch())",
+            "suspend fun make() = Leaf(run { fetch() })",
+            "suspend fun make() = nodeConstruction { fetch(); Leaf(1) }",
+            "suspend fun make() = nodeConstruction { val value = fetch(); Leaf(value) }"
+        ).forEach { declaration ->
+            compileConsumer(
+                """
+                class Leaf(value: Int) : Node<Leaf>()
+                suspend fun fetch(): Int = 1
+                $declaration
+                """.trimIndent()
+            ) { code, output ->
+                assertEquals(ExitCode.COMPILATION_ERROR, code, output)
+                assertTrue("CANOPY_NODE_CONSTRUCTION_SUSPEND" in output, output)
+                assertTrue(Regex("Game\\.kt:[0-9]+:[0-9]+").containsMatchIn(output), output)
+            }
+        }
+        compileConsumer(
+            """
+            class Leaf(callback: suspend () -> Int) : Node<Leaf>()
+            suspend fun fetch(): Int = 1
+            fun make() = Leaf { fetch() }
+            inline fun stash(noinline callback: suspend () -> Int): Int = 1
+            class NumberLeaf(value: Int) : Node<NumberLeaf>()
+            fun stored() = NumberLeaf(stash { fetch() })
+            """.trimIndent()
+        ) { code, output -> assertEquals(ExitCode.OK, code, output) }
+    }
+
+    @Test
+    fun `anonymous object super arguments cannot suspend during construction`() {
+        compileConsumer(
+            """
+            open class Base<N : Base<N>>(value: Int) : Node<N>()
+            suspend fun fetch(): Int = 1
+            suspend fun make() = object : Base<Nothing>(fetch()) {}
+            """.trimIndent()
+        ) { code, output ->
+            assertEquals(ExitCode.COMPILATION_ERROR, code, output)
+            assertTrue("suspension functions can only be called within coroutine body" in output.lowercase(), output)
+        }
+    }
+
+    @Test
+    fun `construction ABI diagnostics require matching inline helper only at node calls`() {
+        compileConsumer(
+            "class Leaf : Node<Leaf>(); fun make() = Leaf()",
+            apiSource = api.replace("inline fun <T> nodeConstruction", "fun <T> nodeConstruction")
+        ) {
+                code,
+                output,
+            ->
+            assertEquals(ExitCode.COMPILATION_ERROR, code, output)
+            assertTrue("CANOPY_NODE_CONSTRUCTION_ABI" in output, output)
+        }
+        compileConsumer(
+            "class Leaf : Node<Leaf>()",
+            apiSource = api.replace("inline fun <T> nodeConstruction", "fun <T> nodeConstruction")
+        ) {
+                code,
+                output,
+            ->
+            assertEquals(ExitCode.OK, code, output)
+        }
+    }
+
     private fun withRuleJar(provider: Class<out CanopyCompilerRule>, block: (java.io.File) -> Unit) {
         // Package a separate provider without changing registrar or traversal source.
         val jar = Files.createTempFile("canopy-extra-rule", ".jar").toFile()
@@ -360,6 +511,7 @@ class CanopyCompilerTests {
         additionalPlugin: String? = null,
         apiSource: String = api,
         inspectOutput: ((java.io.File, java.io.File) -> Unit)? = null,
+        execute: ((ClassLoader) -> Unit)? = null,
         assertResult: (ExitCode, String) -> Unit,
     ) {
         val directory = Files.createTempDirectory("canopy-consumer-compiler").toFile()
@@ -450,6 +602,12 @@ class CanopyCompilerTests {
             }
             assertResult(code, bytes.toString())
             if (code == ExitCode.OK) inspectOutput?.invoke(directory.resolve("game"), apiOutput)
+            if (code == ExitCode.OK && execute != null) {
+                java.net.URLClassLoader(
+                    arrayOf(apiOutput.toURI().toURL(), directory.resolve("game").toURI().toURL()),
+                    javaClass.classLoader
+                ).use(execute)
+            }
         } finally {
             directory.deleteRecursively()
         }

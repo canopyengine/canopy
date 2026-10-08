@@ -555,23 +555,48 @@ class SceneManager(val physicsStep: Float = 1f / 60f, private val block: SceneMa
                 deletionQueue.clear()
                 for (root in pending) {
                     if (root.isFreed) continue
-                    val nodes = mutableListOf<Node<*>>()
-                    traverseNodes(root) { nodes += it }
-                    nodes.forEach { it.beginDestruction() }
-                    failures.attempt { root.exitInternal() }
-                    failures.attempt { unregisterSubtree(root) }
-                    root.detachFromParent()
-                    if (_currScene === root) {
-                        _currScene = null
-                        failures.attempt { onSceneReplaced.emit(null) }
-                    }
-                    for (node in nodes.asReversed()) failures.attempt { node.finishDestruction() }
+                    destroySubtree(root, failures)
                 }
             }
         } finally {
             flushing = false
         }
         failures.rethrow()
+    }
+
+    /** Immediately destroys only construction participants, independently of frame/deletion boundaries. */
+    @JvmSynthetic
+    internal fun rollbackConstruction(node: Node<*>, participants: Set<Node<*>>) {
+        if (node.isFreed) return
+        val failures = CleanupFailures()
+        // Existing nodes moved beneath failed constructors remain reusable rather than becoming owned rollback work.
+        val descendants = mutableListOf<Node<*>>()
+        traverseNodes(node) { descendants += it }
+        for (child in descendants) {
+            if (child !in participants && child.parent in participants) {
+                failures.attempt { child.parent?.removeChild(child) }
+            }
+        }
+        destroySubtree(node, failures)
+        failures.rethrow()
+    }
+
+    private fun destroySubtree(root: Node<*>, failures: CleanupFailures) {
+        if (root.isFreed) return
+        val nodes = mutableListOf<Node<*>>()
+        traverseNodes(root) { nodes += it }
+        nodes.forEach {
+            deletionQueue.remove(it)
+            it.beginDestruction()
+        }
+        failures.attempt { root.exitInternal() }
+        failures.attempt { unregisterSubtree(root) }
+        failures.attempt { root.detachFromParent() }
+        if (_currScene === root) {
+            _currScene = null
+            failures.attempt { onSceneReplaced.emit(null) }
+        }
+        for (node in nodes.asReversed()) failures.attempt { node.finishDestruction() }
     }
 
     /**
