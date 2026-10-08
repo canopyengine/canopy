@@ -362,7 +362,7 @@ class SceneManager(val physicsStep: Float = 1f / 60f, private val block: SceneMa
                 system in initializedSystems &&
                 systemsByClass[system::class] === system &&
                 flatTree[node.path] === node &&
-                system.requiredTypes.any { it.isInstance(node) }
+                system.acceptsNode(node)
             ) {
                 system.register(node)
             }
