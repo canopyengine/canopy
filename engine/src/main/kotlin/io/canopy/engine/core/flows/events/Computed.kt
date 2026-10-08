@@ -12,8 +12,7 @@ class Computed<T>(block: () -> T, owner: Node<*>? = NodeLifetime.current()) {
     private val lifetime = SourceLifetime(owner)
     private var action: (() -> T)? = block
     private var output: Signal<T>? = null
-    private var dependencies = emptySet<Signal<*>>()
-    private val handlers = mutableMapOf<Signal<*>, EventDisconnectHandler>()
+    private val subscriptions = DependencySubscriptions()
     private var recomputing = false
     private var cancelRemoval: (() -> Unit)? = null
     init {
@@ -61,11 +60,7 @@ class Computed<T>(block: () -> T, owner: Node<*>? = NodeLifetime.current()) {
     }
     private fun updateDependencies(next: Set<Signal<*>>) {
         if (lifetime.disposed) return
-        for (dep in dependencies - next) handlers.remove(dep)?.disconnect()
-        for (dep in next - dependencies) {
-            handlers[dep] = NodeLifetime.withOwner(null) { dep.connect { _ -> recompute() } }
-        }
-        dependencies = next
+        subscriptions.reconcile(next, ::recompute)
     }
 
     /** Idempotently releases dependency callbacks, cached output and captured calculation closure. */
@@ -73,9 +68,7 @@ class Computed<T>(block: () -> T, owner: Node<*>? = NodeLifetime.current()) {
         if (!lifetime.dispose()) return
         cancelRemoval?.invoke()
         cancelRemoval = null
-        handlers.values.forEach { it.disconnect() }
-        handlers.clear()
-        dependencies = emptySet()
+        subscriptions.clear()
         output?.dispose()
         output = null
         action = null
