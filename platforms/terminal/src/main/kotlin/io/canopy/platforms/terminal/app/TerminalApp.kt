@@ -26,15 +26,32 @@ class TerminalApp internal constructor(
 ) : App<AppConfig>() {
 
     private val log = EngineLogs.app
+    private var notifiedViewport: Pair<Int, Int>? = null
 
     /**
      * Maximum bottom-panel height in terminal rows, including its editor row; defaults to 8.
      * Must be positive. Clamped to leave a world row when the viewport has at least two rows.
-     * Changes take effect on the next lifecycle-thread presentation or world render; ignored in line mode.
+     * Together with [commandPanelHeightFraction], changes take effect on the next lifecycle-thread frame;
+     * ignored in line mode.
      */
     var commandPanelRows: Int = 8
         set(value) {
             require(value > 0) { "commandPanelRows must be positive" }
+            field = value
+        }
+
+    /**
+     * Fraction of terminal height allocated to the open command panel, defaulting to one third.
+     * Must be finite and in `(0, 1]`. Rounded up to whole rows, capped by [commandPanelRows], and clamped
+     * to keep the editor visible and leave a world row whenever the viewport has at least two rows.
+     * Raw terminal resizing is observed each lifecycle-thread frame, including while gameplay is paused.
+     * Resizing preserves command focus, draft and transcript. Ignored in line mode.
+     */
+    var commandPanelHeightFraction: Double = 1.0 / 3.0
+        set(value) {
+            require(value.isFinite() && value > 0.0 && value <= 1.0) {
+                "commandPanelHeightFraction must be finite and in (0, 1]"
+            }
             field = value
         }
 
@@ -45,7 +62,14 @@ class TerminalApp internal constructor(
     private var lineInputMode = false
 
     private val lineInput = TerminalLineInputBridge(inputManager)
-    private val surface = TerminalSurface(terminal, viewport, output, { commandPanelRows }, { lineInputMode })
+    private val surface = TerminalSurface(
+        terminal,
+        viewport,
+        output,
+        { commandPanelRows },
+        { lineInputMode },
+        { commandPanelHeightFraction }
+    )
     private val commandPresentation = TerminalCommandPresentation(
         lineMode = { lineInputMode },
         output = output,
@@ -68,6 +92,27 @@ class TerminalApp internal constructor(
         surface.renderWorld(lines)
     }
 
+    /** Native host boundary: forward geometry before entering frame dispatch, never from a manager callback. */
+    internal fun updateTerminalFrame(delta: Float) {
+        val size = if (lineInputMode) {
+            null
+        } else {
+            viewport().let {
+                Size(it.width.coerceAtLeast(0), it.height.coerceAtLeast(0))
+            }
+        }
+        if (size != null && (size.width to size.height) != notifiedViewport) {
+            engineLoop.resize(size.width, size.height)
+            // Retry unchanged geometry if a resize listener failed.
+            notifiedViewport = size.width to size.height
+        }
+        val processedLine = lineInput.processEvents()
+        engineLoop.update(delta)
+        processedLine?.complete(Unit)
+    }
+
+    internal fun prepareLineInputPresentation() = lineInput.preparePresentation { lineInputMode = true }
+
     override fun defaultConfig(): AppConfig = AppConfig(
         title = "Terminal Canopy App"
     )
@@ -75,7 +120,8 @@ class TerminalApp internal constructor(
     override fun provideManagers() = listOf(
         inputManager,
         assetsManager,
-        commandHost
+        commandHost,
+        surface
     )
 
     @OptIn(UnstableApi::class)
@@ -125,7 +171,7 @@ class TerminalApp internal constructor(
             } catch (t: Throwable) {
                 log.info { "Raw terminal input unavailable; switching to line input: ${t.message}" }
                 try {
-                    lineInput.preparePresentation { lineInputMode = true }.await()
+                    prepareLineInputPresentation().await()
                     while (true) {
                         if (!running.get()) break
                         val line = withContext(Dispatchers.IO) { readLine() } ?: break
@@ -154,12 +200,8 @@ class TerminalApp internal constructor(
 
                 val delta = deltaNanos / 1_000_000_000f
 
-                // Process input FIRST (drains queue → updates action states)
-                val processedLine = lineInput.processEvents()
-
-                // Process frame
-                engineLoop.update(delta)
-                processedLine?.complete(Unit)
+                // Notify geometry, then drain input and process the frame before acknowledging a submitted line.
+                updateTerminalFrame(delta)
 
                 // Frame limiting
                 val elapsed = System.nanoTime() - now
