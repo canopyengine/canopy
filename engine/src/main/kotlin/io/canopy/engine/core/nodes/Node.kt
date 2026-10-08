@@ -616,7 +616,6 @@ abstract class Node<N : Node<N>> protected constructor(
     internal fun refreshPaths() {
         val s = payload()
         lastPath = s.parent?.let { "${it.internalPath()}/${s.name}" } ?: "/${s.name}"
-        s.owner.reindex(this)
         for (child in s.snapshot()) child.refreshPaths()
     }
 

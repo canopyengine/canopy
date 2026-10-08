@@ -18,6 +18,7 @@ import org.junit.jupiter.api.BeforeEach
 class SceneManagerContractTests {
     private lateinit var scenes: SceneManager
     private val calls = mutableListOf<String>()
+    private val independentRoots = mutableListOf<Node<*>>()
 
     private open class RecordingSystem(val calls: MutableList<String>, val label: String = "system") :
         TreeSystem(UpdatePhase.FramePre, 0, EmptyNode::class) {
@@ -38,7 +39,8 @@ class SceneManagerContractTests {
         }
 
         override fun onNodeRemoved(node: Node<*>) {
-            calls += "$label:remove:${node.name}"
+            val name = if (node.isValid) node.name else node.exitMetadata.name
+            calls += "$label:remove:$name"
             removed(node)
         }
 
@@ -68,6 +70,9 @@ class SceneManagerContractTests {
 
     @AfterEach
     fun cleanup() {
+        independentRoots.filter { it.isValid }.forEach { it.queueFree() }
+        scenes.onUpdate(0f)
+        independentRoots.clear()
         scenes.currScene = null
         ManagersRegistry.exit()
     }
@@ -76,6 +81,208 @@ class SceneManagerContractTests {
         EmptyNode("child")
         EmptyNode2D("unmatched")
     }.also { scenes.currScene = it }
+
+    @Test
+    fun `backfill keeps distinct identities with identical paths after one root is destroyed`() {
+        // Arrange
+        val first = EmptyNode("root") { EmptyNode("child") }.also {
+            it.buildTree()
+            independentRoots += it
+        }
+        val second = EmptyNode("root") { EmptyNode("child") }.also {
+            it.buildTree()
+            independentRoots += it
+        }
+        val firstChild = first.children.values.single()
+        val secondChild = second.children.values.single()
+        val system = RecordingSystem(calls)
+
+        // Act
+        scenes.addSystem(system)
+
+        // Assert
+        assertEquals(listOf(first, firstChild, second, secondChild), system.nodes)
+        assertEquals(4, scenes.indexedNodeCount)
+        first.queueFree()
+        scenes.onUpdate(0f)
+        assertEquals(listOf(second, secondChild), system.nodes)
+        assertEquals(2, scenes.indexedNodeCount)
+        scenes.removeSystem(RecordingSystem::class)
+        scenes.addSystem(system)
+        assertEquals(listOf(second, secondChild), system.nodes)
+    }
+
+    @Test
+    fun `rename and same tree reparent preserve registration order during late backfill`() {
+        // Arrange
+        val root = scene()
+        val child = root.children.values.first()
+        val destination = EmptyNode("destination").also { root.addChild(it) }
+
+        // Act
+        child.name = "renamed"
+        root.reparent(child, destination)
+        root.name = "renamed-root"
+        val system = RecordingSystem(calls)
+        scenes.addSystem(system)
+
+        // Assert
+        assertEquals(listOf(root, child, destination), system.nodes)
+        assertEquals("/renamed-root/destination/renamed", child.path)
+        assertEquals(4, scenes.indexedNodeCount)
+    }
+
+    @Test
+    fun `backfill skips destroyed pending nodes and continues with surviving identities`() {
+        // Arrange
+        val root = EmptyNode("root") {
+            EmptyNode("doomed")
+            EmptyNode("survivor")
+        }.also {
+            it.buildTree()
+            independentRoots += it
+        }
+        val doomed = root.children.values.first()
+        val survivor = root.children.values.last()
+        val system = RecordingSystem(calls).also {
+            it.added = { node ->
+                if (node === root) {
+                    doomed.queueFree()
+                    scenes.onUpdate(0f)
+                }
+            }
+        }
+
+        // Act
+        scenes.addSystem(system)
+
+        // Assert
+        assertFalse(doomed.isValid)
+        assertEquals(listOf(root, survivor), system.nodes)
+        assertEquals(2, scenes.indexedNodeCount)
+    }
+
+    @Test
+    fun `reattachment during backfill appends membership without duplicate system matches`() {
+        // Arrange
+        val root = EmptyNode("root") {
+            EmptyNode("moved")
+            EmptyNode("sibling")
+        }.also {
+            it.buildTree()
+            independentRoots += it
+        }
+        val moved = root.children.getValue("moved")
+        val sibling = root.children.getValue("sibling")
+        val system = RecordingSystem(calls).also {
+            it.added = { node ->
+                if (node === root) {
+                    root.removeChild(moved)
+                    root.addChild(moved)
+                }
+            }
+        }
+
+        // Act
+        scenes.addSystem(system)
+        val later = OtherSystem(calls)
+        scenes.addSystem(later)
+
+        // Assert
+        assertEquals(listOf(root, moved, sibling), system.nodes)
+        assertEquals(listOf(root, sibling, moved), later.nodes)
+        assertEquals(3, scenes.indexedNodeCount)
+    }
+
+    @Test
+    fun `late backfill excludes exited retained nodes until they reenter`() {
+        // Arrange
+        val root = EmptyNode("root").also {
+            it.buildTree()
+            independentRoots += it
+        }
+        root.nodeExitTree()
+        val system = RecordingSystem(calls)
+
+        // Act
+        scenes.addSystem(system)
+
+        // Assert
+        assertEquals(emptyList(), system.nodes)
+        assertEquals(1, scenes.indexedNodeCount)
+        root.buildTree()
+        assertEquals(listOf(root), system.nodes)
+    }
+
+    @Test
+    fun `subtree registration skips destroyed pending children and continues to survivors`() {
+        // Arrange
+        val root = EmptyNode("root") {
+            EmptyNode("doomed")
+            EmptyNode("survivor")
+        }.also { scenes.currScene = it }
+        val doomed = root.children.getValue("doomed")
+        val survivor = root.children.getValue("survivor")
+        scenes.unregisterSubtree(root)
+        val system = RecordingSystem(calls).also {
+            it.registered = { scenes.registerSubtree(root) }
+            it.added = { node ->
+                if (node === root) {
+                    doomed.queueFree()
+                    scenes.onUpdate(0f)
+                }
+            }
+        }
+
+        // Act
+        scenes.addSystem(system)
+
+        // Assert
+        assertFalse(doomed.isValid)
+        assertEquals(listOf(root, survivor), system.nodes)
+        assertEquals(2, scenes.indexedNodeCount)
+        assertEquals(2, scenes.retainedStateCount)
+        assertEquals(
+            listOf("system:register", "system:add:root", "system:process:root", "system:add:survivor"),
+            calls
+        )
+    }
+
+    @Test
+    fun `subtree registration skips later systems after an earlier hook destroys the current node`() {
+        // Arrange
+        val root = EmptyNode("root") {
+            EmptyNode("doomed")
+            EmptyNode("survivor")
+        }.also { scenes.currScene = it }
+        val doomed = root.children.getValue("doomed")
+        val survivor = root.children.getValue("survivor")
+        val first = RecordingSystem(calls)
+        val later = OtherSystem(calls)
+        scenes.addSystem(first)
+        scenes.addSystem(later)
+        scenes.unregisterSubtree(root)
+        first.added = { node ->
+            if (node === doomed) {
+                doomed.queueFree()
+                scenes.onUpdate(0f)
+            }
+        }
+        calls.clear()
+
+        // Act
+        scenes.registerSubtree(root)
+
+        // Assert
+        assertFalse(doomed.isValid)
+        assertEquals(listOf(root, survivor), first.nodes)
+        assertEquals(listOf(root, survivor), later.nodes)
+        assertEquals(2, scenes.indexedNodeCount)
+        assertEquals(2, scenes.retainedStateCount)
+        assertFalse("other:add:doomed" in calls)
+        assertEquals(1, calls.count { it == "system:add:survivor" })
+        assertEquals(1, calls.count { it == "other:add:survivor" })
+    }
 
     @Test
     fun `resize updates the signal before notifying listeners and repeats events only`() {
