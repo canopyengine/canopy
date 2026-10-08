@@ -1,10 +1,12 @@
 package io.canopy.platforms.terminal.app
 
+import kotlin.math.ceil
 import com.github.ajalt.mordant.rendering.Size
 import com.github.ajalt.mordant.rendering.Whitespace
 import com.github.ajalt.mordant.terminal.Terminal
 import com.github.ajalt.mordant.widgets.Text
 import io.canopy.engine.commands.CommandPromptSnapshot
+import io.canopy.engine.core.managers.Manager
 
 /** One lifecycle-thread owner composes world and command rows onto the same bounded terminal surface. */
 internal class TerminalSurface(
@@ -13,10 +15,24 @@ internal class TerminalSurface(
     private val output: (String) -> Unit,
     private val panelRows: () -> Int,
     private val lineMode: () -> Boolean,
-) {
+    private val panelFraction: () -> Double = { 1.0 },
+) : Manager {
     private var world: List<String>? = null
     private var prompt: CommandPromptSnapshot? = null
     private var previous: String? = null
+    private var previousSize: Pair<Int, Int>? = null
+
+    override fun onUpdate(delta: Float) {
+        // Manager dispatch continues while paused and even when no prompt or world callback renders.
+        if (world != null || prompt != null || previous != null) redraw()
+    }
+
+    override fun onExit() {
+        world = null
+        prompt = null
+        previous = null
+        previousSize = null
+    }
 
     fun renderWorld(lines: List<String>) {
         world = lines.toList()
@@ -85,7 +101,12 @@ internal class TerminalSurface(
         val width = size.width.coerceAtLeast(1) - 1
         val snapshot = prompt
         val rows = MutableList(height) { "" }
-        val panelHeight = if (snapshot == null) 0 else panelRows().coerceIn(1, maxOf(1, height - 1))
+        val panelHeight = if (snapshot == null) {
+            0
+        } else {
+            ceil(height * panelFraction()).toInt()
+                .coerceIn(1, minOf(panelRows(), maxOf(1, height - 1)))
+        }
         val worldHeight = (height - panelHeight).coerceAtLeast(0)
         world.orEmpty().flatMap { it.split('\n') }.take(worldHeight).forEachIndexed { index, row -> rows[index] = row }
         if (snapshot != null && height > 0) {
@@ -112,10 +133,11 @@ internal class TerminalSurface(
                 append("\u001b[").append(height).append(';').append(editorWidth + 1).append('H')
             }
         }
-        if (frame == previous) return
+        if (frame == previous && (size.width to size.height) == previousSize) return
         output(frame)
         // Only successful output is cached, so the same snapshot retries after a failed write.
         previous = frame
+        previousSize = size.width to size.height
     }
 }
 
