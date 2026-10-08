@@ -25,10 +25,10 @@ class CommandPromptSnapshot internal constructor(
 
 /** Platform integration for command presentation; snapshots retain copied text without node ownership. */
 interface CommandPromptPresentation {
-    /** Whether submitted lines replace raw key editing and use exact `:console` to toggle visibility. */
+    /** Whether submitted lines replace raw key editing and use exact `:console` to toggle editor activation. */
     val isLineInput: Boolean get() = false
 
-    /** Presents a copied snapshot of a visible prompt on the lifecycle thread. */
+    /** Presents a copied snapshot of an open prompt on the lifecycle thread. */
     fun render(snapshot: CommandPromptSnapshot)
 
     /** Releases presentation ownership and restores the platform's normal output. Idempotent. */
@@ -48,7 +48,7 @@ class CommandPromptHost(val app: App<*>, private val presentation: CommandPrompt
     private var toggleText: String? = null
 
     internal val blocksGameplay: Boolean
-        get() = capturedThisFrame || current()?.isVisible == true
+        get() = capturedThisFrame || current()?.isOpen == true
 
     internal fun attach(prompt: CommandPrompt) {
         check(entered == null || entered === prompt) { "Only one command prompt may enter a host" }
@@ -63,7 +63,7 @@ class CommandPromptHost(val app: App<*>, private val presentation: CommandPrompt
     }
 
     internal fun beginInputFrame() {
-        capturedThisFrame = current()?.isVisible == true
+        capturedThisFrame = current()?.isOpen == true
         toggleText = null
     }
 
@@ -99,8 +99,8 @@ class CommandPromptHost(val app: App<*>, private val presentation: CommandPrompt
             event.consume()
             return true
         }
-        // Once a frame captured focus, later events cannot leak after a handler hides the editor.
-        if (!prompt.isVisible) {
+        // Once a frame captured focus, later events cannot leak after a handler closes the editor.
+        if (!prompt.isOpen) {
             if (!capturedThisFrame) return false
             event.consume()
             return true
@@ -123,7 +123,7 @@ class CommandPromptHost(val app: App<*>, private val presentation: CommandPrompt
 
     override fun onUpdate(delta: Float) {
         val prompt = current()
-        if (prompt?.isVisible == true) {
+        if (prompt?.isOpen == true) {
             presented = true
             presentation.render(prompt.presentationSnapshot())
         } else {

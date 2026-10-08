@@ -12,8 +12,8 @@ import kotlinx.coroutines.CancellationException
 
 /**
  * Declarative terminal command editor. State, definitions, handlers and reusable instances are engine-owned.
- * Starts hidden; showing captures terminal input without pausing gameplay. Draft and bounded transcript survive
- * hiding and reusable tree exit. The terminal host supplies focus and presentation automatically.
+ * Starts closed; opening captures terminal input without pausing gameplay. Draft and bounded transcript survive
+ * closing and reusable tree exit. The terminal host supplies focus and presentation automatically.
  * All configuration, parsing and execution run synchronously on the serialized lifecycle thread.
  * Permanent destruction invalidates gameplay reads and releases command/presentation ownership.
  */
@@ -36,18 +36,21 @@ class CommandPrompt(name: String, block: CommandPrompt.() -> Unit = {}) : Node<C
             runtime.prefix = value
         }
 
-    /** Raw-mode visibility shortcut; defaults to Escape, or null to disable. Line mode uses exact `:console`. */
+    /** Raw-mode activation shortcut; defaults to Escape, or null to disable. Line mode uses exact `:console`. */
     var toggleKey: Key?
         get() = runtime.toggleKey
         set(value) {
             runtime.toggleKey = value
         }
 
-    /** Guarded visibility; hiding preserves draft, definitions and transcript while releasing input focus. */
-    var isVisible: Boolean
-        get() = runtime.visible
+    /**
+     * Guarded activation state; closing preserves draft, definitions and transcript while releasing input focus.
+     * Independent of node rendering visibility; access belongs to the serialized lifecycle thread.
+     */
+    var isOpen: Boolean
+        get() = runtime.open
         set(value) {
-            runtime.visible = value
+            runtime.open = value
         }
 
     /** Maximum retained transcript entries, positive and defaulting to 100. Changes immediately trim old entries. */
@@ -66,19 +69,19 @@ class CommandPrompt(name: String, block: CommandPrompt.() -> Unit = {}) : Node<C
     /** Independent read-only snapshot of retained command echoes, replies, help and errors. */
     val transcript: List<String> get() = Collections.unmodifiableList(runtime.transcript.toList())
 
-    /** Shows the prompt without changing gameplay pause state. */
-    fun show() {
-        isVisible = true
+    /** Opens the command editor and captures input without changing gameplay pause state. Idempotent. */
+    fun open() {
+        isOpen = true
     }
 
-    /** Hides presentation and releases focus without clearing the draft or output. */
-    fun hide() {
-        isVisible = false
+    /** Closes the command editor and releases focus without clearing the draft or output. Idempotent. */
+    fun close() {
+        isOpen = false
     }
 
-    /** Toggles visibility without reconstructing command instances. */
+    /** Toggles command editor activation without reconstructing command instances. */
     fun toggle() {
-        isVisible = !isVisible
+        isOpen = !isOpen
     }
 
     /** Registers an inline definition; argument factories append ordered required positional arguments. */
@@ -215,7 +218,7 @@ class CommandPrompt(name: String, block: CommandPrompt.() -> Unit = {}) : Node<C
         val host = ManagersRegistry.getManager(CommandPromptHost::class)
         val owned = runtime
         onRemoval {
-            owned.visible = false
+            owned.open = false
             owned.host = null
             host.detach(this)
         }
@@ -227,7 +230,7 @@ class CommandPrompt(name: String, block: CommandPrompt.() -> Unit = {}) : Node<C
 private class PromptState {
     var prefix = "> "
     var toggleKey: Key? = Key.ESCAPE
-    var visible = false
+    var open = false
     var limit = 100
     var draft = ""
     var host: CommandPromptHost? = null

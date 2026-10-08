@@ -82,6 +82,41 @@ class CommandPromptTests {
         CommandPrompt("Console", block).also { scenes.currScene = it }
 
     @Test
+    fun `activation controls preserve draft transcript and pause while guarding destroyed state`() {
+        // Arrange
+        val prompt = enter()
+        assertFalse(prompt.isOpen)
+        app.pause()
+        prompt.appendText("draft")
+        prompt.submit("help")
+        val output = prompt.transcript
+
+        // Act: repeated activation calls retain editor state and leave pause under application control.
+        prompt.open()
+        prompt.open()
+        assertTrue(prompt.isOpen)
+        prompt.close()
+        prompt.close()
+        assertFalse(prompt.isOpen)
+        prompt.toggle()
+        assertTrue(prompt.isOpen)
+        prompt.isOpen = false
+
+        // Assert
+        assertEquals("draft", prompt.draft)
+        assertEquals(output, prompt.transcript)
+        assertTrue(app.isPaused)
+        prompt.queueFree()
+        scenes.onUpdate(0f)
+        assertFalse(prompt.isValid)
+        assertFailsWith<CanopyException> { prompt.isOpen }
+        assertFailsWith<CanopyException> { prompt.isOpen = true }
+        assertFailsWith<CanopyException> { prompt.open() }
+        assertFailsWith<CanopyException> { prompt.close() }
+        assertFailsWith<CanopyException> { prompt.toggle() }
+    }
+
+    @Test
     fun `typed arguments bind only for validated execution and delegate forwards invoke`() {
         // Arrange
         lateinit var species: CommandArgument<String>
@@ -288,7 +323,7 @@ class CommandPromptTests {
         input.enqueue(TextInputEvent("pause"))
         input.enqueue(KeyInputEvent(Key.ENTER, state = InputState.JustPressed))
         input.processEvents()
-        assertTrue(prompt.isVisible)
+        assertTrue(prompt.isOpen)
         assertTrue(app.isPaused)
         input.enqueue(TextInputEvent("resume"))
         input.enqueue(KeyInputEvent(Key.ENTER, state = InputState.JustPressed))
@@ -298,17 +333,17 @@ class CommandPromptTests {
     }
 
     @Test
-    fun `focus suppresses mapping polling and later queue events after hide on enter`() {
-        val prompt = enter { command("hide") { execute { prompt.hide() } } }
+    fun `focus suppresses mapping polling and later queue events after close on enter`() {
+        val prompt = enter { command("close") { execute { prompt.close() } } }
         input.mapActions("move" to listOf(InputBind.W))
         input.pressed += InputBind.W
-        prompt.show()
-        input.enqueue(TextInputEvent("hide"))
+        prompt.open()
+        input.enqueue(TextInputEvent("close"))
         input.enqueue(KeyInputEvent(Key.ENTER, state = InputState.JustPressed))
         input.enqueue(KeyInputEvent(Key.W_KEY, state = InputState.JustPressed))
         input.enqueue(TextInputEvent("w"))
         input.processEvents()
-        assertFalse(prompt.isVisible)
+        assertFalse(prompt.isOpen)
         assertEquals("", prompt.draft)
         assertTrue(input.eventsThisFrame.isEmpty())
         assertTrue(input.actionStates.isEmpty())
@@ -326,7 +361,7 @@ class CommandPromptTests {
         input.enqueue(TextInputEvent("fox😀"))
         input.enqueue(KeyInputEvent(Key.BACKSPACE, state = InputState.JustPressed))
         input.processEvents()
-        assertTrue(prompt.isVisible)
+        assertTrue(prompt.isOpen)
         assertEquals("fox", prompt.draft)
     }
 
@@ -338,7 +373,7 @@ class CommandPromptTests {
         input.enqueue(TextInputEvent(":console"))
         input.enqueue(KeyInputEvent(Key.ENTER, state = InputState.JustPressed))
         input.processEvents()
-        assertTrue(prompt.isVisible)
+        assertTrue(prompt.isOpen)
         assertEquals(emptyList(), prompt.transcript)
         input.enqueue(TextInputEvent(":consolex"))
         input.enqueue(KeyInputEvent(Key.ENTER, state = InputState.JustPressed))
@@ -351,18 +386,18 @@ class CommandPromptTests {
     fun `reusable exit releases focus preserves draft and command instances and destroy guards reads`() {
         lateinit var command: CounterCommand
         val prompt = enter { command<CounterCommand> { command = template } }
-        prompt.show()
+        prompt.open()
         input.enqueue(TextInputEvent("draft"))
         input.processEvents()
         host.onUpdate(0f)
         prompt.nodeExitTree()
-        assertFalse(prompt.isVisible)
+        assertFalse(prompt.isOpen)
         assertEquals(1, presentation.hides)
         prompt.nodeEnterTree()
         assertEquals("draft", prompt.draft)
         prompt.submit("counter 1")
         assertEquals(1, command.count)
-        prompt.show()
+        prompt.open()
         host.onUpdate(0f)
         prompt.queueFree()
         scenes.onUpdate(0f)
@@ -383,7 +418,7 @@ class CommandPromptTests {
             transcriptLimit = 2
             command("say") { execute { reply("same") } }
         }
-        prompt.show()
+        prompt.open()
         prompt.submit("say")
         host.onUpdate(0f)
         val first = presentation.snapshots.last()
@@ -426,12 +461,12 @@ class CommandPromptTests {
         root.addChild(first)
         scenes.currScene = root
         assertFailsWith<CanopyException> { root.addChild(CommandPrompt("second")) }
-        first.show()
+        first.open()
         host.onUpdate(0f)
         first.onRemoval { error("cleanup failure") }
         assertFailsWith<CanopyException> { root.nodeExitTree() }
         assertEquals(1, presentation.hides)
-        assertFalse(first.isVisible)
+        assertFalse(first.isOpen)
         assertFalse(input.blocksGameplay)
     }
 
@@ -489,17 +524,17 @@ class CommandPromptTests {
             register(scenes)
         }
         val first = enter()
-        first.show()
+        first.open()
         assertFailsWith<IllegalStateException> { host.onUpdate(0f) }
         assertFailsWith<CanopyException> { first.nodeExitTree() }
         assertEquals(1, hides)
-        assertFalse(first.isVisible)
+        assertFalse(first.isOpen)
         failRender = false
         val second = CommandPrompt("next")
         scenes.currScene = second
-        second.show()
+        second.open()
         host.onUpdate(0f)
-        second.hide()
+        second.close()
         assertFailsWith<IllegalStateException> { host.onUpdate(0f) }
     }
 }
