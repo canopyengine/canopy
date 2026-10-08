@@ -31,8 +31,21 @@ abstract class Node<N : Node<N>> protected constructor(
 
     /** Immutable identity, never reused and available after destruction. */
     val nodeId: Long = identities.incrementAndGet()
+    private enum class Lifecycle(val diagnosticText: String) {
+        Detached("Detached"),
+        Active("Active"),
+        Destroying("Destroying"),
+        Destroyed("Destroyed"),
+    }
+
+    private enum class DispatchKind(val phase: String) {
+        Frame("frame"),
+        Physics("physics"),
+        Input("input"),
+    }
+
     private var lastPath = "/$name"
-    private var lifecycle = "Detached"
+    private var lifecycle = Lifecycle.Detached
     private var queued = false
     private var metadata = NodeExitMetadata(nodeId, name, lastPath, false)
     private val reference: WeakReference<NodeState>
@@ -54,16 +67,18 @@ abstract class Node<N : Node<N>> protected constructor(
             payload.builder = null
             owner.releaseState(nodeId)
             reference.clear()
-            lifecycle = "Destroyed"
+            lifecycle = Lifecycle.Destroyed
             throw failure
         }
     }
 
     /** True while this facade can access its engine state, including reusable detachment. */
-    val isValid: Boolean get() = lifecycle != "Destroying" && lifecycle != "Destroyed" && reference.get() != null
+    val isValid: Boolean get() = lifecycle != Lifecycle.Destroying &&
+        lifecycle != Lifecycle.Destroyed &&
+        reference.get() != null
 
     /** True after permanent destruction starts. */
-    val isFreed: Boolean get() = lifecycle == "Destroying" || lifecycle == "Destroyed"
+    val isFreed: Boolean get() = lifecycle == Lifecycle.Destroying || lifecycle == Lifecycle.Destroyed
 
     /** Whether a safe-boundary deletion is pending. */
     val isQueuedForDeletion: Boolean get() = queued
@@ -77,12 +92,12 @@ abstract class Node<N : Node<N>> protected constructor(
     @PublishedApi
     @JvmSynthetic
     internal fun diagnostic(operation: String, phase: String? = null) =
-        NodeDiagnostic(nodeId, javaClass.simpleName, lastPath, lifecycle, operation, phase)
+        NodeDiagnostic(nodeId, javaClass.simpleName, lastPath, lifecycle.diagnosticText, operation, phase)
 
     @JvmSynthetic
     internal fun state(operation: String): NodeState {
         val current = reference.get()
-        if (current == null || lifecycle == "Destroying" || lifecycle == "Destroyed") {
+        if (current == null || lifecycle == Lifecycle.Destroying || lifecycle == Lifecycle.Destroyed) {
             throw NodeDestroyedException(diagnostic(operation))
         }
         return current
@@ -91,7 +106,7 @@ abstract class Node<N : Node<N>> protected constructor(
     @JvmSynthetic
     internal fun propertyState(property: kotlin.reflect.KProperty<*>, writing: Boolean): NodeState {
         val current = reference.get()
-        if (current == null || lifecycle == "Destroying" || lifecycle == "Destroyed") {
+        if (current == null || lifecycle == Lifecycle.Destroying || lifecycle == Lifecycle.Destroyed) {
             val operation = if (writing) "write" else "read"
             throw NodeDestroyedException(diagnostic("$operation property '${property.name}'"))
         }
@@ -450,7 +465,7 @@ abstract class Node<N : Node<N>> protected constructor(
         if (s.entered) return
         s.entryGeneration++
         s.entered = true
-        lifecycle = "Active"
+        lifecycle = Lifecycle.Active
         if (!s.built) {
             s.built = true
             val previous = currentParent.get()
@@ -503,7 +518,7 @@ abstract class Node<N : Node<N>> protected constructor(
             metadata = NodeExitMetadata(nodeId, s.name, lastPath, isFreed)
             val wasEntered = s.entered
             s.entered = false
-            if (!isFreed) lifecycle = "Detached"
+            if (!isFreed) lifecycle = Lifecycle.Detached
             if (wasEntered) {
                 failures.attempt { cleanup("exit hook") { onExitTree() } }
                 failures.attempt { cleanup("behavior exit") { s.behavior?.onExitTree() } }
@@ -547,7 +562,7 @@ abstract class Node<N : Node<N>> protected constructor(
     internal fun beginDestruction() {
         val s = payload()
         metadata = NodeExitMetadata(nodeId, s.name, lastPath, true)
-        lifecycle = "Destroying"
+        lifecycle = Lifecycle.Destroying
         queued = false
     }
 
@@ -567,7 +582,7 @@ abstract class Node<N : Node<N>> protected constructor(
         s.parentState = null
         s.owner.releaseState(nodeId)
         reference.clear()
-        lifecycle = "Destroyed"
+        lifecycle = Lifecycle.Destroyed
         failures.rethrow()
     }
 
@@ -627,52 +642,48 @@ abstract class Node<N : Node<N>> protected constructor(
     }
 
     @JvmSynthetic
-    internal fun dispatchUpdate(delta: Float) = dispatch(0, delta, null)
+    internal fun dispatchUpdate(delta: Float) = dispatch(DispatchKind.Frame, delta, null)
 
     @JvmSynthetic
-    internal fun dispatchPhysicsUpdate(delta: Float) = dispatch(1, delta, null)
+    internal fun dispatchPhysicsUpdate(delta: Float) = dispatch(DispatchKind.Physics, delta, null)
 
     @JvmSynthetic
-    internal fun dispatchInput(event: InputEvent) = dispatch(2, 0f, event)
-    private fun dispatch(kind: Int, delta: Float, event: InputEvent?) {
+    internal fun dispatchInput(event: InputEvent) = dispatch(DispatchKind.Input, 0f, event)
+    private fun dispatch(kind: DispatchKind, delta: Float, event: InputEvent?) {
         val s = reference.get() ?: return
         dispatchState(kind, delta, event, s)
     }
 
-    private fun dispatchState(kind: Int, delta: Float, event: InputEvent?, s: NodeState) {
-        if (!s.entered || isFreed || (kind == 2 && event?.isHandled == true)) return
-        val phase = when (kind) {
-            0 -> "frame"
-            1 -> "physics"
-            else -> "input"
-        }
+    private fun dispatchState(kind: DispatchKind, delta: Float, event: InputEvent?, s: NodeState) {
+        if (!s.entered || isFreed || (kind == DispatchKind.Input && event?.isHandled == true)) return
+        val phase = kind.phase
         if (eligible(s, s.owner.isPaused)) {
             callback(phase) {
                 when (kind) {
-                    0 -> onUpdate(delta)
-                    1 -> onPhysicsUpdate(delta)
-                    else -> onInput(event!!)
+                    DispatchKind.Frame -> onUpdate(delta)
+                    DispatchKind.Physics -> onPhysicsUpdate(delta)
+                    DispatchKind.Input -> onInput(event!!)
                 }
             }
         }
         for (child in s.snapshot()) {
-            if (kind == 2 && event?.isHandled == true) return
+            if (kind == DispatchKind.Input && event?.isHandled == true) return
             val childState = child.reference.get() ?: continue
             if (childState.parent === this) child.dispatchState(kind, delta, event, childState)
         }
         if (!s.entered ||
             isFreed ||
             !eligible(s, s.owner.isPaused) ||
-            (kind == 2 && event?.isHandled == true)
+            (kind == DispatchKind.Input && event?.isHandled == true)
         ) {
             return
         }
         val behavior = s.behavior ?: return
         callback(phase) {
             when (kind) {
-                0 -> behavior.onUpdate(delta)
-                1 -> behavior.onPhysicsUpdate(delta)
-                else -> behavior.onInput(event!!)
+                DispatchKind.Frame -> behavior.onUpdate(delta)
+                DispatchKind.Physics -> behavior.onPhysicsUpdate(delta)
+                DispatchKind.Input -> behavior.onInput(event!!)
             }
         }
     }

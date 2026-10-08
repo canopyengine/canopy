@@ -8,9 +8,11 @@ import kotlin.test.assertNull
 import kotlin.test.assertTrue
 import io.canopy.engine.core.exceptions.InvalidNodeDefinitionException
 import io.canopy.engine.core.exceptions.NodeDestroyedException
+import io.canopy.engine.core.exceptions.NodeNotFoundException
 import io.canopy.engine.core.managers.ManagersRegistry
 import io.canopy.engine.core.managers.SceneManager
 import io.canopy.engine.core.nodes.types.empty.EmptyNode
+import io.canopy.engine.input.events.TextInputEvent
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.BeforeEach
 
@@ -97,5 +99,48 @@ class NodeStateSafetyTests {
         enemy.queueFree()
         scenes.onPhysicsUpdate(0f)
         assertEquals(1, releases)
+    }
+
+    @Test
+    fun `diagnostic state labels survive entry detachment and permanent cleanup`() {
+        val node = EmptyNode("diagnostic")
+        fun lookupState() = assertFailsWith<NodeNotFoundException> {
+            node.getNode<EmptyNode>("missing")
+        }.diagnostic.state
+        assertEquals("Detached", lookupState())
+        scenes.currScene = node
+        assertEquals("Active", lookupState())
+        scenes.currScene = null
+        assertEquals("Detached", lookupState())
+        var cleanupState: String? = null
+        node.onDestroy {
+            cleanupState = assertFailsWith<NodeDestroyedException> { node.name }.diagnostic.state
+        }
+        node.queueFree()
+        scenes.onUpdate(0f)
+        assertEquals("Destroying", cleanupState)
+        assertEquals("Destroyed", assertFailsWith<NodeDestroyedException> { node.name }.diagnostic.state)
+    }
+
+    @Test
+    fun `consumed input stops sibling and ancestor behavior callbacks`() {
+        val calls = mutableListOf<String>()
+        val root = EmptyNode("root") {
+            behavior(onInput = { calls += "root" })
+            EmptyNode("first") {
+                behavior(onInput = {
+                    calls += "first"
+                    it.consume()
+                })
+                EmptyNode("grandchild") { behavior(onInput = { calls += "grandchild" }) }
+            }
+            EmptyNode("sibling") { behavior(onInput = { calls += "sibling" }) }
+        }
+        scenes.currScene = root
+        root.nodeInput(TextInputEvent("fresh"))
+        assertEquals(listOf("grandchild", "first"), calls)
+        calls.clear()
+        root.nodeInput(TextInputEvent("handled").apply { consume() })
+        assertTrue(calls.isEmpty())
     }
 }
