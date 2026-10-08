@@ -1,5 +1,6 @@
 package io.canopy.platforms.terminal.app
 
+import io.canopy.engine.commands.CommandPrompt
 import io.canopy.engine.commands.CommandPromptPresentation
 import io.canopy.engine.commands.CommandPromptSnapshot
 
@@ -7,9 +8,10 @@ import io.canopy.engine.commands.CommandPromptSnapshot
 internal class TerminalCommandPresentation(
     private val lineMode: () -> Boolean,
     private val output: (String) -> Unit,
-    private val restoreFrame: () -> Unit,
-    private val renderOverlay: (CommandPromptSnapshot) -> Unit,
+    private val ui: TerminalCommandUi,
 ) : CommandPromptPresentation {
+    override fun bind(owner: CommandPrompt?) = ui.bind(owner)
+
     override val isLineInput: Boolean get() = lineMode()
     private var previousLines = emptyList<String>()
     private var previousDraft: String? = null
@@ -31,7 +33,7 @@ internal class TerminalCommandPresentation(
             outputSequence != snapshot.outputSequence
         // The shared surface must see unchanged snapshots too: the viewport may have resized.
         if (!isLineInput) {
-            renderOverlay(snapshot)
+            ui.render(snapshot)
             remember(snapshot)
             return
         }
@@ -69,7 +71,7 @@ internal class TerminalCommandPresentation(
         previousLines = emptyList()
         previousDraft = null
         previousPrefix = null
-        restoreFrame()
+        ui.hide()
         if (isLineInput) output("\n")
     }
 

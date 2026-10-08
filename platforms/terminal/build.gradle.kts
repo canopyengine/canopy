@@ -100,3 +100,12 @@ tasks.register("jvmHeadlessDependencyReport") {
         }
     }
 }
+
+tasks.register<JavaExec>("terminalUiSmoke") {
+    group = "verification"
+    description = "Launch the responsive declarative terminal UI and command overlay smoke example"
+    dependsOn(tasks.testClasses)
+    classpath = sourceSets.test.get().runtimeClasspath
+    mainClass.set("io.canopy.platforms.terminal.app.TerminalUiSmokeKt")
+    standardInput = System.`in`
+}

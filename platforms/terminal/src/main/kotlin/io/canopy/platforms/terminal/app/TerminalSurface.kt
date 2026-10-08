@@ -1,6 +1,5 @@
 package io.canopy.platforms.terminal.app
 
-import kotlin.math.ceil
 import com.github.ajalt.mordant.rendering.Size
 import com.github.ajalt.mordant.rendering.Whitespace
 import com.github.ajalt.mordant.terminal.Terminal
@@ -13,22 +12,22 @@ internal class TerminalSurface(
     private val terminal: Terminal,
     private val viewport: () -> Size,
     private val output: (String) -> Unit,
-    private val panelRows: () -> Int,
     private val lineMode: () -> Boolean,
-    private val panelFraction: () -> Double = { 1.0 },
 ) : Manager {
     private var world: List<String>? = null
+    private var ui = emptyList<TerminalUiSpan>()
     private var prompt: CommandPromptSnapshot? = null
     private var previous: String? = null
     private var previousSize: Pair<Int, Int>? = null
 
     override fun onUpdate(delta: Float) {
         // Manager dispatch continues while paused and even when no prompt or world callback renders.
-        if (world != null || prompt != null || previous != null) redraw()
+        if (world != null || ui.isNotEmpty() || prompt != null || previous != null) redraw()
     }
 
     override fun onExit() {
         world = null
+        ui = emptyList()
         prompt = null
         previous = null
         previousSize = null
@@ -39,19 +38,24 @@ internal class TerminalSurface(
         redraw()
     }
 
+    fun renderUi(spans: List<TerminalUiSpan>) {
+        ui = spans.toList()
+        redraw()
+    }
+
     fun renderPrompt(snapshot: CommandPromptSnapshot) {
         prompt = snapshot
         redraw()
     }
 
-    fun hidePrompt() {
+    fun hidePrompt(redraw: Boolean = true) {
         prompt = null
         // Clearing ownership before writing lets later world frames recover from an output failure.
         previous = null
-        redraw()
+        if (redraw) redraw()
     }
 
-    private fun editorRow(snapshot: CommandPromptSnapshot, width: Int): String {
+    internal fun editorRow(snapshot: CommandPromptSnapshot, width: Int): String {
         if (width <= 0) return ""
         // Plain editor content scrolls at extended grapheme boundaries; the stored draft is never altered.
         val prefix = SGR.replace(safeTerminalText(snapshot.prefix), "").replace("\t", " ")
@@ -101,20 +105,7 @@ internal class TerminalSurface(
         val width = size.width.coerceAtLeast(1) - 1
         val snapshot = prompt
         val rows = MutableList(height) { "" }
-        val panelHeight = if (snapshot == null) {
-            0
-        } else {
-            ceil(height * panelFraction()).toInt()
-                .coerceIn(1, minOf(panelRows(), maxOf(1, height - 1)))
-        }
-        val worldHeight = (height - panelHeight).coerceAtLeast(0)
-        world.orEmpty().flatMap { it.split('\n') }.take(worldHeight).forEachIndexed { index, row -> rows[index] = row }
-        if (snapshot != null && height > 0) {
-            val first = height - panelHeight
-            val transcript = snapshot.transcript.flatMap { it.split('\n') }.takeLast(panelHeight - 1)
-            transcript.forEachIndexed { index, row -> rows[first + index] = row }
-            rows[height - 1] = editorRow(snapshot, width)
-        }
+        world.orEmpty().flatMap { it.split('\n') }.take(height).forEachIndexed { index, row -> rows[index] = row }
         val frame = buildString {
             append("\u001b[2J\u001b[H")
             if (width > 0) {
@@ -123,6 +114,12 @@ internal class TerminalSurface(
                     if (clipped.isNotEmpty()) {
                         append("\u001b[").append(index + 1).append(";1H").append(clipped)
                     }
+                }
+            }
+            ui.forEach { span ->
+                if (span.y in 0 until height && span.x in 0 until width) {
+                    append("\u001b[").append(span.y + 1).append(';').append(span.x + 1).append('H')
+                    append(clipRow(span.text, width - span.x))
                 }
             }
             if (snapshot != null && height > 0 && size.width > 0) {
@@ -142,7 +139,7 @@ internal class TerminalSurface(
 }
 
 /** Preserve only SGR styling; cursor/OSC/control input cannot escape the composed row. */
-private fun safeTerminalText(text: String): String = buildString {
+internal fun safeTerminalText(text: String): String = buildString {
     var offset = 0
     while (offset < text.length) {
         val char = text[offset]

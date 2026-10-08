@@ -14,8 +14,10 @@ import io.canopy.engine.commands.CommandPrompt
 import io.canopy.engine.commands.CommandPromptHost
 import io.canopy.engine.core.managers.ManagersRegistry
 import io.canopy.engine.core.managers.SceneManager
+import io.canopy.engine.input.InputFocus
 import io.canopy.engine.input.binds.InputBind
 import io.canopy.engine.math.Vector2
+import io.canopy.engine.ui.UiManager
 import org.junit.jupiter.api.AfterEach
 
 class TerminalFrameRestorationTests {
@@ -276,14 +278,20 @@ class TerminalFrameRestorationTests {
     fun `line fallback suppresses live surface updates and closes without raw cursor output`() {
         var line = false
         val writes = mutableListOf<String>()
-        val surface = TerminalSurface(terminal, { viewport }, writes::add, { 2 }, { line })
+        val surface = TerminalSurface(terminal, { viewport }, writes::add, { line })
         val presentation =
-            TerminalCommandPresentation({ line }, writes::add, surface::hidePrompt, surface::renderPrompt)
+            TerminalCommandPresentation(
+                { line },
+                writes::add,
+                TerminalCommandUi(terminal, { viewport }, surface, { 2 }, { 1.0 })
+            )
         val host = CommandPromptHost(terminalApp(), presentation)
         val scenes = SceneManager()
         ManagersRegistry.withScope {
+            register(InputFocus())
             register(host)
             register(scenes)
+            register(UiManager())
         }
         val prompt = CommandPrompt("Console")
         scenes.currScene = prompt
@@ -470,18 +478,40 @@ class TerminalFrameRestorationTests {
 
     /** Decode positions and styles into physical rows; bounds and cell widths are asserted separately. */
     private fun rows(): Map<Int, String> {
-        val result = mutableMapOf<Int, String>()
+        val cells = mutableMapOf<Int, MutableMap<Int, String>>()
         var row = 0
+        var column = 0
         val clean = output.last().replace(Regex("\u001b\\[[0-9;:]*m"), "")
         val pattern = Regex("\u001b\\[([0-9;]*)([A-Za-z])|([^\u001b]+)")
         pattern.findAll(clean).forEach { match ->
             when (match.groupValues[2]) {
-                "J" -> result.clear()
-                "H" -> row = (match.groupValues[1].substringBefore(';').toIntOrNull() ?: 1) - 1
-                "" -> result[row] = result.getOrDefault(row, "") + match.groupValues[3]
+                "J" -> cells.clear()
+                "H" -> {
+                    row = (match.groupValues[1].substringBefore(';').toIntOrNull() ?: 1) - 1
+                    column = (match.groupValues[1].substringAfter(';', "1").toIntOrNull() ?: 1) - 1
+                }
+                "" -> Regex("\\X").findAll(match.groupValues[3]).forEach { cluster ->
+                    val width = Text(cluster.value, whitespace = Whitespace.PRE).measure(terminal, 100).max
+                    val line = cells.getOrPut(row) { mutableMapOf() }
+                    line[column] = cluster.value
+                    for (offset in 1 until width) line[column + offset] = ""
+                    column += width
+                }
             }
         }
-        return result
+        return cells.mapNotNull { (index, line) ->
+            val text = (0..(line.keys.maxOrNull() ?: -1)).joinToString("") { line[it] ?: " " }.trimEnd()
+            if (text.isEmpty()) {
+                null
+            } else {
+                index to if (index == row && output.last().endsWith('H')) {
+                    val width = Text(text, whitespace = Whitespace.PRE).measure(terminal, 100).max
+                    text + " ".repeat((column - width).coerceAtLeast(0))
+                } else {
+                    text
+                }
+            }
+        }.toMap()
     }
 
     private fun start(

@@ -22,6 +22,9 @@ internal class NodeState(val owner: SceneManager, var name: String, var builder:
     var built = false
     var entered = false
     var prefab = false
+    var visible = true
+    var managedChildren = false
+    var managedMutationDepth = 0
     var mode = ProcessMode.Inherit
     var exiting = false
 

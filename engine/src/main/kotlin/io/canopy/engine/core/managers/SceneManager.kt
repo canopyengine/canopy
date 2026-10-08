@@ -147,6 +147,7 @@ class SceneManager(val physicsStep: Float = 1f / 60f, private val block: SceneMa
      */
     private fun replaceScene(newScene: Node<*>?) {
         newScene?.requireValid("replace scene")
+        newScene?.requireSceneRootTransfer()
         val oldScene = _currScene
         if (oldScene === newScene) return
 

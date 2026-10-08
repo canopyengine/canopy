@@ -134,6 +134,7 @@ abstract class Node<N : Node<N>> protected constructor(
             val s = state("rename")
             if (s.name == value) return
             val p = s.parent?.state("rename child")
+            s.parent?.checkChildrenMutation("rename child")
             if (p != null && value in p.children) fail("rename", "Sibling '$value' already exists")
             p?.children?.remove(s.name)
             s.name = value
@@ -156,6 +157,75 @@ abstract class Node<N : Node<N>> protected constructor(
 
     /** Read-only view of local group membership. */
     val groups: Set<String> get() = state("read groups").groupView
+
+    /** Local rendering visibility. Hidden nodes keep normal lifecycle, frame, physics and input callbacks. */
+    var isVisible: Boolean
+        get() = state("read isVisible").visible
+        set(value) {
+            state("write isVisible").visible = value
+        }
+
+    /** Effective rendering visibility, inherited through actual parents; detached nodes retain local visibility. */
+    val isVisibleInTree: Boolean get() {
+        var cursor: NodeState? = state("read isVisibleInTree")
+        while (cursor != null) {
+            if (!cursor.visible) return false
+            cursor = cursor.parentState
+        }
+        return true
+    }
+
+    /** Restores local rendering visibility without changing processing or editor activation. */
+    fun show() {
+        isVisible = true
+    }
+
+    /** Hides rendering without changing processing or editor activation. */
+    fun hide() {
+        isVisible = false
+    }
+
+    internal fun <T> withChildConstruction(block: () -> T): T {
+        val previous = currentParent.get()
+        currentParent.set(this)
+        try {
+            return block()
+        } finally {
+            currentParent.set(previous)
+        }
+    }
+
+    internal fun markChildrenManaged() {
+        state("manage children").managedChildren = true
+    }
+
+    internal fun <T> withManagedChildrenMutation(block: () -> T): T {
+        val s = state("mutate managed children")
+        s.managedMutationDepth++
+        try {
+            return block()
+        } finally {
+            s.managedMutationDepth--
+        }
+    }
+
+    internal fun reorderManagedChildren(order: List<Node<*>>) {
+        checkChildrenMutation("reorder managed children")
+        val s = state("reorder managed children")
+        require(order.size == s.children.size && order.toSet() == s.children.values.toSet()) {
+            "Reordering must preserve exact child membership"
+        }
+        s.children.clear()
+        order.forEach { s.children[it.name] = it }
+        s.changed()
+    }
+
+    private fun checkChildrenMutation(operation: String) {
+        val s = state(operation)
+        if (s.managedChildren && s.managedMutationDepth == 0) {
+            fail(operation, "Children are owned by declarative composition")
+        }
+    }
 
     /** Pause eligibility, inherited through actual parents including context wrappers. */
     var processMode: ProcessMode
@@ -247,6 +317,7 @@ abstract class Node<N : Node<N>> protected constructor(
     }
 
     private fun attach(child: Node<*>) {
+        checkChildrenMutation("attach")
         val s = state("attach")
         val c = child.state("attach")
         if (s.owner !== c.owner) fail("attach", "Nodes belong to different scene managers")
@@ -273,6 +344,7 @@ abstract class Node<N : Node<N>> protected constructor(
 
     /** Immediate reusable detachment; completes despite exit or unregister failures. */
     fun removeChild(child: Node<*>) {
+        checkChildrenMutation("removeChild")
         val s = state("removeChild")
         if (child.state("removeChild").parent !== this) fail("removeChild", "Node is not a child")
         val failures = CleanupFailures()
@@ -372,6 +444,7 @@ abstract class Node<N : Node<N>> protected constructor(
     /** Idempotently queues a valid subtree until the next outermost frame/physics boundary. */
     fun queueFree() {
         val s = state("queueFree")
+        s.parent?.checkChildrenMutation("queueFree child")
         if (!queued) s.owner.queueFree(this)
     }
 
@@ -382,6 +455,8 @@ abstract class Node<N : Node<N>> protected constructor(
         val destination = newParent.state("reparent")
         if (c.parent !== this) fail("reparent", "Node is not a child")
         if (newParent === this) return
+        checkChildrenMutation("reparent")
+        newParent.checkChildrenMutation("reparent")
         var ancestor: Node<*>? = newParent
         while (ancestor != null) {
             if (ancestor === child) fail("reparent", "Cannot create a hierarchy cycle")
@@ -405,8 +480,13 @@ abstract class Node<N : Node<N>> protected constructor(
     /** Whether an immediate child has the exact public facade type. */
     fun hasChildType(type: KClass<out Node<*>>) = state("hasChildType").snapshot().any { it::class == type }
 
+    internal fun requireSceneRootTransfer() {
+        state("transfer scene root").parent?.checkChildrenMutation("transfer child to scene root")
+    }
+
     /** Sets this valid facade as its manager's current root. */
     fun asSceneRoot(): Node<*> {
+        requireSceneRootTransfer()
         state("asSceneRoot").owner.currScene = this
         return this
     }

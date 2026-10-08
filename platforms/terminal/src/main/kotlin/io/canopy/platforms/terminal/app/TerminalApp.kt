@@ -12,8 +12,10 @@ import io.canopy.engine.app.App
 import io.canopy.engine.app.AppConfig
 import io.canopy.engine.commands.CommandPromptHost
 import io.canopy.engine.core.managers.SceneManager
+import io.canopy.engine.core.managers.manager
 import io.canopy.engine.input.InputSystem
 import io.canopy.engine.logging.EngineLogs
+import io.canopy.engine.ui.UiManager
 import io.canopy.platforms.terminal.data.assets.TerminalAssetsManager
 import io.canopy.tooling.utils.UnstableApi
 import kotlinx.coroutines.*
@@ -67,15 +69,12 @@ class TerminalApp internal constructor(
         terminal,
         viewport,
         output,
-        { commandPanelRows },
-        { lineInputMode },
-        { commandPanelHeightFraction }
+        { lineInputMode }
     )
     private val commandPresentation = TerminalCommandPresentation(
         lineMode = { lineInputMode },
         output = output,
-        restoreFrame = surface::hidePrompt,
-        renderOverlay = surface::renderPrompt
+        ui = TerminalCommandUi(terminal, viewport, surface, { commandPanelRows }, { commandPanelHeightFraction })
     )
     private val commandHost = CommandPromptHost(this, commandPresentation)
 
@@ -129,6 +128,10 @@ class TerminalApp internal constructor(
     @OptIn(UnstableApi::class)
     override fun SceneManager.configureSceneManager() {
         addSystem(InputSystem())
+    }
+
+    override fun afterEnter() {
+        manager<UiManager>().backend = TerminalUiBackend(terminal, surface::renderUi)
     }
 
     override fun beforeExit() {

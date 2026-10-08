@@ -42,7 +42,6 @@ class TerminalFrameTests {
         terminal,
         { Size(width, 10) },
         screen::apply,
-        { 3 },
         { false }
     )
 

@@ -9,6 +9,7 @@ import io.canopy.engine.core.managers.SceneManager
 import io.canopy.engine.core.nodes.Behavior
 import io.canopy.engine.core.nodes.Node
 import io.canopy.engine.core.nodes.types.empty.EmptyNode
+import io.canopy.engine.input.InputFocus
 import io.canopy.engine.input.InputManager
 import io.canopy.engine.input.binds.InputBind
 import io.canopy.engine.input.binds.Key
@@ -67,6 +68,7 @@ class CommandPromptTests {
         scenes = SceneManager()
         input = Input()
         ManagersRegistry.withScope {
+            register(InputFocus())
             register(host)
             register(scenes)
             register(input)
@@ -80,6 +82,70 @@ class CommandPromptTests {
 
     private fun enter(block: CommandPrompt.() -> Unit = {}): CommandPrompt =
         CommandPrompt("Console", block).also { scenes.currScene = it }
+
+    @Test
+    fun `hidden prompt releases command capture and presentation without changing activation`() {
+        // Arrange
+        val root = EmptyNode("root") { CommandPrompt("Console") }
+        scenes.currScene = root
+        val prompt = root.getNode<CommandPrompt>("Console")
+        prompt.open()
+        host.onUpdate(0f)
+        // Act
+        root.hide()
+        input.enqueue(TextInputEvent("gameplay"))
+        input.processEvents()
+        host.onUpdate(0f)
+        // Assert
+        assertTrue(prompt.isOpen)
+        assertFalse(input.blocksGameplay)
+        assertEquals(1, input.eventsThisFrame.size)
+        assertEquals("", prompt.draft)
+        assertEquals(1, presentation.hides)
+        root.show()
+        input.enqueue(TextInputEvent("command"))
+        input.processEvents()
+        assertTrue(input.blocksGameplay)
+        assertEquals("command", prompt.draft)
+    }
+
+    @Test
+    fun `failed presentation binding releases focus and partial owner preserving cleanup failures`() {
+        // Arrange
+        ManagersRegistry.exit()
+        var bound = false
+        val primary = IllegalStateException("bind")
+        val cleanup = IllegalStateException("cleanup")
+        val failing = object : CommandPromptPresentation {
+            override fun bind(owner: CommandPrompt?) {
+                val wasBound = bound
+                bound = owner != null
+                if (owner != null) {
+                    throw primary
+                } else if (wasBound) {
+                    throw cleanup
+                }
+            }
+            override fun render(snapshot: CommandPromptSnapshot) = Unit
+            override fun hide() = Unit
+        }
+        host = CommandPromptHost(app, failing)
+        scenes = SceneManager()
+        val focus = InputFocus()
+        ManagersRegistry.withScope {
+            register(focus)
+            register(host)
+            register(scenes)
+        }
+        val prompt = CommandPrompt("Console") { open() }
+        // Act
+        val failure = assertFailsWith<CanopyException> { scenes.currScene = prompt }
+        // Assert
+        assertSame(primary, failure.cause)
+        assertFalse(bound)
+        assertFalse(focus.blocksGameplay)
+        assertContentEquals(listOf(cleanup), primary.suppressed.toList())
+    }
 
     @Test
     fun `activation controls preserve draft transcript and pause while guarding destroyed state`() {
@@ -520,6 +586,7 @@ class CommandPromptTests {
         host = CommandPromptHost(app, failing)
         scenes = SceneManager()
         ManagersRegistry.withScope {
+            register(InputFocus())
             register(host)
             register(scenes)
         }

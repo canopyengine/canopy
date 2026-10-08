@@ -14,6 +14,8 @@ import io.canopy.engine.logging.LogContext
 import io.canopy.engine.logging.LoggingPolicy
 import io.canopy.engine.logging.LoggingSession
 import kotlinx.coroutines.CancellationException
+import io.canopy.engine.input.InputFocus
+import io.canopy.engine.ui.UiManager
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
@@ -211,12 +213,14 @@ abstract class App<C : AppConfig> protected constructor() {
                     ManagersRegistry.withScope {
                         provideManagers().forEach(::register)
                         +InjectionManager()
+                        +InputFocus()
                         +ScreenManager()
                         +SceneManager().also {
                             sceneManager = it
                             it.pauseState = { isPaused }
                             it.configureSceneManager()
                         }
+                        +UiManager()
                         managerBuilder()
                     }
                     sceneManager?.let { engineLoop.configurePhysicsStep(it.physicsStep) }

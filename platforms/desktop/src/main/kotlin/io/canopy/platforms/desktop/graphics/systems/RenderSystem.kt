@@ -1,5 +1,7 @@
 package io.canopy.platforms.desktop.graphics.systems
 
+import com.badlogic.gdx.Gdx
+import com.badlogic.gdx.graphics.GL20
 import com.badlogic.gdx.graphics.g2d.SpriteBatch
 import com.badlogic.gdx.utils.viewport.FitViewport
 import io.canopy.engine.core.managers.lazyManager
@@ -38,12 +40,15 @@ class RenderSystem(worldWidth: Int, worldHeight: Int) :
     }
 
     override fun afterProcess(delta: Float) {
+        // Clear even without a camera or visible sprites, removing previously presented pixels.
+        Gdx.gl.glClear(GL20.GL_COLOR_BUFFER_BIT)
         val camera = cameraManager.activeCamera.value ?: return
         batch.projectionMatrix = camera.camera.combined
 
         batch.use { b ->
             matchingNodes
                 .filterIsInstance(Node2D::class.java)
+                .filter { it.isVisibleInTree }
                 .sortedByDescending { it.globalPosition.y }.forEach { node ->
                     when (node) {
                         is Sprite2D -> {
