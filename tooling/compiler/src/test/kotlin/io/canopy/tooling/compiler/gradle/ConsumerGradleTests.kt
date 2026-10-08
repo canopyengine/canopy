@@ -8,7 +8,7 @@ import org.gradle.testkit.runner.GradleRunner
 /** Exercises the public plugin from a separate game build, including its test compilation. */
 class ConsumerGradleTests {
     @Test
-    fun `plugin automatically checks consumer main and test node declarations`() {
+    fun `plugin transforms and executes consumer state while rejecting unsupported main and test declarations`() {
         val directory = Files.createTempDirectory("canopy-game-build").toFile()
         try {
             java.io.File(System.getProperty("canopy.verification.repository"))
@@ -27,6 +27,10 @@ class ConsumerGradleTests {
                 }
                 repositories { maven { url = uri("repository") }; mavenCentral() }
                 kotlin { jvmToolchain(17) }
+                tasks.register<JavaExec>("runConsumer") {
+                    classpath = sourceSets.main.get().runtimeClasspath
+                    mainClass.set("EnemyNodeKt")
+                }
                 """.trimIndent()
             )
             val sources = directory.resolve("src/main/kotlin").apply { mkdirs() }
@@ -35,6 +39,11 @@ class ConsumerGradleTests {
                 package io.canopy.engine.core.nodes
                 import kotlin.reflect.KProperty
                 abstract class Node<N : Node<N>> {
+                    private val slots = mutableMapOf<String, Any?>()
+                    @Suppress("UNCHECKED_CAST")
+                    protected fun <T> compilerPropertyGet(key: String, default: T): T =
+                        if (slots.containsKey(key)) slots[key] as T else default
+                    protected fun <T> compilerPropertySet(key: String, value: T) { slots[key] = value }
                     protected fun <T> nodeProperty(value: T): NodeProperty<T> = TODO()
                 }
                 class NodeProperty<T> {
@@ -47,7 +56,7 @@ class ConsumerGradleTests {
             game.writeText(
                 """
                 import io.canopy.engine.core.nodes.Node
-                class EnemyNode : Node<EnemyNode>() { var health = 100 }
+                class EnemyNode : Node<EnemyNode>() { @JvmField var health = 100 }
                 """.trimIndent()
             )
             val runner = GradleRunner.create().withProjectDir(directory)
@@ -60,19 +69,35 @@ class ConsumerGradleTests {
             ).buildAndFail()
             assertTrue("CANOPY_UNMANAGED_NODE_STATE" in unsafeMain.output, unsafeMain.output)
 
-            game.writeText(game.readText().replace("var health = 100", "var health by nodeProperty(100)"))
+            game.writeText(
+                game.readText().replace("@JvmField var health = 100", "var health = 100") +
+                    """
+
+                    fun main() {
+                        val enemy = EnemyNode()
+                        check(enemy.health == 100)
+                        enemy.health -= 1
+                        check(enemy.health == 99)
+                        check(EnemyNode::class.java.declaredFields.none {
+                            !java.lang.reflect.Modifier.isStatic(it.modifiers)
+                        })
+                        java.io.File("verified.txt").writeText("automatic state works")
+                    }
+                    """.trimIndent()
+            )
             runner.withArguments(
-                "compileKotlin",
+                "runConsumer",
                 "--offline",
                 "--stacktrace",
                 "--gradle-user-home",
                 System.getProperty("canopy.gradle.home")
             ).build()
+            assertTrue(directory.resolve("verified.txt").readText() == "automatic state works")
             val tests = directory.resolve("src/test/kotlin").apply { mkdirs() }
             tests.resolve("UnsafeTestNode.kt").writeText(
                 """
                 import io.canopy.engine.core.nodes.Node
-                class UnsafeTestNode : Node<UnsafeTestNode>() { val retained = Any() }
+                class UnsafeTestNode : Node<UnsafeTestNode>() { lateinit var retained: Any }
                 """.trimIndent()
             )
             val unsafeTest = runner.withArguments(
@@ -83,6 +108,17 @@ class ConsumerGradleTests {
                 System.getProperty("canopy.gradle.home")
             ).buildAndFail()
             assertTrue("CANOPY_UNMANAGED_NODE_STATE" in unsafeTest.output, unsafeTest.output)
+            tests.resolve("UnsafeTestNode.kt").writeText(
+                "import io.canopy.engine.core.nodes.Node\n" +
+                    "class SafeTestNode : Node<SafeTestNode>() { val retained = Any() }"
+            )
+            runner.withArguments(
+                "compileTestKotlin",
+                "--offline",
+                "--stacktrace",
+                "--gradle-user-home",
+                System.getProperty("canopy.gradle.home")
+            ).build()
         } finally {
             directory.deleteRecursively()
         }
