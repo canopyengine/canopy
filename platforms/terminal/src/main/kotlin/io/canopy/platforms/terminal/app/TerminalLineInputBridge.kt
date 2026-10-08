@@ -22,8 +22,9 @@ internal class TerminalLineInputBridge(private val input: InputManager) {
     fun submit(line: String): CompletableDeferred<Unit> = synchronized(lock) {
         check(pending == null) { "Previous terminal line has not been processed" }
         CompletableDeferred<Unit>().also {
-            input.enqueue(TextInputEvent(line))
-            input.enqueue(KeyInputEvent(Key.ENTER, state = InputState.JustPressed))
+            input.enqueueBatch(
+                listOf(TextInputEvent(line), KeyInputEvent(Key.ENTER, state = InputState.JustPressed))
+            )
             pending = it
         }
     }

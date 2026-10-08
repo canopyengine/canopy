@@ -1,6 +1,6 @@
 package io.canopy.engine.input
 
-import java.util.concurrent.ConcurrentLinkedQueue
+import java.util.ArrayDeque
 import io.canopy.engine.app.App
 import io.canopy.engine.commands.CommandPromptHost
 import io.canopy.engine.core.managers.Manager
@@ -14,8 +14,8 @@ import io.canopy.engine.input.events.InputState
 import io.canopy.engine.math.Vector2
 
 /**
- * Bridges backend events to frame input states. Only enqueue supports concurrent producers; other access belongs
- * to the engine thread.
+ * Bridges backend events to frame input states. Only enqueue and enqueueBatch support concurrent producers;
+ * other access belongs to the engine thread.
  */
 abstract class InputManager : Manager {
 
@@ -30,13 +30,9 @@ abstract class InputManager : Manager {
 
     internal val blocksGameplay: Boolean get() = commandHost()?.blocksGameplay == true
 
-    /**
-     * Async → Sync bridge.
-     * Backends enqueue events, engine drains them per frame.
-     * Backends publishing a related event batch must synchronize on this queue around their enqueue calls.
-     * Polling uses the same monitor so no frame can observe a partially published batch.
-     */
-    protected val eventQueue = ConcurrentLinkedQueue<InputEvent>()
+    /** Async producers publish through one private monitor; consumers invoke hooks after releasing it. */
+    private val queueLock = Any()
+    private val eventQueue = ArrayDeque<InputEvent>()
 
     /**
      * Per-frame snapshot of raw events not consumed by command focus.
@@ -75,6 +71,10 @@ abstract class InputManager : Manager {
      * 1. Clears last frame's raw event snapshot
      * 2. Drains async events into backend state, routing focused commands before the gameplay raw snapshot
      * 3. Recomputes action states
+     *
+     * Call only on the engine thread. Drains until an empty poll, including events enqueued by callbacks.
+     * Later publication waits for another drain. Event callbacks run outside the publication monitor.
+     * If a callback throws, that event is already removed and the remaining queue stays pending.
      */
     open fun processEvents() {
         // 1. Clear last frame's raw event snapshot
@@ -85,7 +85,7 @@ abstract class InputManager : Manager {
 
         // 2. Drain queue → backend state + raw snapshot
         while (true) {
-            val event = synchronized(eventQueue) { eventQueue.poll() } ?: break
+            val event = synchronized(queueLock) { eventQueue.pollFirst() } ?: break
             handleEvent(event)
             if (host?.route(event) != true) _eventsThisFrame += event
         }
@@ -184,11 +184,21 @@ abstract class InputManager : Manager {
         _actionStates.clear()
     }
 
-    /**
-     * Called by async producers (coroutines, callbacks, etc.)
-     */
+    /** Publishes one event in FIFO order; safe for concurrent producers. */
     fun enqueue(event: InputEvent) {
-        synchronized(eventQueue) { eventQueue.add(event) }
+        synchronized(queueLock) { eventQueue.addLast(event) }
+    }
+
+    /**
+     * Publishes related events contiguously in FIFO order; safe for concurrent producers.
+     * Copies event references in caller-supplied order before acquiring the publication monitor.
+     * Keep [events] stable while it is copied. Iteration failure publishes nothing; an empty batch publishes nothing.
+     * Competing producers and the consumer cannot observe a partially published batch.
+     * Event handling is not transactional: callbacks run per event and may fail after consuming part of a batch.
+     */
+    fun enqueueBatch(events: Iterable<InputEvent>) {
+        val snapshot = events.toList()
+        synchronized(queueLock) { eventQueue.addAll(snapshot) }
     }
 
     /** Registers input mapping serialization with the current SaveManager; loading resets states to Released. */
