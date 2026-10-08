@@ -4,6 +4,14 @@ A JVM host can drive the existing EngineLoop and reuse the existing Java asset i
 Ktx, Mordant or native dependency artifacts. This is a tested architecture experiment, not a public replacement
 for HeadlessApp. Keep the existing headless backend while deciding the production adapter and migration contracts.
 
+## Historical evaluation status
+
+The dependency counts and test results below are measurements of the stated baseline,
+not a current integration/release report. PR #208 includes the Logback separation and
+host failure handling follow-ups (#190/#193), so those named gaps are no longer pending
+in the combined implementation. The JVM-only host itself remains an unpublished test
+prototype; adoption and migration contracts are still unapproved.
+
 ## Reproduce
 
 Use the checked-in wrapper and Java 25 toolchain:

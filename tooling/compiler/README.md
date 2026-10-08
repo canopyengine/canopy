@@ -1,7 +1,7 @@
 # Canopy compiler tooling
 
-`tooling/compiler` is one included-build module containing compiler storage transformation, checks and
-Gradle integration. Both share the `io.canopy.tooling.compiler` package root;
+`tooling/compiler` is one included-build module containing compiler transformations, checks and
+Gradle integration. Compiler and Gradle sources share the `io.canopy.tooling.compiler` package root;
 Gradle-specific classes live in its `gradle` subpackage.
 
 The module builds two isolated artifacts at the engine version:
@@ -16,6 +16,38 @@ registration. The Gradle artifact contains only integration classes and the plug
 descriptor. Compiler APIs and Gradle APIs are provided by their respective hosts;
 we do not bundle either host into the other artifact. The composite build selects
 the compiler-specific capability when resolving the compiler dependency.
+
+## Compilation pipeline
+
+The registrar installs four ordered Kotlin IR passes before JVM bytecode generation:
+
+1. **Node storage:** supported instance properties become guarded NodeState slots.
+2. **Validation:** mandatory NodeState checks and rule providers inspect declarations.
+3. **UI expression capture:** supported declarative expressions become reevaluable
+   bindings and structural regions.
+4. **Construction protection:** supported Node constructor calls receive synchronous
+   rollback boundaries.
+
+The plugin generates calls to runtime helpers; it does not implement the engine loop
+or convert every value into a signal. Keep engine, compiler plugin and Kotlin versions
+matched, and recompile consuming modules after changes to these generated contracts.
+
+## Declarative UI capture
+
+Within the supported `UiScope` DSL, direct expressions such as
+`Text("Population: ${population()}")` can track signal reads and reevaluate text.
+Supported conditionals and keyed lists reconcile structure while preserving retained
+identities. Container initialization and action callbacks are not rerun as arbitrary
+side effects whenever a property changes. The runtime owns invalidation, layout,
+focus and cleanup; platform backends measure and paint their specific components.
+
+Capture applies to the resolved Canopy declarative API, not arbitrary Kotlin calls.
+A helper returning an already computed string does not establish a general automatic
+reactivity guarantee. Reusable UI declaration functions must return `Unit`; unsupported
+structural forms produce source diagnostics. Without the plugin, use the runtime's
+explicit binding/structural APIs where appropriate. Refer to the
+[shared UI guide](https://github.com/canopyengine/canopy-docs/blob/main/markdown/manuals/concepts/app/declarative-ui.md)
+for supported syntax and extension contracts.
 
 ## Consumer setup
 
@@ -71,9 +103,8 @@ reactive, attach Signal/Effect ownership, or dispose arbitrary resources.
 Explicit owners, ownership scopes and existing lifetime registrations retain
 their meaning. Access uses the same lifecycle guards as `nodeProperty`: detachment
 preserves state; destruction invalidates access and clears engine-owned payload.
-Constructor failures retain the engine's existing cleanup contract; a compiler
-transformation does not automatically destroy partially constructed objects.
-The existing partial-state cleanup gap is tracked in [#205](https://github.com/canopyengine/canopy/issues/205).
+A separate construction pass protects supported constructor calls and releases
+partially constructed nodes on failure; see [Failed node construction](#failed-node-construction).
 
 Physical-field reflection, Java field access and serializers that depend on
 backing fields must migrate to property accessors or explicit serialization.

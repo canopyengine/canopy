@@ -2,6 +2,16 @@
 
 Agent-originated audit prepared by Codex, with implementation and independent reviewer agents, 2026-10-07. This is the audit phase, not completion of #148 or implementation approval for #147.
 
+## Historical status
+
+This is a preserved pre-implementation audit of `main` at `51d982b`; source line
+numbers, missing capabilities and outstanding questions below describe that snapshot.
+They do not describe the current integration branch. PR #208 now includes shared
+visibility/focus, the bottom command overlay, adaptive terminal sizing, compiler UI
+capture and minimum declarative layout/text/buttons. User decisions subsequently
+selected open/close prompt activation and a live bottom overlay. The broader #147 UI
+roadmap remains separate. Consult the README and current manuals for supported APIs.
+
 ## Evidence and scope
 
 Baseline: main `51d982b`. Also inspected canonical-keyboard PR #192 at `6267487`, issue bodies #145/#147/#148, relevant source/callers/tests and engine documentation. No production edits, commit or push was performed by this audit agent. No new tests were run for this source-only audit. Source locations below refer to main 51d982b unless an explicit branch is named. Existing reviewed housekeeping branches are alternatives awaiting integration, not all present in this checkout.

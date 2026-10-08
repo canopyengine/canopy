@@ -1,5 +1,9 @@
 # Node cleanup validation and benchmarks
 
+This file preserves the original benchmark and verification snapshot. The compiler
+checks and construction cleanup are now included in integration PR #208; the
+stacked-PR status and test counts below remain historical evidence.
+
 Measured locally on 2026-10-04 using Windows, AMD Ryzen 7 5800HS, JDK 25,
 `-Xms1g -Xmx1g`, and logging disabled. Baseline: latest `main`,
 `17fa44cae8af3b8ce5b3832d0eed6971ea914941`. Candidate: the unpublished cleanup
