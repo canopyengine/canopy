@@ -2,7 +2,6 @@ package io.canopy.engine.input
 
 import java.util.concurrent.ConcurrentLinkedQueue
 import io.canopy.engine.app.App
-import io.canopy.engine.commands.CommandPromptHost
 import io.canopy.engine.core.managers.Manager
 import io.canopy.engine.core.managers.manager
 import io.canopy.engine.core.managers.managerOrNull
@@ -26,9 +25,9 @@ abstract class InputManager : Manager {
     /** Returns copied mapped states, or an empty map while command editing owns this frame's input. */
     val actionStates get() = if (blocksGameplay) emptyMap() else _actionStates.toMap()
 
-    private fun commandHost(): CommandPromptHost? = managerOrNull<CommandPromptHost>()
+    private fun focus(): InputFocus? = managerOrNull<InputFocus>()
 
-    internal val blocksGameplay: Boolean get() = commandHost()?.blocksGameplay == true
+    internal val blocksGameplay: Boolean get() = focus()?.blocksGameplay == true
 
     /**
      * Async → Sync bridge.
@@ -80,7 +79,7 @@ abstract class InputManager : Manager {
         // 1. Clear last frame's raw event snapshot
         _eventsThisFrame.clear()
         eventsConsumedThisFrame = false
-        val host = commandHost()
+        val host = focus()
         host?.beginInputFrame()
 
         // 2. Drain queue → backend state + raw snapshot

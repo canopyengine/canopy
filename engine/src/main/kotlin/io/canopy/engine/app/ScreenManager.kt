@@ -17,6 +17,10 @@ class ScreenManager : Manager {
     private val screens = linkedMapOf<KClass<out Screen>, Screen>()
     private var leaving = false
     private var visitVersion = 0L
+    private var geometry: Pair<Int, Int>? = null
+    private var resizedVisit: Long? = null
+    private var activatedVisit: Long? = null
+    private var resizingVisit: Long? = null
 
     /* ============================================================
      * State
@@ -56,21 +60,32 @@ class ScreenManager : Manager {
 
     /**
      * Ends the current visit, then calls the target's [Screen.onEnter] and [Screen.onActive].
-     * Starting the current instance is a no-op; an unregistered type fails before any callbacks.
+     * Replays the latest non-negative host dimensions after activation, if that visit is still current.
+     * Starting the current instance is a no-op unless its resize callback previously failed: only that
+     * pending resize is retried. An unregistered type fails before any callbacks.
      */
     fun <T : Screen> start(type: KClass<T>) {
         check(!leaving) { "Cannot navigate from onInactive or onExit" }
         val next = screens[type]
             ?: error("Screen not registered: ${type.qualifiedName}")
 
-        if (current === next) return
+        if (current === next) {
+            replayGeometry(next, visitVersion)
+            return
+        }
 
         leaveCurrent()
         current = next
         val visit = ++visitVersion
         next.onEnter()
         // onEnter may navigate to another screen; do not activate a screen that already left.
-        if (current === next && visitVersion == visit) next.onActive()
+        if (current === next && visitVersion == visit) {
+            next.onActive()
+            if (current === next && visitVersion == visit) {
+                activatedVisit = visit
+                replayGeometry(next, visit)
+            }
+        }
     }
 
     /* ============================================================
@@ -89,8 +104,31 @@ class ScreenManager : Manager {
         current?.onPhysicsUpdate(delta)
     }
 
+    /** Forwards every host notification and retains non-negative dimensions for later screen visits. */
     override fun onResize(width: Int, height: Int) {
-        current?.onResize(width, height)
+        if (width >= 0 && height >= 0) geometry = width to height
+        val target = current ?: return
+        val visit = visitVersion
+        resizedVisit = null
+        deliverGeometry(target, visit, width, height)
+        if (current === target && visitVersion == visit && geometry == (width to height)) resizedVisit = visit
+    }
+
+    private fun replayGeometry(target: Screen, visit: Long) {
+        val (width, height) = geometry ?: return
+        if (activatedVisit != visit || resizedVisit == visit || resizingVisit == visit) return
+        deliverGeometry(target, visit, width, height)
+        if (current === target && visitVersion == visit) resizedVisit = visit
+    }
+
+    private fun deliverGeometry(target: Screen, visit: Long, width: Int, height: Int) {
+        val previous = resizingVisit
+        resizingVisit = visit
+        try {
+            target.onResize(width, height)
+        } finally {
+            resizingVisit = previous
+        }
     }
 
     /* ============================================================
@@ -103,6 +141,9 @@ class ScreenManager : Manager {
             leaveCurrent()
         } finally {
             screens.clear()
+            geometry = null
+            resizedVisit = null
+            activatedVisit = null
         }
     }
 
@@ -111,6 +152,8 @@ class ScreenManager : Manager {
         // Clear first so repeated teardown cannot exit the same visit again.
         current = null
         visitVersion++
+        resizedVisit = null
+        activatedVisit = null
         leaving = true
         var failure: Throwable? = null
         try {

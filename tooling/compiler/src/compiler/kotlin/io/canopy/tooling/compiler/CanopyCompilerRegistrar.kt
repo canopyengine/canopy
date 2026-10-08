@@ -29,6 +29,7 @@ class CanopyCompilerRegistrar : CompilerPluginRegistrar() {
             ).toList()
         require(rules.map { it.id }.distinct().size == rules.size) { "Canopy compiler rule IDs must be unique" }
         IrGenerationExtension.registerExtension(CanopyRuleRunner(messages, rules))
+        IrGenerationExtension.registerExtension(UiExpressionTransform(messages))
     }
 }
 

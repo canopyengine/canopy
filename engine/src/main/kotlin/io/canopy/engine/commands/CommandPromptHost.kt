@@ -2,6 +2,8 @@ package io.canopy.engine.commands
 
 import io.canopy.engine.app.App
 import io.canopy.engine.core.managers.Manager
+import io.canopy.engine.core.managers.manager
+import io.canopy.engine.input.InputFocus
 import io.canopy.engine.input.binds.Key
 import io.canopy.engine.input.events.InputEvent
 import io.canopy.engine.input.events.InputState
@@ -28,6 +30,9 @@ interface CommandPromptPresentation {
     /** Whether submitted lines replace raw key editing and use exact `:console` to toggle editor activation. */
     val isLineInput: Boolean get() = false
 
+    /** Binds the entered editor owner; null releases platform-owned UI without disposing the editor. */
+    fun bind(owner: CommandPrompt?) {}
+
     /** Presents a copied snapshot of an open prompt on the lifecycle thread. */
     fun render(snapshot: CommandPromptSnapshot)
 
@@ -42,33 +47,61 @@ interface CommandPromptPresentation {
  */
 class CommandPromptHost(val app: App<*>, private val presentation: CommandPromptPresentation) : Manager {
     private var entered: CommandPrompt? = null
+    private var focusLease: AutoCloseable? = null
     private var presented = false
     private var capturedThisFrame = false
     private var skipLineEnter = false
     private var toggleText: String? = null
 
     internal val blocksGameplay: Boolean
-        get() = capturedThisFrame || current()?.isOpen == true
+        get() = capturedThisFrame || interactive()?.isOpen == true
 
     internal fun attach(prompt: CommandPrompt) {
         check(entered == null || entered === prompt) { "Only one command prompt may enter a host" }
+        if (entered === prompt) return
+        val focus = manager<InputFocus>()
+        focusLease = focus.register(
+            owner = prompt,
+            priority = Int.MAX_VALUE,
+            capturesGameplay = { interactive()?.isOpen == true },
+            beginFrame = { beginInputFrame() }
+        ) { route(it) }
         entered = prompt
+        try {
+            presentation.bind(prompt)
+        } catch (failure: Throwable) {
+            entered = null
+            focusLease?.close()
+            focusLease = null
+            try {
+                presentation.bind(null)
+            } catch (cleanup: Throwable) {
+                if (cleanup !== failure) failure.addSuppressed(cleanup)
+            }
+            throw failure
+        }
     }
 
     internal fun detach(prompt: CommandPrompt) {
         if (entered !== prompt) return
         entered = null
+        focusLease?.close()
+        focusLease = null
         skipLineEnter = false
-        hidePresentation()
+        releasePresentation()
+    }
+
+    override fun onEnter() {
+        manager<InputFocus>()
     }
 
     internal fun beginInputFrame() {
-        capturedThisFrame = current()?.isOpen == true
+        capturedThisFrame = interactive()?.isOpen == true
         toggleText = null
     }
 
     internal fun route(event: InputEvent): Boolean {
-        val prompt = current() ?: return capturedThisFrame.also { if (it) event.consume() }
+        val prompt = interactive() ?: return capturedThisFrame.also { if (it) event.consume() }
         if (event is KeyInputEvent && event.isCtrlC()) return false
         val suppressedText = toggleText
         toggleText = null
@@ -126,7 +159,7 @@ class CommandPromptHost(val app: App<*>, private val presentation: CommandPrompt
     }
 
     override fun onUpdate(delta: Float) {
-        val prompt = current()
+        val prompt = interactive()
         if (prompt?.isOpen == true) {
             presented = true
             presentation.render(prompt.presentationSnapshot())
@@ -137,10 +170,34 @@ class CommandPromptHost(val app: App<*>, private val presentation: CommandPrompt
 
     override fun onExit() {
         entered = null
+        focusLease?.close()
+        focusLease = null
         skipLineEnter = false
         capturedThisFrame = false
-        hidePresentation()
+        releasePresentation()
     }
+
+    private fun releasePresentation() {
+        var failure: Throwable? = null
+        try {
+            hidePresentation()
+        } catch (error: Throwable) {
+            failure = error
+        }
+        try {
+            presentation.bind(null)
+        } catch (error: Throwable) {
+            val first = failure
+            if (first == null) {
+                failure = error
+            } else if (first !== error) {
+                first.addSuppressed(error)
+            }
+        }
+        failure?.let { throw it }
+    }
+
+    private fun interactive(): CommandPrompt? = current()?.takeIf { it.isVisibleInTree }
 
     private fun current(): CommandPrompt? {
         val prompt = entered ?: return null

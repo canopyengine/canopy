@@ -8,9 +8,11 @@ import io.canopy.engine.core.managers.InjectionManager
 import io.canopy.engine.core.managers.Manager
 import io.canopy.engine.core.managers.ManagersRegistry
 import io.canopy.engine.core.managers.SceneManager
+import io.canopy.engine.input.InputFocus
 import io.canopy.engine.logging.CanopyLogging
 import io.canopy.engine.logging.EngineLogs
 import io.canopy.engine.logging.LogContext
+import io.canopy.engine.ui.UiManager
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.withTimeout
 
@@ -187,12 +189,14 @@ abstract class App<C : AppConfig> protected constructor() {
                 ManagersRegistry.withScope {
                     provideManagers().forEach(::register)
                     +InjectionManager()
+                    +InputFocus()
                     +ScreenManager()
                     +SceneManager().also {
                         sceneManager = it
                         it.pauseState = { isPaused }
                         it.configureSceneManager()
                     }
+                    +UiManager()
                     managerBuilder()
                 }
                 sceneManager?.let { engineLoop.configurePhysicsStep(it.physicsStep) }
