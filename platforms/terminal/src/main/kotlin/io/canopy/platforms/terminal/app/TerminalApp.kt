@@ -93,6 +93,7 @@ class TerminalApp internal constructor(
     }
 
     override fun defaultLoggingPolicy() = LogbackLogging()
+
     /** Native host boundary: forward geometry before entering frame dispatch, never from a manager callback. */
     internal fun updateTerminalFrame(delta: Float) {
         val size = if (lineInputMode) {

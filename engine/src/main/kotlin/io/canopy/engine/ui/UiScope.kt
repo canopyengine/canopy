@@ -1,7 +1,7 @@
 package io.canopy.engine.ui
 
+import io.canopy.engine.core.CleanupFailures
 import io.canopy.engine.core.flows.events.untrack
-import io.canopy.engine.core.nodes.CleanupFailures
 import io.canopy.engine.core.nodes.Node
 import io.canopy.engine.core.nodes.NodeLifetime
 

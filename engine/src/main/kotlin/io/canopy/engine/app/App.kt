@@ -9,13 +9,13 @@ import io.canopy.engine.core.managers.InjectionManager
 import io.canopy.engine.core.managers.Manager
 import io.canopy.engine.core.managers.ManagersRegistry
 import io.canopy.engine.core.managers.SceneManager
+import io.canopy.engine.input.InputFocus
 import io.canopy.engine.logging.EngineLogs
 import io.canopy.engine.logging.LogContext
 import io.canopy.engine.logging.LoggingPolicy
 import io.canopy.engine.logging.LoggingSession
-import kotlinx.coroutines.CancellationException
-import io.canopy.engine.input.InputFocus
 import io.canopy.engine.ui.UiManager
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
@@ -293,7 +293,18 @@ abstract class App<C : AppConfig> protected constructor() {
         scopedAttempt { EngineLogs.lifecycle.info("event" to "app.dispose") { "Disposing app" } }
         scopedAttempt { beforeExit() }
         if (ownsManagerScope) scopedAttempt { ManagersRegistry.exit() }
-        scopedAttempt { loggingSession?.end(reason = if (failures.failure == null) "normal" else "crash", failure = failures.failure) }
+        scopedAttempt {
+            loggingSession?.end(
+                reason = if (failures.failure ==
+                    null
+                ) {
+                    "normal"
+                } else {
+                    "crash"
+                },
+                failure = failures.failure
+            )
+        }
         scopedAttempt { onExit(this) }
         val session = loggingSession
         loggingSession = null

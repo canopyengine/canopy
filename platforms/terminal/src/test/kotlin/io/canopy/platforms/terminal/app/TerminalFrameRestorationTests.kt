@@ -334,7 +334,7 @@ class TerminalFrameRestorationTests {
             }
         })
         val scenes = ManagersRegistry.getManager(SceneManager::class)
-        scenes.onResize.connect { _, _ -> sceneSizes.add(scenes.sceneSize()) }
+        val resizeConnection = scenes.onResize.connect { _, _ -> sceneSizes.add(scenes.sceneSize()) }
         app.updateTerminalFrame(0f)
         assertEquals("x".repeat(10), rows()[0])
         app.updateTerminalFrame(0f)
@@ -350,6 +350,7 @@ class TerminalFrameRestorationTests {
         assertEquals(listOf(Vector2(20f, 6f), Vector2(8f, 3f), Vector2(12f, 9f)), sceneSizes)
         assertEquals(4, updates)
         assertTrue(app.isPaused)
+        resizeConnection.disconnect()
     }
 
     @Test
@@ -421,7 +422,7 @@ class TerminalFrameRestorationTests {
     }
 
     @Test
-    fun `resize output failure retries unchanged geometry on next native frame`() {
+    fun `resize output can retry but shutdown retains the original failure`() {
         var fail = false
         val (app, _, _) = start { text ->
             check(!fail) { "output unavailable" }
@@ -431,16 +432,17 @@ class TerminalFrameRestorationTests {
         app.updateTerminalFrame(0f)
         viewport = Size(30, 12)
         fail = true
-        assertFailsWith<IllegalStateException> { app.updateTerminalFrame(0f) }
+        val failure = assertFailsWith<IllegalStateException> { app.updateTerminalFrame(0f) }
         fail = false
         val count = output.size
         app.updateTerminalFrame(0f)
         assertEquals(count + 1, output.size)
         assertEquals(mapOf(0 to "same"), rows())
+        assertSame(failure, assertFailsWith<IllegalStateException> { app.fail(failure) })
     }
 
     @Test
-    fun `failed resize callback retries initial geometry before a frame is dispatched`() {
+    fun `failed resize callback retries before dispatch and shutdown retains failure`() {
         var fail = true
         var resizes = 0
         var updates = 0
@@ -451,13 +453,14 @@ class TerminalFrameRestorationTests {
             }
             onUpdate { updates++ }
         })
-        assertFailsWith<IllegalStateException> { app.updateTerminalFrame(0f) }
+        val failure = assertFailsWith<IllegalStateException> { app.updateTerminalFrame(0f) }
         assertEquals(0, updates)
         fail = false
         app.updateTerminalFrame(0f)
         app.updateTerminalFrame(0f)
         assertEquals(2, resizes)
         assertEquals(2, updates)
+        assertSame(failure, assertFailsWith<IllegalStateException> { app.fail(failure) })
     }
 
     @Test

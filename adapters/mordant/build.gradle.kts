@@ -18,7 +18,6 @@ dependencies {
     api(libs.mordant.core)
     api(libs.mordant.coroutines)
 
-
     // Testing
     testImplementation(libs.kotlin.test.junit5)
     testImplementation(libs.junit.jupiter)

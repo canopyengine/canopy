@@ -263,8 +263,8 @@ class JvmHeadlessHostTests {
         assertSame(primary, assertFailsWith<IllegalStateException> { app.launch() })
 
         assertEquals(listOf("manager", "exit"), events)
-        assertEquals(listOf(managerFailure), primary.suppressed.toList())
-        assertEquals(listOf(exitFailure), managerFailure.suppressed.toList())
+        assertEquals(listOf(managerFailure, exitFailure), primary.suppressed.toList())
+        assertTrue(managerFailure.suppressed.isEmpty())
     }
 
     @Test

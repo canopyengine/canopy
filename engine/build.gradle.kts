@@ -22,6 +22,8 @@ dependencies {
     api(libs.slf4j.api)
 
     // Testing
+    // Exercise the core SLF4J bridge against the existing host provider without exporting it at runtime.
+    testImplementation(libs.logback.classic)
     testImplementation(libs.kotlin.test.junit5)
     testImplementation(libs.junit.jupiter)
 }

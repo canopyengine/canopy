@@ -98,49 +98,51 @@ class TerminalCommandPromptTests {
     fun `digit and punctuation toggles suppress only their paired text and modifiers preserve later input`() {
         val input = MordantInputManager()
         val scenes = SceneManager()
-        val host = CommandPromptHost(terminalApp(), TerminalCommandPresentation({ false }, {}, {}))
+        val host = CommandPromptHost(terminalApp(), presentation({ false }, {}))
         ManagersRegistry.withScope {
+            register(InputFocus())
             register(input)
             register(host)
             register(scenes)
+            register(UiManager())
         }
         val prompt = CommandPrompt("Console") { toggleKey = Key.NUM_1 }
         scenes.currScene = prompt
         input.enqueueMordantKeyEvent(KeyboardEvent("1"))
         input.enqueueMordantKeyEvent(KeyboardEvent("x"))
         input.processEvents()
-        assertTrue(prompt.isVisible)
+        assertTrue(prompt.isOpen)
         assertEquals("x", prompt.draft)
         prompt.toggleKey = Key.SEMICOLON
         input.enqueueMordantKeyEvent(KeyboardEvent(";"))
         input.processEvents()
-        assertFalse(prompt.isVisible)
+        assertFalse(prompt.isOpen)
         input.enqueueMordantKeyEvent(KeyboardEvent(";"))
         input.enqueueMordantKeyEvent(KeyboardEvent("y"))
         input.processEvents()
-        assertTrue(prompt.isVisible)
+        assertTrue(prompt.isOpen)
         assertEquals("xy", prompt.draft)
-        prompt.hide()
+        prompt.close()
         prompt.toggleKey = Key.Z
         input.enqueueMordantKeyEvent(KeyboardEvent("Z", shift = true))
         input.enqueueMordantKeyEvent(KeyboardEvent("a"))
         input.processEvents()
-        assertTrue(prompt.isVisible)
+        assertTrue(prompt.isOpen)
         assertEquals("xya", prompt.draft)
-        prompt.hide()
+        prompt.close()
         input.enqueueMordantKeyEvent(KeyboardEvent("z", ctrl = true))
         // A modifier toggle emits no paired text; an independent following text event must survive.
         input.enqueue(TextInputEvent("z"))
         input.enqueueMordantKeyEvent(KeyboardEvent("x"))
         input.processEvents()
-        assertTrue(prompt.isVisible)
+        assertTrue(prompt.isOpen)
         assertEquals("xyazx", prompt.draft)
-        prompt.hide()
+        prompt.close()
         prompt.toggleKey = Key.NUM_LOCK
         input.enqueueMordantKeyEvent(KeyboardEvent("NumLock"))
         input.enqueue(TextInputEvent("LOCK"))
         input.processEvents()
-        assertTrue(prompt.isVisible)
+        assertTrue(prompt.isOpen)
         assertEquals("xyazxLOCK", prompt.draft)
     }
 
