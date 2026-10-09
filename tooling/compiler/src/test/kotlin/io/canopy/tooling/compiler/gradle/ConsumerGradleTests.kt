@@ -23,7 +23,7 @@ class ConsumerGradleTests {
                 """
                 plugins {
                     id("org.jetbrains.kotlin.jvm") version "$CANOPY_KOTLIN_VERSION"
-                    id("io.canopy.compiler") version "$CANOPY_VERSION"
+                    id("io.github.canopyengine.compiler") version "$CANOPY_VERSION"
                 }
                 repositories { maven { url = uri("repository") }; mavenCentral() }
                 kotlin { jvmToolchain(17) }
