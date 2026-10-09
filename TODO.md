@@ -3,10 +3,11 @@
 Reviewed against the combined integration implementation on 2026-10-08.
 [Engine PR #208](https://github.com/canopyengine/canopy/pull/208) and
 [docs PR #45](https://github.com/canopyengine/canopy-docs/pull/45) contain the
-consolidated housekeeping work. Proposed integration code is not merged `main`
-or a published stable release. Version remains `0.1.0-dev2`.
+consolidated housekeeping work, now merged into `main`. Maven namespace migration
+#214 is merged too. Source prepares `0.1.0-alpha.1`; it is not a published Central
+release or stable 0.1.0. See [publication preparation](tooling/central/README.md).
 
-## Implemented in the integration branch
+## Implemented in merged main
 
 - Direct-type TreeSystem membership; ordered scene membership and lifecycle cleanup.
 - Shared cleanup aggregation, reactive subscription bookkeeping, atomic input batches,
@@ -25,13 +26,14 @@ they are not current release verification reports.
 
 ## Remaining 0.1.0 release gates
 
-- [ ] Review and merge consolidated engine PR #208, then docs PR #45; verify resulting `main`.
+- [x] Merge consolidated engine PR #208 and docs PR #45.
 - [ ] Finish the deterministic command-driven ecosystem demo: rabbits/foxes, nine day
   phases, food/water/cover, naturally evolving weather, minimum status/events UI,
   live commands and explicit pause/resume.
 - [ ] Exercise the full demo including resize, focus, lifecycle and shutdown.
 - [ ] Establish immutable matching engine/compiler/plugin publication and verify a fresh
-  external consumer. Local Maven publication is currently the documented path.
+  external consumer. Signed Central staging is prepared; owner credentials, Portal validation/publication
+  and remote consumer verification remain pending.
 - [ ] Finalize release notes, supported limits and extension examples.
 - [ ] Decide whether a simple CLI ships with 0.1.0; no supported `canopy new` exists.
 - [ ] Declare the feature freeze after demo validation; accept release fixes and packaging.

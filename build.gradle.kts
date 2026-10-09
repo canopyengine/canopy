@@ -14,6 +14,7 @@ plugins {
     alias(libs.plugins.kotlin.jvm) apply false
     alias(libs.plugins.kotlin.serialization) apply false
     alias(libs.plugins.ktlint) apply false
+    alias(libs.plugins.dokka) apply false
 }
 
 group = "io.github.canopyengine"
@@ -66,10 +67,25 @@ subprojects {
             sourceCompatibility = JavaVersion.VERSION_25
             targetCompatibility = JavaVersion.VERSION_25
             withSourcesJar()
+
         }
     }
 
     plugins.withId("maven-publish") {
+        pluginManager.apply("org.jetbrains.dokka")
+        extensions.configure<org.jetbrains.dokka.gradle.DokkaExtension> {
+            dokkaSourceSets.configureEach {
+                // Documentation must not depend on remote package-list availability.
+                enableJdkDocumentationLink.set(false)
+                enableKotlinStdLibDocumentationLink.set(false)
+            }
+        }
+        val apiDocumentationJar = tasks.register<Jar>("apiDocumentationJar") {
+            archiveClassifier.set("javadoc")
+            dependsOn("dokkaGeneratePublicationHtml")
+            from(layout.buildDirectory.dir("dokka/html"))
+        }
+        apply(from = rootProject.file("gradle/central-publication.gradle.kts"))
         extensions.configure<PublishingExtension>("publishing") {
             publications {
                 create("mavenJava", MavenPublication::class.java) {
@@ -78,6 +94,7 @@ subprojects {
                         from(javaComponent)
                     }
 
+                    artifact(apiDocumentationJar)
                     artifactId = project.path.removePrefix(":").replace(":", "-")
 
                     pom {
@@ -202,4 +219,25 @@ coverageReport.configure {
         sourceDirectories.from(file("tooling/compiler/src/$sourceSet/kotlin"))
         classDirectories.from(file("tooling/compiler/build/classes/kotlin/$sourceSet"))
     }
+}
+
+// Stage all enabled artifacts together, including compiler implementation and plugin markers.
+val stageCentralPublication = tasks.register("stageCentralPublication") {
+    group = "publishing"
+    description = "Stages Maven Central artifacts locally; does not upload or release them."
+    dependsOn(gradle.includedBuild("compiler").task(":publishAllPublicationsToCentralStagingRepository"))
+}
+subprojects {
+    plugins.withId("maven-publish") {
+        stageCentralPublication.configure {
+            dependsOn(tasks.named("publishAllPublicationsToCentralStagingRepository"))
+        }
+    }
+}
+
+// Run this separately before staging: included builds may publish concurrently.
+tasks.register<Delete>("cleanCentralStaging") {
+    group = "publishing"
+    description = "Removes the previous local Central bundle and Maven staging repository."
+    delete(layout.buildDirectory.dir("central-repository"), layout.buildDirectory.file("central-bundle.zip"))
 }
