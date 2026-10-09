@@ -49,7 +49,7 @@ class InstalledLogDirectoryTests {
                 installedLogDirectory("Publisher", name, "Linux", { null }, home)
             }
         }
-        assertFailsWith<IllegalArgumentException> { LogbackLogging.Retention(minimumRuns = -1) }
+        assertFailsWith<IllegalArgumentException> { LogbackLogging.Retention(maxRuns = -1) }
         assertFailsWith<IllegalArgumentException> { LogbackLogging.Retention(targetBytes = -1) }
     }
 }

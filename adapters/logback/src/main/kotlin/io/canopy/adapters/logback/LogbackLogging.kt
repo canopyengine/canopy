@@ -43,10 +43,14 @@ class LogbackLogging(private val config: Config = Config()) : LoggingPolicy {
         DIAGNOSTIC,
     }
 
-    /** Completed-history limits. The newest [minimumRuns] are protected even if they exceed [targetBytes]. */
-    data class Retention(val minimumRuns: Int = 10, val targetBytes: Long = 100L * 1024 * 1024) {
+    /**
+     * Completed-history caps, applied at startup and after isolated runs close.
+     * Oldest owned runs are removed until both [maxRuns] and [targetBytes] fit; fewer runs may remain.
+     * Current/active and unrecognized data are excluded. Cleanup is best-effort when files cannot be removed.
+     */
+    data class Retention(val maxRuns: Int = 10, val targetBytes: Long = 100L * 1024 * 1024) {
         init {
-            require(minimumRuns >= 0) { "minimumRuns must not be negative" }
+            require(maxRuns >= 0) { "maxRuns must not be negative" }
             require(targetBytes >= 0) { "targetBytes must not be negative" }
         }
     }
@@ -89,13 +93,14 @@ class LogbackLogging(private val config: Config = Config()) : LoggingPolicy {
             session.open()
             session.withContext {
                 val history = files.cleanupHistory()
-                if (history.bytes > config.retention.targetBytes) {
+                if (history.bytes > config.retention.targetBytes || history.runs > config.retention.maxRuns) {
                     engineLogger("session").warn(
                         "event" to "history.budget",
                         "historyBytes" to history.bytes,
                         "targetBytes" to config.retention.targetBytes,
-                        "protectedRuns" to config.retention.minimumRuns
-                    ) { "Completed log history exceeds its target; protected runs and active logs were preserved" }
+                        "historyRuns" to history.runs,
+                        "maxRuns" to config.retention.maxRuns
+                    ) { "Unable to trim all completed log history; active and unrecognized data were preserved" }
                 }
                 if (config.banner) ConsoleBanner.print(engineVersion, ConsoleBanner.Mode.GRADIENT)
                 engineLogger("session").info(

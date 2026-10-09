@@ -52,6 +52,8 @@ internal class ManagedLogFiles private constructor(
                 currentLease?.close()
             }
         }
+        // Append handles and leases are closed before completed-run cleanup; no logger output is emitted here.
+        cleanupHistory()
     }
 
     companion object {
@@ -200,8 +202,8 @@ internal class ManagedLogFiles private constructor(
         private data class HistoryEntry(val directory: Path, val startedAt: String, val bytes: Long)
 
         private fun cleanupHistory(base: Path, retention: LogbackLogging.Retention): HistoryResult {
-            val lease = Lease.tryOpen(base.resolve(HISTORY_LOCK)) ?: return HistoryResult(0, 0)
             return try {
+                val lease = Lease.tryOpen(base.resolve(HISTORY_LOCK)) ?: return HistoryResult(0, 0)
                 lease.use { cleanupUnlockedHistory(base, retention) }
             } catch (_: java.io.IOException) {
                 HistoryResult(0, 0)
@@ -241,8 +243,8 @@ internal class ManagedLogFiles private constructor(
             }.sortedByDescending { java.time.Instant.parse(it.startedAt) }
             var bytes = entries.sumOf { it.bytes }
             var runs = entries.size
-            for (entry in entries.drop(retention.minimumRuns).asReversed()) {
-                if (bytes <= retention.targetBytes) break
+            for (entry in entries.asReversed()) {
+                if (bytes <= retention.targetBytes && runs <= retention.maxRuns) break
                 if (deleteHistory(entry)) {
                     bytes -= entry.bytes
                     runs--

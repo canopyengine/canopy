@@ -32,7 +32,7 @@ The proposed version is available from a local source build until it is publishe
 - Interactive terminal hosting with queued keyboard input, plus a separate
   LibGDX headless host.
 - Backend-neutral file handles, JSON/TOML codecs, ID registries and modular saves.
-- Two current text log files under `.canopy/logs` out of the box, with protected history and opt-in JSON diagnostics,
+- Two current text log files under `.canopy/logs` out of the box, with bounded history and opt-in JSON diagnostics,
   plus ktlint, CodeQL and aggregate coverage reporting.
 
 Desktop sources are present but excluded from the build. The enabled platforms
@@ -49,10 +49,11 @@ A terminal or headless game writes `engine.log` (engine and session diagnostics)
 and `app.log` (your game messages) inside `.canopy/logs`. Logs stay out of the
 terminal. No project `logback.xml` is needed.
 
-Previous current logs move into `history` when the next standard run starts. The newest
-10 completed runs are protected. Older Canopy-owned history is removed when
-needed to meet the 100 MiB target; protected runs can exceed that target. Active
-runs, legacy folders and unrecognized user files are preserved. Simultaneous
+Previous current logs move into `history` when the next standard run starts. Cleanup
+keeps at most 10 completed runs within a 100 MiB budget, removing the oldest first.
+Large logs can leave fewer than 10 runs. Cleanup runs at startup and after an
+isolated run closes; it is best-effort when files cannot be removed. Current and
+active runs, legacy folders and unrecognized user files are preserved. Simultaneous
 runs use separate text-only folders instead of sharing current files.
 
 For structured JSON diagnostics, select the mode inside your app builder before launch:

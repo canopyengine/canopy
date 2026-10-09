@@ -186,29 +186,31 @@ class ManagedLogFilesTests {
     }
 
     @Test
-    fun `retention protects newest ten active current unknown and malformed data`() {
+    fun `retention enforces both caps while preserving active current unknown and malformed data`() {
         // Arrange
         repeat(12) { completed("old-$it", it) }
         val active = ManagedLogFiles.open(config("active", diagnostic = true), "active")
-        val current = ManagedLogFiles.open(config("current", retention = LogbackLogging.Retention(10, 1)), "current")
+        val current = ManagedLogFiles.open(config("current", retention = LogbackLogging.Retention(10, 8192)), "current")
         val unknown = Files.createDirectory(directory.resolve("legacy"))
         unknown.resolve("user.txt").writeText("preserved")
         val malformed = Files.createDirectory(directory.resolve("malformed"))
         malformed.resolve(".canopy-run.properties").writeText(
             "schema=canopy-managed-logs-v1\nrunId=malformed\nstate=complete\nvalue=\\uQQQQ"
         )
-        directory.resolve("old-0").resolve("engine.log").writeText("oldest-data")
+        active.directory.resolve("engine.log").writeText("active-data")
+        current.rollingDirectory.resolve("engine.2026-01-01.0.log").writeText("active-rolling-data")
         try {
             // Act
             val result = current.cleanupHistory()
 
             // Assert
-            assertEquals(10, result.runs)
-            assertTrue(result.bytes > 1) // Preserve ten even though they exceed the byte target.
+            assertTrue(result.runs in 1..9)
+            assertTrue(result.bytes <= 8192)
             assertFalse(Files.exists(directory.resolve("old-0")))
             assertFalse(Files.exists(directory.resolve("old-1")))
-            (2..11).forEach { assertTrue(Files.exists(directory.resolve("old-$it/engine.log"))) }
-            assertTrue(Files.exists(active.directory))
+            assertTrue(Files.exists(directory.resolve("old-11/engine.log")))
+            assertEquals("active-data", active.directory.resolve("engine.log").readText())
+            assertEquals("active-rolling-data", current.rollingDirectory.resolve("engine.2026-01-01.0.log").readText())
             assertTrue(Files.exists(directory.resolve("engine.log")))
             assertEquals("preserved", unknown.resolve("user.txt").readText())
             assertTrue(Files.exists(malformed.resolve(".canopy-run.properties")))
@@ -219,17 +221,74 @@ class ManagedLogFilesTests {
     }
 
     @Test
-    fun `completed histories below budget keep more than ten runs`() {
+    fun `completed histories below byte budget still retain at most ten runs`() {
         // Arrange
         repeat(12) { completed("small-$it", it, payload = "small") }
         val current = ManagedLogFiles.open(config("current"), "current")
         try {
             // Act and Assert
-            assertEquals(12, current.cleanupHistory().runs)
-            repeat(12) { assertTrue(Files.exists(directory.resolve("small-$it"))) }
+            val result = current.cleanupHistory()
+            assertEquals(10, result.runs)
+            assertTrue(result.bytes <= LogbackLogging.Retention().targetBytes)
+            assertFalse(Files.exists(directory.resolve("small-0")))
+            assertFalse(Files.exists(directory.resolve("small-1")))
+            (2..11).forEach { assertTrue(Files.exists(directory.resolve("small-$it/engine.log"))) }
         } finally {
             current.close()
         }
+    }
+
+    @Test
+    fun `byte budget can retain fewer than ten completed runs`() {
+        // Arrange
+        repeat(3) { completed("large-$it", it) }
+        val current = ManagedLogFiles.open(config("current", retention = LogbackLogging.Retention(10, 1600)), "current")
+        try {
+            // Act
+            val result = current.cleanupHistory()
+
+            // Assert
+            assertEquals(1, result.runs)
+            assertTrue(result.bytes <= 1600)
+            assertFalse(Files.exists(directory.resolve("large-0")))
+            assertFalse(Files.exists(directory.resolve("large-1")))
+            assertTrue(Files.exists(directory.resolve("large-2/engine.log")))
+        } finally {
+            current.close()
+        }
+    }
+
+    @Test
+    fun `closing an oversized isolated run enforces budget without waiting for another launch`() {
+        // Arrange
+        val run = ManagedLogFiles.open(
+            config("oversized", diagnostic = true, retention = LogbackLogging.Retention(10, 1024)),
+            "oversized"
+        )
+        run.directory.resolve("engine.log").writeText("x".repeat(2048))
+        assertTrue(Files.exists(run.directory))
+
+        // Act
+        run.close()
+
+        // Assert
+        assertFalse(Files.exists(run.directory))
+    }
+
+    @Test
+    fun `closing an isolated run enforces count without waiting for another launch`() {
+        // Arrange
+        repeat(10) { completed("previous-$it", it, payload = "small") }
+        val run = ManagedLogFiles.open(config("newest", diagnostic = true), "newest")
+        run.directory.resolve("engine.log").writeText("newest-data")
+
+        // Act
+        run.close()
+
+        // Assert
+        assertFalse(Files.exists(directory.resolve("previous-0")))
+        (1..9).forEach { assertTrue(Files.exists(directory.resolve("previous-$it/engine.log"))) }
+        assertEquals("newest-data", run.directory.resolve("engine.log").readText())
     }
 
     @Test
@@ -289,7 +348,10 @@ class ManagedLogFilesTests {
     }
 
     private fun completed(id: String, order: Int, payload: String = "x".repeat(1024)) {
-        val run = ManagedLogFiles.open(config(id, diagnostic = true), id)
+        val run = ManagedLogFiles.open(
+            config(id, diagnostic = true, retention = LogbackLogging.Retention(Int.MAX_VALUE, Long.MAX_VALUE)),
+            id
+        )
         run.directory.resolve("engine.log").writeText(payload)
         run.close()
         val marker = run.directory.resolve(".canopy-run.properties")
