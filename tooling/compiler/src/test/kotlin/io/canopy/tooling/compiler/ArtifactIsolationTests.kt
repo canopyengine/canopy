@@ -29,7 +29,7 @@ class ArtifactIsolationTests {
         }
         JarFile(System.getProperty("canopy.gradle.jar")).use { gradle ->
             assertTrue(gradle.getJarEntry("io/canopy/tooling/compiler/gradle/CanopyCompilerPlugin.class") != null)
-            assertTrue(gradle.getJarEntry("META-INF/gradle-plugins/io.canopy.compiler.properties") != null)
+            assertTrue(gradle.getJarEntry("META-INF/gradle-plugins/io.github.canopyengine.compiler.properties") != null)
             assertFalse(gradle.getJarEntry("io/canopy/tooling/compiler/CanopyCompilerRegistrar.class") != null)
             assertFalse(
                 gradle.getJarEntry("META-INF/services/org.jetbrains.kotlin.compiler.plugin.CompilerPluginRegistrar") !=
@@ -37,7 +37,10 @@ class ArtifactIsolationTests {
             )
         }
         val repository = File(System.getProperty("canopy.verification.repository"))
-        val marker = repository.walkTopDown().single { it.name.endsWith(".pom") && "gradle.plugin" in it.name }
+        val marker = repository.resolve("io/github/canopyengine/compiler").walkTopDown().single {
+            it.name.endsWith(".pom") && "io.github.canopyengine.compiler.gradle.plugin" in it.name
+        }
+        assertTrue("<groupId>io.github.canopyengine</groupId>" in marker.readText())
         assertTrue("<artifactId>canopy-compiler-gradle</artifactId>" in marker.readText())
     }
 }

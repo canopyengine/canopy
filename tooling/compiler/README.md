@@ -8,8 +8,8 @@ The module builds two isolated artifacts at the engine version:
 
 | Source set | Artifact | Execution host |
 | --- | --- | --- |
-| `compiler` | `io.canopy:canopy-compiler` | Kotlin compiler |
-| `main` | `io.canopy:canopy-compiler-gradle` | Gradle |
+| `compiler` | `io.github.canopyengine:canopy-compiler` | Kotlin compiler |
+| `main` | `io.github.canopyengine:canopy-compiler-gradle` | Gradle |
 
 The compiler artifact contains its registrar, rule SPI, checks and compiler service
 registration. The Gradle artifact contains only integration classes and the plugin
@@ -56,7 +56,7 @@ Apply the plugin to every Kotlin game module declaring custom nodes:
 ```kotlin
 plugins {
     kotlin("jvm") version "2.4.10"
-    id("io.canopy.compiler") version "0.1.0-dev2"
+    id("io.github.canopyengine.compiler") version "0.1.0-dev2"
 }
 ```
 
@@ -186,3 +186,19 @@ Kotlin version; it is not a version-independent binary API. Consumer compilation
 fixtures verify supported automatic properties, unsupported declarations, payload-free JVM classes,
 managed delegates and an independent provider
 running alongside the mandatory rule.
+
+## Maven namespace migration
+
+Maven artifacts now use `io.github.canopyengine`, and the Gradle plugin ID is
+`io.github.canopyengine.compiler`. Replace the former `io.canopy` dependency
+group and `io.canopy.compiler` plugin ID together, then rebuild consumers. Kotlin
+packages and imports remain `io.canopy.*`; source code does not need an import
+migration. Old coordinates are not aliases or relocation publications.
+
+The plugin marker is
+`io.github.canopyengine.compiler:io.github.canopyengine.compiler.gradle.plugin`,
+which stays within the verified `io.github.canopyengine` namespace. Changing
+coordinates prepares publication; this change does not publish to Maven Central.
+Until a release is published, build the matching artifacts with
+`./gradlew publishToMavenLocal` and include `mavenLocal()` in dependency and
+plugin-management repositories.

@@ -17,7 +17,7 @@ import org.jetbrains.kotlin.ir.visitors.acceptChildrenVoid
 
 /** Installs mandatory engine checks and additional rule providers from the compiler plugin classpath. */
 class CanopyCompilerRegistrar : CompilerPluginRegistrar() {
-    override val pluginId: String = "io.canopy.compiler"
+    override val pluginId: String = "io.github.canopyengine.compiler"
     override val supportsK2: Boolean = true
 
     override fun ExtensionStorage.registerExtensions(configuration: CompilerConfiguration) {

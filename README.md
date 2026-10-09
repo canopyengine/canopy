@@ -71,15 +71,19 @@ repositories {
     mavenCentral()
 }
 dependencies {
-    implementation("io.canopy:engine:0.1.0-dev2")
-    implementation("io.canopy:platforms-terminal:0.1.0-dev2")
+    implementation("io.github.canopyengine:engine:0.1.0-dev2")
+    implementation("io.github.canopyengine:platforms-terminal:0.1.0-dev2")
 }
 kotlin { jvmToolchain(25) }
 ```
 
-For headless hosting use `io.canopy:platforms-headless:0.1.0-dev2` instead.
+For headless hosting use `io.github.canopyengine:platforms-headless:0.1.0-dev2` instead.
 The headless host does not supply terminal input or filesystem asset services.
 These instructions do not assume the snapshot is published to Maven Central.
+When migrating an existing project, replace the `io.canopy` Maven group with
+`io.github.canopyengine` and the `io.canopy.compiler` Gradle plugin ID with
+`io.github.canopyengine.compiler`. Kotlin packages/imports remain unchanged.
+See the [compiler migration notes](tooling/compiler/README.md#maven-namespace-migration).
 
 ```kotlin
 import io.canopy.engine.app.Screen
