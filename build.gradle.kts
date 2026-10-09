@@ -9,14 +9,14 @@ val canopyVersion = project.property("canopyVersion") ?: ""
 
 plugins {
     base
-    id("io.canopy.compiler") apply false
+    id("io.github.canopyengine.compiler") apply false
     jacoco
     alias(libs.plugins.kotlin.jvm) apply false
     alias(libs.plugins.kotlin.serialization) apply false
     alias(libs.plugins.ktlint) apply false
 }
 
-group = "io.canopy"
+group = "io.github.canopyengine"
 version = canopyVersion
 
 allprojects {
@@ -24,7 +24,7 @@ allprojects {
     apply(plugin = "eclipse")
     apply(plugin = "idea")
 
-    group = "io.canopy"
+    group = "io.github.canopyengine"
     version = canopyVersion
 
     extensions.configure<IdeaModel> {
@@ -43,7 +43,7 @@ subprojects {
     }
 
     plugins.withId("org.jetbrains.kotlin.jvm") {
-        pluginManager.apply("io.canopy.compiler")
+        pluginManager.apply("io.github.canopyengine.compiler")
 
         // Use the shared Jar base type so both Java and Kotlin source archives keep this metadata.
         if (project.path in setOf(":engine", ":adapters:libgdx", ":adapters:mordant", ":adapters:logback")) {

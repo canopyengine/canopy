@@ -11,7 +11,7 @@ plugins {
     jacoco
 }
 val canopyProperties = Properties().apply { file("../../gradle.properties").inputStream().use(::load) }
-group = "io.canopy"
+group = "io.github.canopyengine"
 version = canopyProperties.getProperty("canopyVersion").trim()
 kotlin { jvmToolchain(17) }
 
@@ -33,7 +33,7 @@ dependencies {
 gradlePlugin {
     plugins {
         create("canopyCompiler") {
-            id = "io.canopy.compiler"
+            id = "io.github.canopyengine.compiler"
             implementationClass = "io.canopy.tooling.compiler.gradle.CanopyCompilerPlugin"
             displayName = "Canopy compiler checks"
             description = "Installs extensible Canopy compile-time checks, including mandatory node state safety."
@@ -77,7 +77,7 @@ val compilerElements = configurations.create("compilerElements") {
         attribute(Bundling.BUNDLING_ATTRIBUTE, objects.named(Bundling.EXTERNAL))
         attribute(TargetJvmVersion.TARGET_JVM_VERSION_ATTRIBUTE, 17)
     }
-    outgoing.capability("io.canopy:canopy-compiler-checks:${project.version}")
+    outgoing.capability("io.github.canopyengine:canopy-compiler-checks:${project.version}")
     outgoing.artifact(compilerJar)
 }
 
