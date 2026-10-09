@@ -3,17 +3,18 @@
 <p align="center"><img src="logo.png" width="420" alt="Canopy Engine logo"></p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/version-0.1.0--alpha.1-red.svg" alt="Canopy version 0.1.0-alpha.1">
+  <img src="https://img.shields.io/badge/version-0.1.0--alpha.2-red.svg" alt="Canopy version 0.1.0-alpha.2">
   <img src="https://img.shields.io/badge/kotlin-2.4.10-blue.svg" alt="Kotlin version 2.4.10">
   <img src="https://img.shields.io/badge/license-MIT%20OR%20Apache--2.0-green.svg" alt="License: MIT or Apache 2.0">
 </p>
 
-**Canopy 0.1.0-alpha.1** is an experimental Kotlin/JVM engine built around node
+**Canopy 0.1.0-alpha.2** is an experimental Kotlin/JVM engine built around node
 trees, composable behaviors and reactive state. This is a development snapshot;
 public APIs may change before stable 0.1.0. This README describes the combined
 implementation merged through [PR #208](https://github.com/canopyengine/canopy/pull/208),
-not a published stable release. `0.1.0-alpha.1` is the proposed first Central
-prerelease and has not been published yet. See the
+not a published stable release. `0.1.0-alpha.1` is published on Maven Central;
+this source prepares `0.1.0-alpha.2`, including restored file-only logging defaults.
+The proposed version is available from a local source build until it is published. See the
 [publication and secret setup guide](tooling/central/README.md).
 
 ## Current capabilities
@@ -31,7 +32,8 @@ prerelease and has not been published yet. See the
 - Interactive terminal hosting with queued keyboard input, plus a separate
   LibGDX headless host.
 - Backend-neutral file handles, JSON/TOML codecs, ID registries and modular saves.
-- Structured logging, ktlint, CodeQL and aggregate coverage reporting.
+- File-only engine/session and game logging under `.canopy/logs` out of the box,
+  plus ktlint, CodeQL and aggregate coverage reporting.
 
 Desktop sources are present but excluded from the build. The enabled platforms
 do not currently provide a supported graphical sprite or collision workflow.
@@ -73,13 +75,13 @@ repositories {
     mavenCentral()
 }
 dependencies {
-    implementation("io.github.canopyengine:engine:0.1.0-alpha.1")
-    implementation("io.github.canopyengine:platforms-terminal:0.1.0-alpha.1")
+    implementation("io.github.canopyengine:engine:0.1.0-alpha.2")
+    implementation("io.github.canopyengine:platforms-terminal:0.1.0-alpha.2")
 }
 kotlin { jvmToolchain(25) }
 ```
 
-For headless hosting use `io.github.canopyengine:platforms-headless:0.1.0-alpha.1` instead.
+For headless hosting use `io.github.canopyengine:platforms-headless:0.1.0-alpha.2` instead.
 The headless host does not supply terminal input or filesystem asset services.
 These instructions do not assume the snapshot is published to Maven Central.
 When migrating an existing project, replace the `io.canopy` Maven group with

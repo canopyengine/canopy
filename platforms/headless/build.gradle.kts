@@ -11,5 +11,6 @@ dependencies {
     implementation(projects.tooling.utils)
     implementation(projects.adapters.libgdx)
 
-    // Logging
+    // File-only managed logging, available by default without project configuration.
+    api(projects.adapters.logback)
 }
