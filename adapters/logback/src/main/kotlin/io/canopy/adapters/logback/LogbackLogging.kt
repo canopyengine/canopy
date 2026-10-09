@@ -1,6 +1,5 @@
 package io.canopy.adapters.logback
 
-import java.nio.file.Files
 import java.nio.file.Path
 import java.time.Duration
 import java.time.Instant
@@ -26,7 +25,8 @@ import net.logstash.logback.encoder.LogstashEncoder
 import org.slf4j.LoggerFactory
 
 /**
- * Per-application file logging: engine/session diagnostics use engine.log/jsonl; game logs use app.log/jsonl.
+ * File-only logging: current engine/session and game diagnostics use `.canopy/logs/engine.log` and `app.log`.
+ * [Mode.DIAGNOSTIC] adds JSONL and a separate run directory. Concurrent standard runs use separate text-only folders.
  * Defaults temporarily replace host appenders with files, enabling engine and game DEBUG logging.
  * The last managed session restores the previous host configuration without resetting or stopping its backend.
  * Unscoped events belong to the sole active session; overlapping applications must use their logging context.
@@ -34,8 +34,25 @@ import org.slf4j.LoggerFactory
  * Select [LoggingPolicy.Host] to leave host output entirely under the caller's control.
  */
 class LogbackLogging(private val config: Config = Config()) : LoggingPolicy {
+    /** Diagnostic detail and layout selected before application entry; changing mode during a run is unsupported. */
+    enum class Mode {
+        /** Two current text files; previous runs are archived under `history` at the next start. */
+        STANDARD,
+
+        /** Separate run folders containing text and JSONL files for structured diagnosis. */
+        DIAGNOSTIC,
+    }
+
+    /** Completed-history limits. The newest [minimumRuns] are protected even if they exceed [targetBytes]. */
+    data class Retention(val minimumRuns: Int = 10, val targetBytes: Long = 100L * 1024 * 1024) {
+        init {
+            require(minimumRuns >= 0) { "minimumRuns must not be negative" }
+            require(targetBytes >= 0) { "targetBytes must not be negative" }
+        }
+    }
+
     /**
-     * Managed output options; an explicit [runId] must identify a new directory beneath [baseLogDir].
+     * Managed output options; an explicit [runId] must identify a new run beneath [baseLogDir].
      * [preserveHostOutput] retains host appenders, levels and routing, capturing only scoped events in files.
      * Sessions with different host-output policies cannot overlap in the same Logback context.
      * [banner] controls intentional startup artwork, independently of diagnostic logging.
@@ -45,24 +62,41 @@ class LogbackLogging(private val config: Config = Config()) : LoggingPolicy {
         val runId: String? = null,
         val banner: Boolean = true,
         val preserveHostOutput: Boolean = false,
-    )
+        val mode: Mode = Mode.STANDARD,
+        val retention: Retention = Retention(),
+    ) {
+        companion object {
+            /**
+             * Explicit installed-game storage: Windows LOCALAPPDATA, Linux XDG_STATE_HOME or macOS Library/Logs.
+             * [publisher] and [game] must be portable single directory names. Environment fallbacks use user.home.
+             * The default [Config] remains project-relative; [baseLogDir] accepts an explicit custom path.
+             */
+            fun forInstalledGame(publisher: String, game: String, mode: Mode = Mode.STANDARD): Config =
+                Config(baseLogDir = installedLogDirectory(publisher, game), mode = mode)
+        }
+    }
 
     override fun start(engineVersion: String): LoggingSession {
         val context = LoggerFactory.getILoggerFactory() as? LoggerContext
             ?: error("Managed logging requires the SLF4J Logback backend; select LoggingPolicy.Host for other backends")
         val token = UUID.randomUUID().toString()
         val runId = config.runId ?: "${FOLDER_TIME.format(ZonedDateTime.now())}-$token"
-        require(
-            runId.isNotBlank() && runId != "." && runId != ".." && '/' !in runId && '\\' !in runId && ':' !in runId
-        ) {
-            "runId must be one directory name"
-        }
-        Files.createDirectories(config.baseLogDir)
-        val directory = Files.createDirectory(config.baseLogDir.resolve(runId)).toAbsolutePath()
-        val session = Session(context, directory, runId, token, engineVersion, config.preserveHostOutput)
+        requireLogDirectoryName(runId)
+        val files = ManagedLogFiles.open(config, runId)
+        val directory = files.directory
+        val session = Session(context, files, runId, token, engineVersion, config.preserveHostOutput)
         try {
             session.open()
             session.withContext {
+                val history = files.cleanupHistory()
+                if (history.bytes > config.retention.targetBytes) {
+                    engineLogger("session").warn(
+                        "event" to "history.budget",
+                        "historyBytes" to history.bytes,
+                        "targetBytes" to config.retention.targetBytes,
+                        "protectedRuns" to config.retention.minimumRuns
+                    ) { "Completed log history exceeds its target; protected runs and active logs were preserved" }
+                }
                 if (config.banner) ConsoleBanner.print(engineVersion, ConsoleBanner.Mode.GRADIENT)
                 engineLogger("session").info(
                     "event" to "session.start",
@@ -86,7 +120,7 @@ class LogbackLogging(private val config: Config = Config()) : LoggingPolicy {
 
     private class Session(
         private val context: LoggerContext,
-        private val directory: Path,
+        private val files: ManagedLogFiles,
         private val runId: String,
         private val token: String,
         private val engineVersion: String,
@@ -104,7 +138,7 @@ class LogbackLogging(private val config: Config = Config()) : LoggingPolicy {
             Routing.open(context, token, preserveHostOutput)
             registered = true
             for (engine in listOf(true, false)) {
-                for (json in listOf(false, true)) addAppender(engine, json)
+                for (json in if (files.json) listOf(false, true) else listOf(false)) addAppender(engine, json)
             }
         }
 
@@ -127,7 +161,7 @@ class LogbackLogging(private val config: Config = Config()) : LoggingPolicy {
             }
             appender.context = context
             appender.name = "canopy-$token-$category-$extension"
-            appender.file = directory.resolve("$category.$extension").toString()
+            appender.file = files.directory.resolve("$category.$extension").toString()
             val encoder: Encoder<ILoggingEvent> = if (json) {
                 LogstashEncoder().also { it.context = context }
             } else {
@@ -139,9 +173,9 @@ class LogbackLogging(private val config: Config = Config()) : LoggingPolicy {
             val rolling = SizeAndTimeBasedRollingPolicy<ILoggingEvent>().also {
                 it.context = context
                 it.setParent(appender)
-                it.fileNamePattern = directory.resolve("$category.%d{yyyy-MM-dd}.%i.$extension").toString()
+                it.fileNamePattern = files.rollingDirectory.resolve("$category.%d{yyyy-MM-dd}.%i.$extension").toString()
                 it.setMaxFileSize(FileSize.valueOf("10MB"))
-                it.maxHistory = 30
+                // Completed-run retention owns cleanup; rolling must never remove part of an active run.
             }
             // Track all children before starting any so partial initialization can release them.
             owned += OwnedAppender(logger, appender, encoder, rolling)
@@ -224,6 +258,7 @@ class LogbackLogging(private val config: Config = Config()) : LoggingPolicy {
                 registered = false
                 attempt { Routing.close(context, token) }
             }
+            attempt { files.close() }
             failure?.let { throw it }
         }
     }

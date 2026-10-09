@@ -32,7 +32,7 @@ The proposed version is available from a local source build until it is publishe
 - Interactive terminal hosting with queued keyboard input, plus a separate
   LibGDX headless host.
 - Backend-neutral file handles, JSON/TOML codecs, ID registries and modular saves.
-- File-only engine/session and game logging under `.canopy/logs` out of the box,
+- Two current text log files under `.canopy/logs` out of the box, with protected history and opt-in JSON diagnostics,
   plus ktlint, CodeQL and aggregate coverage reporting.
 
 Desktop sources are present but excluded from the build. The enabled platforms
@@ -42,6 +42,36 @@ backend is claimed.
 Fixed physics callbacks do not themselves supply a physics simulation.
 There is no supported `canopy new` CLI. The ecosystem demo remains a scaffold;
 its agreed 0.1.0 target uses rabbits and foxes with nine abstract day phases.
+
+## Logs without setup
+
+A terminal or headless game writes `engine.log` (engine and session diagnostics)
+and `app.log` (your game messages) inside `.canopy/logs`. Logs stay out of the
+terminal. No project `logback.xml` is needed.
+
+Previous current logs move into `history` when the next standard run starts. The newest
+10 completed runs are protected. Older Canopy-owned history is removed when
+needed to meet the 100 MiB target; protected runs can exceed that target. Active
+runs, legacy folders and unrecognized user files are preserved. Simultaneous
+runs use separate text-only folders instead of sharing current files.
+
+For structured JSON diagnostics, select the mode inside your app builder before launch:
+
+```kotlin
+logging(LogbackLogging(LogbackLogging.Config(mode = LogbackLogging.Mode.DIAGNOSTIC)))
+```
+
+Diagnostic runs have their own folder with `engine.log`, `app.log`,
+`engine.jsonl` and `app.jsonl`. Mode does not change during a run. An installed
+game can explicitly choose a user-owned location instead of the working directory:
+
+```kotlin
+logging(LogbackLogging(LogbackLogging.Config.forInstalledGame("MyStudio", "MyGame")))
+```
+
+That uses Windows `LOCALAPPDATA`, Linux `XDG_STATE_HOME` (or `~/.local/state`),
+or macOS `~/Library/Logs`. A custom `Config(baseLogDir = path)` remains available.
+Select `LoggingPolicy.Host` to keep the host's own logging configuration.
 
 ## Build from source
 

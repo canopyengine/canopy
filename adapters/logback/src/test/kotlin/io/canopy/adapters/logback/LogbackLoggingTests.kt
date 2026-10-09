@@ -91,7 +91,13 @@ class LogbackLoggingTests {
     }
 
     private fun open(id: String, preserveHostOutput: Boolean = false): LoggingSession = LogbackLogging(
-        LogbackLogging.Config(directory, id, banner = false, preserveHostOutput = preserveHostOutput)
+        LogbackLogging.Config(
+            directory,
+            id,
+            banner = false,
+            preserveHostOutput = preserveHostOutput,
+            mode = LogbackLogging.Mode.DIAGNOSTIC
+        )
     ).start("test-version")
         .also { sessions += it }
 
@@ -443,10 +449,11 @@ class LogbackLoggingTests {
         }
         assertEquals(retained, directory.resolve("retained/engine.log").readText())
         assertEquals(before, appenders())
-        val policy = LogbackLogging(LogbackLogging.Config(directory, banner = false))
+        val policy =
+            LogbackLogging(LogbackLogging.Config(directory, banner = false, mode = LogbackLogging.Mode.DIAGNOSTIC))
         sessions += policy.start("test-version")
         sessions += policy.start("test-version")
-        assertEquals(3, Files.list(directory).use { it.count() })
+        assertEquals(3, Files.list(directory).use { paths -> paths.filter { Files.isDirectory(it) }.count() })
     }
 
     @Test
@@ -457,7 +464,11 @@ class LogbackLoggingTests {
             override fun defaultConfig() = AppConfig()
             override fun internalLaunch(config: AppConfig, vararg args: String) = Unit
         }.apply {
-            logging(LogbackLogging(LogbackLogging.Config(directory, "app", banner = false)))
+            logging(
+                LogbackLogging(
+                    LogbackLogging.Config(directory, "app", banner = false, mode = LogbackLogging.Mode.DIAGNOSTIC)
+                )
+            )
             onExit { logger("example.game").info { "application-final-message" } }
         }
 
