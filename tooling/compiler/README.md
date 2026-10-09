@@ -56,7 +56,7 @@ Apply the plugin to every Kotlin game module declaring custom nodes:
 ```kotlin
 plugins {
     kotlin("jvm") version "2.4.10"
-    id("io.github.canopyengine.compiler") version "0.1.0-dev2"
+    id("io.github.canopyengine.compiler") version "0.1.0-alpha.1"
 }
 ```
 

@@ -6,6 +6,7 @@ import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 import java.io.File
 import java.util.jar.JarFile
+import io.canopy.tooling.compiler.gradle.CANOPY_VERSION
 
 /** Verifies that the two execution hosts receive only their own entry points and service registrations. */
 class ArtifactIsolationTests {
@@ -37,9 +38,11 @@ class ArtifactIsolationTests {
             )
         }
         val repository = File(System.getProperty("canopy.verification.repository"))
-        val marker = repository.resolve("io/github/canopyengine/compiler").walkTopDown().single {
-            it.name.endsWith(".pom") && "io.github.canopyengine.compiler.gradle.plugin" in it.name
-        }
+        val artifact = "io.github.canopyengine.compiler.gradle.plugin"
+        val marker = repository.resolve(
+            "io/github/canopyengine/compiler/$artifact/$CANOPY_VERSION/$artifact-$CANOPY_VERSION.pom"
+        )
+        assertTrue(marker.isFile)
         assertTrue("<groupId>io.github.canopyengine</groupId>" in marker.readText())
         assertTrue("<artifactId>canopy-compiler-gradle</artifactId>" in marker.readText())
     }

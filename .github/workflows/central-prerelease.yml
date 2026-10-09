@@ -1,0 +1,80 @@
+name: Prepare Central prerelease
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Version committed in gradle.properties
+        required: true
+        default: 0.1.0-alpha.1
+        type: string
+      upload_for_validation:
+        description: Upload signed bundle to Central for manual validation (does not publish)
+        default: false
+        type: boolean
+
+permissions:
+  contents: read
+
+concurrency:
+  group: central-prerelease
+  cancel-in-progress: false
+
+jobs:
+  prepare:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    environment: maven-central
+    env:
+      RELEASE_VERSION: ${{ inputs.version }}
+      MAVEN_SIGNING_KEY: ${{ secrets.MAVEN_SIGNING_KEY }}
+      MAVEN_SIGNING_PASSWORD: ${{ secrets.MAVEN_SIGNING_PASSWORD }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: |
+            25
+            17
+      - uses: gradle/actions/setup-gradle@v6.3.0
+      - name: Verify requested version and signing configuration
+        run: |
+          python3 - <<'PY'
+          import os, pathlib, re
+          text = pathlib.Path('gradle.properties').read_text()
+          version = re.search(r'^canopyVersion\s*=\s*(\S+)\s*$', text, re.M).group(1)
+          if version != os.environ['RELEASE_VERSION']:
+              raise SystemExit('Requested version differs from committed version')
+          if version.endswith('-SNAPSHOT'):
+              raise SystemExit('This workflow only prepares immutable releases')
+          if not os.environ.get('MAVEN_SIGNING_KEY'):
+              raise SystemExit('Configure MAVEN_SIGNING_KEY before running this workflow')
+          PY
+      - name: Verify publication helpers offline
+        run: python3 -m unittest discover -s tooling/central -p 'test_*.py'
+      - name: Verify engine and compiler
+        run: ./gradlew test ktlintCheck build coverageReport --max-workers=2 --console=plain
+      - name: Clear previous staging
+        run: ./gradlew cleanCentralStaging --console=plain
+      - name: Stage signed artifacts
+        run: ./gradlew stageCentralPublication -PrequireSigning=true --max-workers=2 --console=plain
+      - name: Validate and package the bundle
+        run: python3 tooling/central/bundle.py --version "$RELEASE_VERSION" --require-signatures --output build/central-bundle.zip
+      - uses: actions/upload-artifact@v4
+        with:
+          name: central-bundle-${{ inputs.version }}
+          path: build/central-bundle.zip
+          if-no-files-found: error
+      - name: Upload for manual Portal validation
+        if: inputs.upload_for_validation
+        env:
+          CENTRAL_USERNAME: ${{ secrets.CENTRAL_USERNAME }}
+          CENTRAL_PASSWORD: ${{ secrets.CENTRAL_PASSWORD }}
+        run: python3 tooling/central/upload.py build/central-bundle.zip --result build/central-deployment.json
+      - uses: actions/upload-artifact@v4
+        if: inputs.upload_for_validation
+        with:
+          name: central-deployment-${{ inputs.version }}
+          path: build/central-deployment.json
+          if-no-files-found: error

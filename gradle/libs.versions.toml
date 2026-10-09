@@ -6,6 +6,7 @@
 # Kotlin
 kotlin = "2.4.10"
 ktlint = "14.2.0"
+dokka = "2.2.0"
 kotlinxSerialization = "1.11.0"
 
 # Gdx
@@ -98,3 +99,5 @@ mordant-markdown = {module= "com.github.ajalt.mordant:mordant-markdown", version
 kotlin-jvm = { id = "org.jetbrains.kotlin.jvm", version.ref = "kotlin" }
 kotlin-serialization = { id = "org.jetbrains.kotlin.plugin.serialization", version.ref = "kotlin" }
 ktlint = { id = "org.jlleitschuh.gradle.ktlint", version.ref = "ktlint" }
+
+dokka = { id = "org.jetbrains.dokka", version.ref = "dokka" }
