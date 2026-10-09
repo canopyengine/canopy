@@ -20,9 +20,9 @@ class CanopyCompilerPlugin : KotlinCompilerPluginSupportPlugin {
         target.configurations.configureEach { configuration ->
             if (configuration.name.startsWith("kotlinCompilerPluginClasspath")) {
                 configuration.dependencies.withType(ModuleDependency::class.java).configureEach { dependency ->
-                    if (dependency.group == "io.canopy" && dependency.name == "canopy-compiler") {
+                    if (dependency.group == "io.github.canopyengine" && dependency.name == "canopy-compiler") {
                         dependency.capabilities { handler ->
-                            handler.requireCapability("io.canopy:canopy-compiler-checks")
+                            handler.requireCapability("io.github.canopyengine:canopy-compiler-checks")
                         }
                     }
                 }
@@ -30,9 +30,9 @@ class CanopyCompilerPlugin : KotlinCompilerPluginSupportPlugin {
         }
     }
     override fun isApplicable(kotlinCompilation: KotlinCompilation<*>): Boolean = true
-    override fun getCompilerPluginId(): String = "io.canopy.compiler"
+    override fun getCompilerPluginId(): String = "io.github.canopyengine.compiler"
     override fun getPluginArtifact(): SubpluginArtifact =
-        SubpluginArtifact("io.canopy", "canopy-compiler", CANOPY_VERSION)
+        SubpluginArtifact("io.github.canopyengine", "canopy-compiler", CANOPY_VERSION)
     override fun applyToCompilation(kotlinCompilation: KotlinCompilation<*>): Provider<List<SubpluginOption>> {
         val project = kotlinCompilation.target.project
         val version = project.getKotlinPluginVersion()
