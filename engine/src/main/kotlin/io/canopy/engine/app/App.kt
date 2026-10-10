@@ -389,7 +389,7 @@ abstract class App<C : AppConfig> protected constructor() {
     /**
      * Selects the logging policy for entry; call before launch or [enter].
      * This is application lifecycle configuration, independent of platform [AppConfig].
-     * Existing loggers and providers are unchanged.
+     * Providers are unchanged; the selected policy defines backend routing and resource ownership.
      */
     fun logging(policy: LoggingPolicy) {
         check(!onStarted.isCompleted && loggingSession == null) { "Configure logging before application entry" }

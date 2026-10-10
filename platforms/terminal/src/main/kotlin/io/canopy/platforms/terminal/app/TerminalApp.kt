@@ -21,7 +21,11 @@ import io.canopy.tooling.utils.UnstableApi
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.takeWhile
 
-/** Application hosted by the terminal runtime, with queued keyboard input and a synchronous frame loop. */
+/**
+ * Application hosted by the terminal runtime, with queued keyboard input and a synchronous frame loop.
+ * Engine and game diagnostics go to `.canopy/logs` by default, leaving terminal output for the game.
+ * Select `logging(LoggingPolicy.Host)` before launch to retain host-owned logging instead.
+ */
 class TerminalApp internal constructor(
     private val terminal: Terminal = Terminal(interactive = true),
     private val output: (String) -> Unit = { terminal.rawPrint(it) },
@@ -141,8 +145,6 @@ class TerminalApp internal constructor(
     }
 
     override fun internalLaunch(config: AppConfig, vararg args: String) {
-        log.info { "Starting terminal runtime" }
-
         val frameNanos = 1_000_000_000L / config.fps
         val running = AtomicBoolean(true)
 
@@ -152,6 +154,7 @@ class TerminalApp internal constructor(
         )
 
         engineLoop.enter()
+        withLoggingContext { log.info { "Starting terminal runtime" } }
 
         // 🔹 Start async input handling
         val inputJob = appScope.launch {
@@ -161,7 +164,7 @@ class TerminalApp internal constructor(
                     .collect { event ->
                         when (event) {
                             is KeyboardEvent -> {
-                                log.trace("key" to event.key) { "Key: ${event.key}" }
+                                withLoggingContext { log.trace("key" to event.key) { "Key: ${event.key}" } }
 
                                 // Forward into engine input system (converts to Canopy InputEvent)
                                 inputManager.enqueueMordantKeyEvent(event)
@@ -175,7 +178,9 @@ class TerminalApp internal constructor(
             } catch (e: CancellationException) {
                 // Normal shutdown
             } catch (t: Throwable) {
-                log.info { "Raw terminal input unavailable; switching to line input: ${t.message}" }
+                withLoggingContext {
+                    log.info { "Raw terminal input unavailable; switching to line input: ${t.message}" }
+                }
                 try {
                     prepareLineInputPresentation().await()
                     while (true) {
@@ -187,7 +192,7 @@ class TerminalApp internal constructor(
                 } catch (e: CancellationException) {
                     // Normal shutdown
                 } catch (fallbackError: Throwable) {
-                    log.error(fallbackError) { "Line input loop crashed" }
+                    withLoggingContext { log.error(fallbackError) { "Line input loop crashed" } }
                 }
             } finally {
                 // Ctrl+C or flow ended → stop app

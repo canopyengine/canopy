@@ -4,8 +4,10 @@ Reviewed against the combined integration implementation on 2026-10-08.
 [Engine PR #208](https://github.com/canopyengine/canopy/pull/208) and
 [docs PR #45](https://github.com/canopyengine/canopy-docs/pull/45) contain the
 consolidated housekeeping work, now merged into `main`. Maven namespace migration
-#214 is merged too. Source prepares `0.1.0-alpha.1`; it is not a published Central
-release or stable 0.1.0. See [publication preparation](tooling/central/README.md).
+#214 is merged too. `0.1.0-alpha.1` is published on Central. Source now prepares
+`0.1.0-alpha.2` to restore file-only engine/session and game logging defaults;
+this fix is not available in the immutable alpha.1 artifacts. Stable 0.1.0 remains
+pending. See [publication preparation](tooling/central/README.md).
 
 ## Implemented in merged main
 
