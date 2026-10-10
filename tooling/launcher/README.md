@@ -1,39 +1,55 @@
-# Standalone game launcher
+# Standalone Java game launcher
 
-Copy this folder into a Gradle application project, or run it from a Canopy
-checkout. Requires the project's Gradle wrapper and Java; no CLI installation
-or Rust toolchain is needed.
+Use the same command on Linux, Windows and macOS. Requires a JDK 17+ to run the
+launcher and the project's Gradle wrapper JAR/properties. Gradle and the game may
+require a newer JDK; the project's configured Java toolchain determines the game
+runtime. No Rust, shell script or PowerShell script is required.
 
-From your game project on Linux/macOS:
-
-```sh
-sh /path/to/canopy/tooling/launcher/launch.sh
-```
-
-Or choose the project and application submodule:
+Copy `CanopyLaunch.java` into your project, or run it from a Canopy checkout:
 
 ```sh
-sh tooling/launcher/launch.sh -p /path/to/game --module :game -- --smoke
+java tooling/launcher/CanopyLaunch.java -p /path/to/game
+java tooling/launcher/CanopyLaunch.java -p /path/to/game --module :game -- --smoke
 ```
 
-On Windows, use PowerShell:
+From the game directory, `-p` defaults to `.`. Quote paths containing spaces in
+your terminal, including Windows paths. Everything after `--` is passed literally
+to the game. Before it, `--gradle-arg` supplies one Gradle argument and can repeat:
 
-```powershell
-& C:\path\to\canopy\tooling\launcher\launch.ps1 -Project C:\path\to\game
+```sh
+java tooling/launcher/CanopyLaunch.java -p /path/to/game --gradle-arg --offline -- --smoke
 ```
 
-Select a submodule with `-Module :game`; pass application arguments with
-`-GameArgs @('--smoke')`. PowerShell's local script execution policy must permit
-the script to run.
+The launcher invokes `gradle/wrapper/gradle-wrapper.jar` with its own Java runtime,
+so the project's pinned Gradle distribution is used without going through a shell
+or batch file. It creates a temporary Kotlin init script, builds `installDist`,
+and reads the game's Java executable, libraries, main class/module, JVM options
+and working directory. After Gradle exits, Java starts directly with inherited
+stdin/stdout/stderr. Temporary build files are removed before the game starts;
+the game exit code is returned to the caller.
 
-The launcher runs `installDist`, waits for Gradle to exit, and invokes the
-generated application start script with the original console handles and the
-application's Java toolchain. It discovers the configured distribution path and
-application name, supports paths with spaces, and returns the application's exit
-code. Arguments after `--` in the shell launcher belong to the game.
+Both classpath and JPMS applications are supported. JVM options come from
+`application.applicationDefaultJvmArgs` and the Gradle `run` task's `jvmArgs`.
+Shell wrapper customizations and `JAVA_OPTS`/`GRADLE_OPTS` are not evaluated; pass
+Gradle flags through `--gradle-arg` or use project `gradle.properties`. Custom
+application start-script logic and `run` task environment overrides are not
+executed. The game runs from its module directory and uses `installDist/lib`.
 
-Set persistent JVM options in `application.applicationDefaultJvmArgs`, as for a
-normal Gradle distribution. Options configured only on the Gradle `run` task do
-not change the installed start scripts. The game runs from its module directory.
-Custom distributions must retain the application plugin's installed start script.
-Windows/macOS execution has not yet been verified.
+## Verification
+
+Run the same integration suite on each operating system:
+
+```sh
+java tooling/launcher/LauncherTests.java .
+```
+
+The suite creates a real Gradle application and checks root/submodule selection,
+custom distribution paths, spaces and shell characters in paths/arguments, empty
+and Unicode arguments, Java selection, JVM flags, JPMS, stdin delivery, exit
+status, build failures and temporary-file cleanup. It requires this repository's
+wrapper files and a JDK supported by the pinned Gradle distribution.
+
+The Launcher GitHub Actions workflow runs that command on Linux, Windows and
+macOS. CI passes piped input; native terminal controls need an interactive smoke
+check on each target system. The terminal starter is suitable for checking arrows,
+Enter, Escape, command input, resizing and shutdown.
