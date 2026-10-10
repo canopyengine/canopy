@@ -70,7 +70,8 @@ internal object UiLayoutEngine {
         val key = listOf(backend, element.text, style, available, children.map { it.nodeId }, measures)
         if (key == element.measurementKey) return element.measured
         val intrinsic = when (element.kind) {
-            UiKind.Text, UiKind.Button -> backend.measureText(element.text, inner.width, style.wrap)
+            UiKind.Text -> backend.measureText(element.text, inner.width, style.wrap)
+            UiKind.Button -> backend.measureButton(element.text, inner.width, style.wrap)
             UiKind.Row -> UiSize(
                 measures.sumOf { it.width } + max(0, children.size - 1) * style.gap,
                 measures.maxOfOrNull { it.height } ?: 0.0
@@ -215,7 +216,18 @@ internal object UiLayoutEngine {
                     max(0.0, bounds.width - 2 * padding),
                     max(0.0, bounds.height - 2 * padding)
                 )
-                backend.drawText(element.text, textBounds, ownClip, element === focused, element.style.wrap)
+                if (element.kind == UiKind.Button) {
+                    backend.drawButton(
+                        element.text,
+                        textBounds,
+                        ownClip,
+                        element === focused,
+                        element.enabled,
+                        element.style.wrap
+                    )
+                } else {
+                    backend.drawText(element.text, textBounds, ownClip, element === focused, element.style.wrap)
+                }
             }
             else -> element.content?.elements()?.forEach { paint(it, backend, ownClip, focused) }
         }

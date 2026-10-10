@@ -29,6 +29,19 @@ class TerminalUiTests {
     }
 
     @Test
+    fun `resize and update callbacks share one physical frame write`() {
+        val output = mutableListOf<String>()
+        val app = TerminalApp(terminal, output::add, { Size(21, 5) }).also { this.app = it }
+        app.engineLoop.enter()
+        app.onResize { _, _ -> app.renderFrame(listOf("resize intermediate")) }
+        app.onUpdate { app.renderFrame(listOf("final update")) }
+        app.updateTerminalFrame(0f)
+        assertEquals(1, output.size)
+        assertEquals("final update", terminalTestRows(terminal, output)[0])
+        assertFalse(output.single().contains("resize intermediate"))
+    }
+
+    @Test
     fun `common fill and fraction layout follows both console dimensions without resize handlers`() {
         var viewport = Size(41, 12)
         val output = mutableListOf<String>()
@@ -59,7 +72,7 @@ class TerminalUiTests {
         assertEquals(3.0, row.bounds.height)
         assertEquals(10.0, first.bounds.width)
         assertEquals(10.0, second.bounds.x)
-        assertContains(output.last(), "森林 👩‍💻")
+        assertContains(terminalTestRows(terminal, output)[0]!!, "森林 👩‍💻")
     }
 
     @Test
@@ -106,7 +119,7 @@ class TerminalUiTests {
         input.processEvents()
         app.updateTerminalFrame(0f)
         assertEquals("a", prompt.draft)
-        assertContains(output.last(), "> a")
+        assertEquals("> a", terminalTestRows(terminal, output)[4])
         assertFalse(output.last().contains("late4"))
         prompt.hide()
         app.updateTerminalFrame(0f)
@@ -115,7 +128,7 @@ class TerminalUiTests {
         assertContains(output.last(), "late4")
         prompt.show()
         app.updateTerminalFrame(0f)
-        assertContains(output.last(), "> a")
+        assertEquals("> a", terminalTestRows(terminal, output)[4])
         assertFalse(app.isPaused)
     }
 
@@ -169,6 +182,22 @@ class TerminalUiTests {
         backend.begin(UiSize(5.0, 2.0))
         backend.end()
         assertTrue(spans.isEmpty())
+    }
+
+    @Test
+    fun `buttons measure their chrome and paint distinct enabled focused and disabled states`() {
+        var spans = emptyList<TerminalUiSpan>()
+        val backend = TerminalUiBackend(terminal) { spans = it }
+        assertEquals(UiSize(7.0, 1.0), backend.measureButton("Add", 20.0, false))
+        val clip = UiRect(0.0, 0.0, 20.0, 3.0)
+        backend.begin(UiSize(20.0, 3.0))
+        for (y in 0..2) {
+            backend.drawButton("Add", UiRect(0.0, y.toDouble(), 7.0, 1.0), clip, y == 1, y != 2, false)
+        }
+        backend.end()
+        assertEquals(3, spans.size)
+        assertTrue(spans.all { it.text.replace(Regex("\u001b\\[[0-9;]*m"), "") == "[ Add ]" })
+        assertTrue(spans[0].text != spans[1].text && spans[1].text != spans[2].text)
     }
 }
 

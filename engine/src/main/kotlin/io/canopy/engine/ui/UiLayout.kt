@@ -82,11 +82,18 @@ interface UiBackend {
     /** Measures wrapped or unwrapped text using this backend's cell/font metrics. */
     fun measureText(text: String, maxWidth: Double, wrap: Boolean): UiSize
 
+    /** Measures an action including backend control decoration; defaults to plain text metrics. */
+    fun measureButton(text: String, maxWidth: Double, wrap: Boolean): UiSize = measureText(text, maxWidth, wrap)
+
     /** Starts a frame. */
     fun begin(viewport: UiSize) = Unit
 
     /** Draws text within its allocated bounds and ancestor clipping rectangle. */
     fun drawText(text: String, bounds: UiRect, clip: UiRect, focused: Boolean, wrap: Boolean = true)
+
+    /** Paints an action with its focus and eligibility; defaults to the backend's text primitive. */
+    fun drawButton(text: String, bounds: UiRect, clip: UiRect, focused: Boolean, enabled: Boolean, wrap: Boolean) =
+        drawText(text, bounds, clip, focused, wrap)
 
     /** Ends a frame. */
     fun end() = Unit

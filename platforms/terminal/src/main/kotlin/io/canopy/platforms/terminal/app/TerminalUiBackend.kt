@@ -25,6 +25,27 @@ internal class TerminalUiBackend(private val terminal: Terminal, private val sub
 
     override fun viewport(size: UiSize) = UiSize((size.width - 1).coerceAtLeast(0.0), size.height)
 
+    override fun measureButton(text: String, maxWidth: Double, wrap: Boolean): UiSize =
+        measureText(buttonLabel(text), maxWidth, wrap)
+
+    override fun drawButton(
+        text: String,
+        bounds: UiRect,
+        clip: UiRect,
+        focused: Boolean,
+        enabled: Boolean,
+        wrap: Boolean,
+    ) {
+        val style = when {
+            !enabled -> "\u001b[2m"
+            focused -> "\u001b[1;7m"
+            else -> "\u001b[36m"
+        }
+        drawText(style + buttonLabel(text) + "\u001b[0m", bounds, clip, false, wrap)
+    }
+
+    private fun buttonLabel(text: String): String = text.split('\n').joinToString("\n") { "[ $it ]" }
+
     override fun begin(viewport: UiSize) {
         columns = floor(viewport.width).toInt().coerceAtLeast(0)
         rows = floor(viewport.height).toInt().coerceAtLeast(0)

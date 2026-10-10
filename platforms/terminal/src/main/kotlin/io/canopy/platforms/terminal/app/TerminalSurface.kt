@@ -17,20 +17,69 @@ internal class TerminalSurface(
     private var world: List<String>? = null
     private var ui = emptyList<TerminalUiSpan>()
     private var prompt: CommandPromptSnapshot? = null
-    private var previous: String? = null
-    private var previousSize: Pair<Int, Int>? = null
+    private val screen = TerminalCellScreen(terminal)
+    private var submitted = false
+    private var batching = false
+    private var sessionOpen = false
+    private var sessionManaged = false
+    private var shutdownHook: Thread? = null
+
+    @Synchronized
+    fun openSession() {
+        if (sessionOpen) return
+        val hook = Thread({
+            try {
+                closeSession()
+            } catch (_: Throwable) {
+                // At VM shutdown there is no remaining engine lifecycle to report terminal I/O failures.
+            }
+        }, "canopy-terminal-cleanup")
+        Runtime.getRuntime().addShutdownHook(hook)
+        shutdownHook = hook
+        sessionManaged = true
+        sessionOpen = true
+        output("\u001b[?1049h\u001b[?25l")
+        screen.clear()
+    }
+
+    @Synchronized
+    fun closeSession() {
+        if (!sessionOpen) return
+        output("\u001b[0m\u001b[?25h\u001b[?1049l")
+        sessionOpen = false
+        shutdownHook?.let { hook ->
+            try {
+                Runtime.getRuntime().removeShutdownHook(hook)
+            } catch (_: IllegalStateException) {
+                // Shutdown hooks cannot be removed once VM shutdown has started.
+            }
+        }
+        shutdownHook = null
+        screen.clear()
+    }
+
+    fun beginFrame() {
+        batching = true
+    }
+
+    fun endFrame() {
+        batching = false
+        if (submitted) redraw()
+    }
 
     override fun onUpdate(delta: Float) {
         // Manager dispatch continues while paused and even when no prompt or world callback renders.
-        if (world != null || ui.isNotEmpty() || prompt != null || previous != null) redraw()
+        if (world != null || ui.isNotEmpty() || prompt != null || submitted) redraw()
     }
 
     override fun onExit() {
         world = null
         ui = emptyList()
         prompt = null
-        previous = null
-        previousSize = null
+        screen.clear()
+        submitted = false
+        batching = false
+        closeSession()
     }
 
     fun renderWorld(lines: List<String>) {
@@ -51,7 +100,6 @@ internal class TerminalSurface(
     fun hidePrompt(redraw: Boolean = true) {
         prompt = null
         // Clearing ownership before writing lets later world frames recover from an output failure.
-        previous = null
         if (redraw) redraw()
     }
 
@@ -75,66 +123,34 @@ internal class TerminalSurface(
         return visiblePrefix + tail.asReversed().joinToString("")
     }
 
-    private fun clipRow(row: String, width: Int): String = buildString {
-        // Mordant's nowrap renderer expands tabs and parses styling. Clip its spans ourselves: its wrapping
-        // renderer wraps whitespace-delimited words even with TRUNCATE, escaping a physical terminal row.
-        val line = Text(safeTerminalText(row), whitespace = Whitespace.PRE)
-            .render(terminal, Int.MAX_VALUE).lines.firstOrNull() ?: return@buildString
-        var cells = 0
-        for (span in line) {
-            val kept = StringBuilder()
-            for (match in GRAPHEME.findAll(span.text)) {
-                val cluster = match.value
-                val clusterWidth = Text(cluster, whitespace = Whitespace.PRE).measure(terminal, Int.MAX_VALUE).max
-                if (cells + clusterWidth > width) {
-                    if (kept.isNotEmpty()) append(span.style(kept.toString()))
-                    return@buildString
-                }
-                kept.append(cluster)
-                cells += clusterWidth
-            }
-            if (kept.isNotEmpty()) append(span.style(kept.toString()))
-        }
-    }
-
     private fun redraw() {
-        if (lineMode()) return
+        submitted = true
+        if (lineMode() || batching || sessionManaged && !sessionOpen) return
         val size = viewport()
         val height = size.height.coerceAtLeast(0)
-        // Reserve the last cell: writing it can wrap or scroll on terminals with differing autowrap behavior.
-        val width = size.width.coerceAtLeast(1) - 1
-        val snapshot = prompt
-        val rows = MutableList(height) { "" }
-        world.orEmpty().flatMap { it.split('\n') }.take(height).forEachIndexed { index, row -> rows[index] = row }
-        val frame = buildString {
-            append("\u001b[2J\u001b[H")
-            if (width > 0) {
-                rows.forEachIndexed { index, row ->
-                    val clipped = clipRow(row, width)
-                    if (clipped.isNotEmpty()) {
-                        append("\u001b[").append(index + 1).append(";1H").append(clipped)
-                    }
-                }
-            }
-            ui.forEach { span ->
-                if (span.y in 0 until height && span.x in 0 until width) {
-                    append("\u001b[").append(span.y + 1).append(';').append(span.x + 1).append('H')
-                    append(clipRow(span.text, width - span.x))
-                }
-            }
-            if (snapshot != null && height > 0 && size.width > 0) {
-                val editorWidth = Text(
-                    editorRow(snapshot, width),
-                    whitespace = Whitespace.PRE
-                ).measure(terminal, Int.MAX_VALUE).max
-                append("\u001b[").append(height).append(';').append(editorWidth + 1).append('H')
-            }
+        // Reserve the final column to avoid emulator-dependent autowrap and scrolling.
+        val width = (size.width - 1).coerceAtLeast(0)
+        screen.begin(width, height)
+        world.orEmpty().flatMap { it.split('\n') }.take(height).forEachIndexed { y, row ->
+            screen.paint(row, 0, y)
         }
-        if (frame == previous && (size.width to size.height) == previousSize) return
-        output(frame)
-        // Only successful output is cached, so the same snapshot retries after a failed write.
-        previous = frame
-        previousSize = size.width to size.height
+        ui.forEach { screen.paint(it.text, it.x, it.y) }
+        val cursor = if (prompt != null && height > 0 && width > 0) {
+            Text(editorRow(prompt!!, width), whitespace = Whitespace.PRE).measure(terminal, Int.MAX_VALUE).max to
+                height - 1
+        } else {
+            0 to 0
+        }
+        screen.flush(cursor) { frame ->
+            val visibility = if (!sessionOpen) {
+                ""
+            } else if (prompt == null) {
+                "\u001b[?25l"
+            } else {
+                "\u001b[?25h"
+            }
+            output("\u001b[?2026h" + visibility + frame + "\u001b[?2026l")
+        }
     }
 }
 

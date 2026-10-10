@@ -146,7 +146,7 @@ class TerminalFrameRestorationTests {
         assertEquals(emptyMap(), rows())
         viewport = Size(0, 0)
         host.onUpdate(0f)
-        assertEquals("\u001b[2J\u001b[H", output.last())
+        assertContains(output.last(), "\u001b[2J\u001b[H")
         assertFailsWith<IllegalArgumentException> { app.commandPanelRows = 0 }
     }
 
@@ -164,7 +164,7 @@ class TerminalFrameRestorationTests {
         assertFalse(output.last().contains('\t'))
         assertFalse(output.last().contains('\r'))
         assertFalse(output.last().contains('\u0007'))
-        assertEquals(1, Regex("\u001b\\[2J").findAll(output.last()).count())
+        assertEquals(0, Regex("\u001b\\[2J").findAll(output.last()).count())
     }
 
     @Test
@@ -244,13 +244,13 @@ class TerminalFrameRestorationTests {
         app.commandPanelRows = 1
         prompt.open()
         host.onUpdate(0f)
-        assertTrue(output.last().endsWith("\u001b[3;3H"))
+        assertTrue(output.last().endsWith("\u001b[3;3H\u001b[?2026l"))
         prompt.prompt = ">   "
         host.onUpdate(0f)
-        assertTrue(output.last().endsWith("\u001b[3;5H"))
+        assertTrue(output.last().endsWith("\u001b[3;5H\u001b[?2026l"))
         prompt.prompt = ""
         host.onUpdate(0f)
-        assertTrue(output.last().endsWith("\u001b[3;1H"))
+        assertTrue(output.last().endsWith("\u001b[3;1H\u001b[?2026l"))
         val input = ManagersRegistry.getManager(MordantInputManager::class)
         val draft = "abcdefgh👩‍💻"
         draft.codePoints().toArray().forEach {
@@ -479,43 +479,7 @@ class TerminalFrameRestorationTests {
         assertTrue(output.none { '\u001b' in it })
     }
 
-    /** Decode positions and styles into physical rows; bounds and cell widths are asserted separately. */
-    private fun rows(): Map<Int, String> {
-        val cells = mutableMapOf<Int, MutableMap<Int, String>>()
-        var row = 0
-        var column = 0
-        val clean = output.last().replace(Regex("\u001b\\[[0-9;:]*m"), "")
-        val pattern = Regex("\u001b\\[([0-9;]*)([A-Za-z])|([^\u001b]+)")
-        pattern.findAll(clean).forEach { match ->
-            when (match.groupValues[2]) {
-                "J" -> cells.clear()
-                "H" -> {
-                    row = (match.groupValues[1].substringBefore(';').toIntOrNull() ?: 1) - 1
-                    column = (match.groupValues[1].substringAfter(';', "1").toIntOrNull() ?: 1) - 1
-                }
-                "" -> Regex("\\X").findAll(match.groupValues[3]).forEach { cluster ->
-                    val width = Text(cluster.value, whitespace = Whitespace.PRE).measure(terminal, 100).max
-                    val line = cells.getOrPut(row) { mutableMapOf() }
-                    line[column] = cluster.value
-                    for (offset in 1 until width) line[column + offset] = ""
-                    column += width
-                }
-            }
-        }
-        return cells.mapNotNull { (index, line) ->
-            val text = (0..(line.keys.maxOrNull() ?: -1)).joinToString("") { line[it] ?: " " }.trimEnd()
-            if (text.isEmpty()) {
-                null
-            } else {
-                index to if (index == row && output.last().endsWith('H')) {
-                    val width = Text(text, whitespace = Whitespace.PRE).measure(terminal, 100).max
-                    text + " ".repeat((column - width).coerceAtLeast(0))
-                } else {
-                    text
-                }
-            }
-        }.toMap()
-    }
+    private fun rows(): Map<Int, String> = terminalTestRows(terminal, output)
 
     private fun start(
         configure: TerminalApp.() -> Unit = {},

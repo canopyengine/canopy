@@ -29,11 +29,10 @@ class TerminalFrameTests {
     }
 
     @Test
-    fun `replacement erases wrapped rows and command output`() {
+    fun `replacement clips long rows without wrapping`() {
         val screen = Screen(width = 8)
         val surface = surface(screen, width = 8)
         surface.renderWorld(listOf("long line wraps across rows"))
-        screen.apply("command output\nother output")
         surface.renderWorld(listOf("next"))
         assertEquals(listOf("next"), screen.lines())
     }
