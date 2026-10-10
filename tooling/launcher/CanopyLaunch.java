@@ -114,7 +114,8 @@ public class CanopyLaunch {
         game.add(fields.get(1));
         game.addAll(fields.subList(5, fields.size()));
         if (fields.get(4).isEmpty()) {
-            game.addAll(List.of("-cp", Path.of(fields.get(2)).resolve("*").toString(), fields.get(3)));
+            // The JVM expands classpath wildcards; Windows Path rejects '*' as a filename.
+            game.addAll(List.of("-cp", fields.get(2) + java.io.File.separator + "*", fields.get(3)));
         } else {
             game.addAll(List.of("--module-path", fields.get(2), "--module", fields.get(4) + "/" + fields.get(3)));
         }
