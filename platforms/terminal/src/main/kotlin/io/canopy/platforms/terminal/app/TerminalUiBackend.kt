@@ -2,8 +2,14 @@ package io.canopy.platforms.terminal.app
 
 import kotlin.math.ceil
 import kotlin.math.floor
+import com.github.ajalt.mordant.rendering.BorderType
+import com.github.ajalt.mordant.rendering.TextColors
+import com.github.ajalt.mordant.rendering.TextStyles
 import com.github.ajalt.mordant.rendering.Whitespace
+import com.github.ajalt.mordant.rendering.Widget
 import com.github.ajalt.mordant.terminal.Terminal
+import com.github.ajalt.mordant.widgets.Padding
+import com.github.ajalt.mordant.widgets.Panel
 import com.github.ajalt.mordant.widgets.Text
 import io.canopy.engine.ui.UiBackend
 import io.canopy.engine.ui.UiRect
@@ -24,6 +30,58 @@ internal class TerminalUiBackend(private val terminal: Terminal, private val sub
     }
 
     override fun viewport(size: UiSize) = UiSize((size.width - 1).coerceAtLeast(0.0), size.height)
+
+    override fun measureButton(text: String, maxWidth: Double, wrap: Boolean): UiSize {
+        val available = floor(maxWidth).toInt().coerceAtLeast(0)
+        if (available == 0) return UiSize(0.0, 0.0)
+        val rendered = buttonWidget(text, available, false, true, wrap).render(terminal, available)
+        return UiSize(rendered.width.coerceAtMost(available).toDouble(), rendered.height.toDouble())
+    }
+
+    override fun drawButton(
+        text: String,
+        bounds: UiRect,
+        clip: UiRect,
+        focused: Boolean,
+        enabled: Boolean,
+        wrap: Boolean,
+    ) {
+        val available = floor(bounds.width).toInt().coerceAtLeast(0)
+        if (available == 0 || bounds.height < 1) return
+        val lines =
+            buttonWidget(text, available, focused, enabled, wrap)
+                .render(terminal, available)
+                .lines
+                .map { line -> line.joinToString("") { it.style(it.text) } }
+        // Widget rendering remains in memory; the surface owns output and partial repainting.
+        drawText(lines.joinToString("\n"), bounds, clip, false, false)
+    }
+
+    private fun buttonWidget(text: String, available: Int, focused: Boolean, enabled: Boolean, wrap: Boolean): Widget {
+        val style =
+            when {
+                !enabled -> TextStyles.dim.style
+                focused -> TextColors.cyan + TextStyles.bold + TextStyles.inverse
+                else -> TextColors.cyan
+            }
+        val safe = safeTerminalText(text)
+        fun label(value: String, width: Int): Text {
+            // Keep Canopy's grapheme wrapping: Mordant's word breaking can duplicate wide labels.
+            val lines = textLines(value, width.toDouble(), wrap).joinToString("\n") { it.joinToString("") }
+            return Text(style(lines), whitespace = Whitespace.PRE)
+        }
+        // A panel needs two border cells, two padding cells and at least one content cell.
+        if (available < 5) {
+            val compact = safe.split('\n').joinToString("\n") { "[ $it ]" }
+            return label(compact, available)
+        }
+        return Panel(
+            label(safe, available - 4),
+            padding = Padding(0, 1, 0, 1),
+            borderType = BorderType.ROUNDED,
+            borderStyle = style
+        )
+    }
 
     override fun begin(viewport: UiSize) {
         columns = floor(viewport.width).toInt().coerceAtLeast(0)
@@ -72,15 +130,14 @@ internal class TerminalUiBackend(private val terminal: Terminal, private val sub
                     x++
                 } else {
                     val start = x
-                    val text = buildString {
-                        while (x < columns) {
-                            val next = row[x] ?: break
-                            if (next.focused) append("\u001b[7m")
-                            append(next.text)
-                            if (next.focused) append("\u001b[0m")
-                            x += next.width
+                    val text =
+                        buildString {
+                            while (x < columns) {
+                                val next = row[x] ?: break
+                                append(if (next.focused) TextStyles.inverse(next.text) else next.text)
+                                x += next.width
+                            }
                         }
-                    }
                     spans.add(TerminalUiSpan(start, y, text))
                 }
             }
@@ -93,10 +150,14 @@ internal class TerminalUiBackend(private val terminal: Terminal, private val sub
         return text.split('\n').flatMap { raw ->
             // Mordant expands tabs and neutralizes styling into spans; only printable graphemes are stored.
             val safe = safeTerminalText(raw)
-            val clusters = Text(safe, whitespace = Whitespace.PRE).render(terminal, Int.MAX_VALUE)
-                .lines.firstOrNull()?.flatMap { span ->
-                    GRAPHEMES.findAll(span.text).map { span.style(it.value) }.toList()
-                }.orEmpty()
+            val clusters =
+                Text(safe, whitespace = Whitespace.PRE)
+                    .render(terminal, Int.MAX_VALUE)
+                    .lines
+                    .firstOrNull()
+                    ?.flatMap { span ->
+                        GRAPHEMES.findAll(span.text).map { span.style(it.value) }.toList()
+                    }.orEmpty()
             val result = mutableListOf<List<String>>()
             var line = mutableListOf<String>()
             var used = 0
@@ -117,7 +178,8 @@ internal class TerminalUiBackend(private val terminal: Terminal, private val sub
     }
 
     private fun width(cluster: String): Int = Text(cluster, whitespace = Whitespace.PRE)
-        .measure(terminal, Int.MAX_VALUE).max
+        .measure(terminal, Int.MAX_VALUE)
+        .max
 }
 
 private val GRAPHEMES = Regex("\\X")

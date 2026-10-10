@@ -147,7 +147,7 @@ class TerminalCommandPromptTests {
     }
 
     @Test
-    fun `raw presentation clears rows on redraw and hide while filtering control sequences`() {
+    fun `raw presentation changes only owned rows on redraw and hide while filtering control sequences`() {
         val output = mutableListOf<String>()
         val presentation = presentation({ false }, output::add)
         val host = CommandPromptHost(terminalApp(), presentation)
@@ -165,7 +165,7 @@ class TerminalCommandPromptTests {
         prompt.open()
         prompt.submit("say")
         host.onUpdate(0f)
-        assertTrue(output.last().startsWith("\u001b[2J\u001b[H"))
+        assertFalse(output.last().contains("\u001b[2J"))
         assertTrue(output.last().contains("first"))
         assertTrue(output.last().contains("second"))
         val count = output.size
@@ -173,7 +173,8 @@ class TerminalCommandPromptTests {
         assertEquals(count, output.size)
         prompt.close()
         host.onUpdate(0f)
-        assertContains(output.last(), "world")
+        assertEquals("world", terminalTestRows(Terminal(ansiLevel = AnsiLevel.TRUECOLOR), output)[0])
+        assertFalse(output.last().contains("world"))
         assertFalse(output.last().contains("first"))
         assertFalse(output.last().contains("second"))
         assertFalse(presentation.isVisible)

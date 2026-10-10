@@ -91,6 +91,9 @@ class TerminalApp internal constructor(
      * Rows and text cells are clipped to the viewport; the final column is reserved to prevent scrolling.
      * SGR styling is preserved; cursor and other control input is sanitized.
      * Line input suppresses screen output so it cannot overwrite the blocking editor.
+     * During a terminal update, submissions coalesce into one cell-diff write at the frame boundary.
+     * Outside that update, a submission flushes immediately. Unchanged cells are never rewritten;
+     * startup, resizing and recovery from a failed write clear and repaint the drawable surface.
      */
     fun renderFrame(lines: List<String>) {
         surface.renderWorld(lines)
@@ -107,17 +110,35 @@ class TerminalApp internal constructor(
                 Size(it.width.coerceAtLeast(0), it.height.coerceAtLeast(0))
             }
         }
-        if (size != null && (size.width to size.height) != notifiedViewport) {
-            engineLoop.resize(size.width, size.height)
-            // Retry unchanged geometry if a resize listener failed.
-            notifiedViewport = size.width to size.height
+        surface.beginFrame()
+        var frameFailure: Throwable? = null
+        val processedLine = try {
+            if (size != null && (size.width to size.height) != notifiedViewport) {
+                engineLoop.resize(size.width, size.height)
+                // Retry unchanged geometry if a resize listener failed.
+                notifiedViewport = size.width to size.height
+            }
+            val line = lineInput.processEvents()
+            engineLoop.update(delta)
+            line
+        } catch (failure: Throwable) {
+            frameFailure = failure
+            throw failure
+        } finally {
+            try {
+                surface.endFrame()
+            } catch (failure: Throwable) {
+                if (frameFailure == null) throw failure
+                if (failure !== frameFailure) frameFailure.addSuppressed(failure)
+            }
         }
-        val processedLine = lineInput.processEvents()
-        engineLoop.update(delta)
         processedLine?.complete(Unit)
     }
 
-    internal fun prepareLineInputPresentation() = lineInput.preparePresentation { lineInputMode = true }
+    internal fun prepareLineInputPresentation() = lineInput.preparePresentation {
+        lineInputMode = true
+        surface.closeSession()
+    }
 
     override fun defaultConfig(): AppConfig = AppConfig(
         title = "Terminal Canopy App"
@@ -142,6 +163,7 @@ class TerminalApp internal constructor(
     override fun beforeExit() {
         appScope.cancel()
         lineInput.cancel()
+        surface.closeSession()
     }
 
     override fun internalLaunch(config: AppConfig, vararg args: String) {
@@ -153,6 +175,7 @@ class TerminalApp internal constructor(
             forceClose = { running.set(false) }
         )
 
+        surface.openSession()
         engineLoop.enter()
         withLoggingContext { log.info { "Starting terminal runtime" } }
 
