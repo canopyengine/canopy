@@ -99,6 +99,7 @@ abstract class App<C : AppConfig> protected constructor() {
      * Builder hooks
      * ============================================================ */
     protected var managerBuilder: ManagersRegistry.() -> Unit = {}
+    internal var screenBuilder: ScreenRegistry.() -> Unit = {}
 
     /* ============================================================
      * Public handle
@@ -215,7 +216,7 @@ abstract class App<C : AppConfig> protected constructor() {
                         provideManagers().forEach(::register)
                         +InjectionManager()
                         +InputFocus()
-                        +ScreenManager()
+                        +ScreenManager().also { it.configure = screenBuilder }
                         +SceneManager().also {
                             sceneManager = it
                             it.pauseState = { isPaused }
