@@ -1,12 +1,15 @@
 package io.canopy.engine.app
 
 import kotlin.time.Duration
+import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicLong
 import java.util.concurrent.atomic.AtomicReference
 import io.canopy.engine.core.CanopyBuildInfo
 import io.canopy.engine.core.CleanupFailures
+import io.canopy.engine.core.managers.ExecutionMode
 import io.canopy.engine.core.managers.InjectionManager
 import io.canopy.engine.core.managers.Manager
+import io.canopy.engine.core.managers.ManagerScope
 import io.canopy.engine.core.managers.ManagersRegistry
 import io.canopy.engine.core.managers.SceneManager
 import io.canopy.engine.core.managers.manager
@@ -34,6 +37,14 @@ abstract class App<C : AppConfig> protected constructor() {
      * ============================================================ */
     private var _config: C? = null
     private var loggingPolicy: LoggingPolicy? = null
+    private val managerScope = ManagerScope()
+
+    /** This app's diagnostic mode. Configure before startup or change on the lifecycle thread. */
+    var executionMode: ExecutionMode
+        get() = managerScope.executionMode
+        set(value) {
+            managerScope.executionMode = value
+        }
 
     @Volatile
     private var loggingSession: LoggingSession? = null
@@ -74,6 +85,7 @@ abstract class App<C : AppConfig> protected constructor() {
     private val backendExitRef = AtomicReference<(() -> Unit)?>(null)
     private val backendForceRef = AtomicReference<(() -> Unit)?>(null)
     private val launchThreadRef = AtomicReference<Thread?>(null)
+    private val launchRequested = AtomicBoolean(false)
 
     /* ============================================================
      * User callbacks
@@ -203,6 +215,8 @@ abstract class App<C : AppConfig> protected constructor() {
     private fun performEnter() {
         var ownsManagerScope = false
         try {
+            ManagersRegistry.acquire(managerScope, allowCurrent = true)
+            ownsManagerScope = true
             loggingSession = (loggingPolicy ?: defaultLoggingPolicy()).start(CanopyBuildInfo.projectVersion)
 
             val backendName = this::class.simpleName ?: "unknown"
@@ -211,8 +225,7 @@ abstract class App<C : AppConfig> protected constructor() {
                     EngineLogs.lifecycle.info { "Booting Canopy..." }
 
                     var sceneManager: SceneManager? = null
-                    ownsManagerScope = true
-                    ManagersRegistry.withScope {
+                    ManagersRegistry.apply {
                         provideManagers().forEach(::register)
                         +InjectionManager()
                         +InputFocus()
@@ -225,6 +238,7 @@ abstract class App<C : AppConfig> protected constructor() {
                         +UiManager()
                         managerBuilder()
                     }
+                    ManagersRegistry.enter()
                     sceneManager?.let { engineLoop.configurePhysicsStep(it.physicsStep) }
 
                     onEnter(this@App)
@@ -296,7 +310,7 @@ abstract class App<C : AppConfig> protected constructor() {
 
         scopedAttempt { EngineLogs.lifecycle.info("event" to "app.dispose") { "Disposing app" } }
         scopedAttempt { beforeExit() }
-        if (ownsManagerScope) scopedAttempt { ManagersRegistry.exit() }
+        if (ownsManagerScope) scopedAttempt { ManagersRegistry.dispose(managerScope) }
         scopedAttempt {
             loggingSession?.end(
                 reason = if (failures.failure ==
@@ -313,6 +327,7 @@ abstract class App<C : AppConfig> protected constructor() {
         val session = loggingSession
         loggingSession = null
         failures.attempt { session?.close() }
+        failures.attempt { ManagersRegistry.release(managerScope) }
         val error = failures.failure
         if (error == null) {
             onStopped.safeComplete()
@@ -328,11 +343,13 @@ abstract class App<C : AppConfig> protected constructor() {
 
     /** Launches the platform on the calling thread; blocking behavior depends on the backend. */
     fun launch(vararg args: String) {
+        reserveLaunch()
         launchHost(args)
     }
 
     /** Launches the platform on a non-daemon thread and returns lifecycle controls. */
     fun launchAsync(threadName: String = "canopy-app", vararg args: String): AppHandle {
+        reserveLaunch()
         val thread = Thread({
             try {
                 launchHost(args)
@@ -353,10 +370,22 @@ abstract class App<C : AppConfig> protected constructor() {
 
     private fun launchHost(args: Array<out String>) {
         try {
+            ManagersRegistry.acquire(managerScope)
             internalLaunch(config, *args)
         } catch (error: Throwable) {
             fail(error)
         }
+    }
+
+    private fun reserveLaunch() {
+        check(!onStarted.isCompleted && !onStopped.isCompleted) { "An App can only be launched before entry" }
+        check(launchRequested.compareAndSet(false, true)) { "An App can only be launched once" }
+    }
+
+    @PublishedApi
+    internal fun currentScreenManager(): ScreenManager {
+        ManagersRegistry.checkAppScope(managerScope)
+        return manager<ScreenManager>()
     }
 
     /**
@@ -375,6 +404,11 @@ abstract class App<C : AppConfig> protected constructor() {
             if (cleanup !== primary && primary.suppressed.none { it === cleanup }) primary.addSuppressed(cleanup)
         }
         val primary = engineLoop.failure ?: error
+        try {
+            ManagersRegistry.release(managerScope)
+        } catch (cleanup: Throwable) {
+            if (cleanup !== primary && primary.suppressed.none { it === cleanup }) primary.addSuppressed(cleanup)
+        }
         onStarted.safeFail(primary)
         onStopped.safeFail(primary)
         throw primary
