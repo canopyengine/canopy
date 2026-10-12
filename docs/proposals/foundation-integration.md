@@ -40,7 +40,7 @@ after the complete branch and required ecosystem workflows have been tested.
 | 6 | Scoped drawing and efficient terminal rendering (#219) | Implemented text drawing slice; full verification passes; live acceptance pending |
 | 7 | UiNode/components and matching compiler integration | Implemented; full verification passes |
 | 8 | Custom styles/themes and runnable examples | Implemented; full verification passes; interactive acceptance pending |
-| 9 | Launcher, external consumer and headless parity | Pending |
+| 9 | Launcher, external consumer and headless parity | Linux verification passes; cross-platform native acceptance pending |
 
 Keep independently reviewable commits. Component/compiler changes ship together.
 Node-storage replacement and headless-host replacement require evidence and are
@@ -181,3 +181,26 @@ Learning-time estimates are planning targets, not measured onboarding results.
 The full branch is ready for main only after these checks, live terminal
 resize/input/pause/shutdown testing, and the rabbits/foxes demo's required
 0.1.0 workflows. Audit completion or a passing synthetic probe is insufficient.
+
+## Final distribution verification and remaining work
+
+At engine commit `917af22`, Maven staging, a separate real-artifact consumer,
+two successive headless apps and the Java launcher's five integration groups pass.
+A Linux controlling-PTY smoke resizes 80×24 to 100×30, opens the command prompt
+with Escape, types `quit` and exits with status zero. Windows/macOS native
+terminal controls and visual resize/pause/focus acceptance remain unverified.
+See [verification evidence](foundation-verification.md) for exact scope and commands.
+
+The allocation comparison does not meet the audit's rendering goals: 1,000-label
+idle snapshots allocate 666,736 bytes/frame versus 587,528 at the baseline; one
+changed label allocates 2,045,480 versus 1,680,344 and still paints all 1,000 labels.
+Terminal cell composition allocations and zero unchanged writes are preserved.
+The next implementation slice should profile and remove avoidable snapshot and
+appearance work while retaining visibility, theme, focus, hierarchy and failure
+invalidation. Do not replace the snapshot with a dirty flag before those
+contracts are covered. Re-run these probes after the change.
+
+Before main: complete that performance slice, native terminal acceptance and the
+required ecosystem workflows. Independent onboarding still needs a developer to
+complete the documented exercises. No Rust CLI, main merge, Central publication
+or release declaration is part of this verification.
