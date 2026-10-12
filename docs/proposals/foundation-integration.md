@@ -33,7 +33,7 @@ after the complete branch and required ecosystem workflows have been tested.
 | 2 | TOML public dependency exposure | Implemented; consumer regression passes |
 | 3 | Failed-frame discard and retry | Implemented; UI/terminal regressions pass |
 | 4 | App-owned runtime/services and explicit stages | Implemented; full verification passes |
-| 5 | Lifetime contract and optional node-storage prototype | Pending |
+| 5 | Lifetime contract and node-local reactive factories | Implemented; existing guarded storage retained |
 | 6 | Scoped drawing and efficient terminal rendering (#219) | Pending |
 | 7 | UiNode/components and matching compiler integration | Pending |
 | 8 | Custom styles/themes and runnable examples | Pending |
@@ -56,6 +56,13 @@ manager lookup remains a lifecycle-thread facade; standalone scope replacement
 and direct teardown cannot take over a running App. Its reservation remains
 held through logging/user shutdown callbacks, and inactive App screen shortcuts
 cannot navigate the running App.
+
+Node-local event/signal/computed/effect factories now bind their explicit node
+receiver, including constructor initializers. Global factories retain ambient or
+explicit ownership. UI observers reuse the core dependency-subscription helper.
+The lifetime gate passes with 531 tests and 5,932 / 6,639 covered lines (89.4%).
+An optional storage replacement is deferred: no measured evidence yet justifies
+changing retained-facade, detached-resource or reusable scene-manager contracts.
 
 ## Verification and independent onboarding
 
