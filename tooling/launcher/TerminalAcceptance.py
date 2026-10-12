@@ -59,7 +59,7 @@ class Session:
         try:
             self.child = subprocess.Popen(
                 command, stdin=slave, stdout=slave, stderr=slave,
-                env=dict(os.environ, TERM="xterm-256color"),
+                env=dict(os.environ, TERM="xterm-256color", COLORTERM="truecolor"),
                 preexec_fn=controlling_terminal,
             )
         except BaseException:
