@@ -7,20 +7,25 @@ import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
 import kotlin.test.assertSame
 import kotlin.test.assertTrue
+import java.io.ByteArrayOutputStream
+import java.io.PrintStream
 import java.nio.file.Files
 import java.nio.file.Path
 import ch.qos.logback.classic.Level
 import ch.qos.logback.classic.Logger
 import ch.qos.logback.classic.LoggerContext
+import ch.qos.logback.classic.encoder.PatternLayoutEncoder
 import ch.qos.logback.classic.spi.ILoggingEvent
 import ch.qos.logback.classic.turbo.TurboFilter
 import ch.qos.logback.core.Appender
+import ch.qos.logback.core.ConsoleAppender
 import ch.qos.logback.core.read.ListAppender
 import ch.qos.logback.core.rolling.RollingFileAppender
 import ch.qos.logback.core.spi.FilterReply
 import io.canopy.engine.app.App
 import io.canopy.engine.app.AppConfig
 import io.canopy.engine.logging.LogContext
+import io.canopy.engine.logging.LoggingPolicy
 import io.canopy.engine.logging.LoggingSession
 import io.canopy.engine.logging.engineLogger
 import io.canopy.engine.logging.logger
@@ -85,12 +90,164 @@ class LogbackLoggingTests {
         if (previousMdc == null) MDC.clear() else MDC.setContextMap(previousMdc)
     }
 
-    private fun open(id: String): LoggingSession =
-        LogbackLogging(LogbackLogging.Config(directory, id, banner = false)).start("test-version")
-            .also { sessions += it }
+    private fun open(id: String, preserveHostOutput: Boolean = false): LoggingSession = LogbackLogging(
+        LogbackLogging.Config(
+            directory,
+            id,
+            banner = false,
+            preserveHostOutput = preserveHostOutput,
+            mode = LogbackLogging.Mode.DIAGNOSTIC
+        )
+    ).start("test-version")
+        .also { sessions += it }
 
     private fun appenders(): List<Appender<ILoggingEvent>> =
         root.iteratorForAppenders().asSequence().toList() + engine.iteratorForAppenders().asSequence().toList()
+
+    @Test
+    fun `default logging captures ordinary game and background events in files without console output`() {
+        // Arrange: model Logback's default console setup, with no project logback.xml.
+        val output = ByteArrayOutputStream()
+        val previousOutput = System.out
+        val console = ConsoleAppender<ILoggingEvent>()
+        val encoder = PatternLayoutEncoder().also {
+            it.context = context
+            it.pattern = "%msg%n"
+            it.start()
+        }
+        System.setOut(PrintStream(output))
+        console.context = context
+        console.encoder = encoder
+        console.start()
+        root.addAppender(console)
+        val game = context.getLogger("example.default.game")
+        val previousLevel = game.level
+        val previousAdditive = game.isAdditive
+        game.level = Level.ERROR
+        game.isAdditive = false
+        game.addAppender(console)
+        try {
+            val before = appenders()
+            val session = open("default")
+
+            // Act
+            engineLogger("probe").debug { "engine-debug" }
+            engineLogger("probe").error { "engine-error" }
+            logger(game.name).debug { "game-debug" }
+            logger(game.name).info { "game-info" }
+            logger(game.name).warn { "game-warning" }
+            Thread { logger(game.name).error { "game-background-error" } }.apply {
+                start()
+                join()
+            }
+            session.end("normal", null)
+            session.close()
+
+            // Assert
+            assertEquals("", output.toString())
+            assertTrue(host.list.isEmpty())
+            val engineFile = directory.resolve("default/engine.log").readText()
+            val gameFile = directory.resolve("default/app.log").readText()
+            assertTrue("engine-debug" in engineFile)
+            assertTrue("engine-error" in engineFile)
+            assertTrue("session.start" in engineFile && "session.end" in engineFile)
+            assertFalse("game-info" in engineFile)
+            assertTrue("game-info" in gameFile)
+            assertTrue("game-warning" in gameFile)
+            assertTrue("game-background-error" in gameFile)
+            assertTrue("game-debug" in gameFile)
+            assertFalse("engine-error" in gameFile)
+            val records = directory.resolve("default/app.jsonl").readText().lineSequence().filter { it.isNotBlank() }
+                .map { Json.parseToJsonElement(it).jsonObject }.toList()
+            assertEquals(4, records.size)
+            assertTrue(records.all { it.getValue("runId").jsonPrimitive.content == "default" })
+            assertTrue(records.all { it.getValue("engineVersion").jsonPrimitive.content == "test-version" })
+            assertEquals(before, appenders())
+            assertEquals(Level.ERROR, game.level)
+            assertFalse(game.isAdditive)
+            assertTrue(console.isStarted)
+            logger(game.name).error { "host-console-restored" }
+            assertTrue("host-console-restored" in output.toString())
+        } finally {
+            System.setOut(previousOutput)
+            root.detachAppender(console)
+            game.detachAppender(console)
+            game.level = previousLevel
+            game.isAdditive = previousAdditive
+            console.stop()
+            encoder.stop()
+        }
+    }
+
+    @Test
+    fun `explicit host and preserving policies leave host output untouched`() {
+        // Arrange
+        val before = appenders()
+        val hostSession = LoggingPolicy.Host.start("test-version")
+        val managed = open("preserving", preserveHostOutput = true)
+
+        // Act
+        hostSession.withContext { logger("example.host").info { "host-message" } }
+        managed.withContext { logger("example.game").info { "preserved-game-message" } }
+        logger("example.game").info { "unscoped-host-message" }
+        managed.close()
+        hostSession.close()
+
+        // Assert
+        assertEquals(before, appenders())
+        assertTrue(host.list.any { it.formattedMessage == "host-message" })
+        assertTrue(host.list.any { it.formattedMessage == "preserved-game-message" })
+        assertTrue(host.list.any { it.formattedMessage == "unscoped-host-message" })
+        val appFile = directory.resolve("preserving/app.log").readText()
+        assertTrue("preserved-game-message" in appFile)
+        assertFalse("unscoped-host-message" in appFile)
+        assertFalse("host-message" in appFile)
+    }
+
+    @Test
+    fun `last active session receives unscoped events after either close order`() {
+        for (closeFirst in listOf(true, false)) {
+            // Arrange
+            val first = open("overlap-first-$closeFirst")
+            val second = open("overlap-second-$closeFirst")
+            val closed = if (closeFirst) first else second
+            val remaining = if (closeFirst) second else first
+            val remainingId = if (closeFirst) "overlap-second-$closeFirst" else "overlap-first-$closeFirst"
+            val closedId = if (closeFirst) "overlap-first-$closeFirst" else "overlap-second-$closeFirst"
+
+            // Act
+            logger("example.game").info { "ambiguous-game-message" }
+            closed.close()
+            logger("example.game").info { "remaining-unscoped-message" }
+            remaining.withContext { engineLogger("probe").debug { "remaining-engine-debug" } }
+
+            // Assert
+            assertTrue(host.list.isEmpty())
+            remaining.close()
+            assertTrue("remaining-unscoped-message" in directory.resolve("$remainingId/app.log").readText())
+            assertFalse("remaining-unscoped-message" in directory.resolve("$closedId/app.log").readText())
+            assertFalse("ambiguous-game-message" in directory.resolve("$remainingId/app.log").readText())
+            assertTrue("remaining-engine-debug" in directory.resolve("$remainingId/engine.log").readText())
+            assertTrue(root.isAttached(host))
+        }
+    }
+
+    @Test
+    fun `incompatible overlapping output policies fail without disturbing active session`() {
+        // Arrange
+        val existing = open("managed")
+        val before = appenders()
+
+        // Act
+        assertFailsWith<IllegalStateException> { open("incompatible", preserveHostOutput = true) }
+        logger("example.game").info { "still-managed" }
+        existing.close()
+
+        // Assert
+        assertEquals(4, before.size)
+        assertTrue("still-managed" in directory.resolve("managed/app.log").readText())
+        assertTrue(root.isAttached(host))
+    }
 
     @Test
     fun `sessions isolate files and close only owned appenders without changing host configuration`() {
@@ -167,7 +324,7 @@ class LogbackLoggingTests {
         val blocked = context.getLogger("io.canopy.engine.blocked")
         val oldLevel = blocked.level
         val oldAdditive = blocked.isAdditive
-        val session = open("filtered")
+        val session = open("filtered", preserveHostOutput = true)
         try {
             blocked.level = Level.WARN
             blocked.isAdditive = false
@@ -191,6 +348,44 @@ class LogbackLoggingTests {
             blocked.level = oldLevel
             blocked.isAdditive = oldAdditive
         }
+    }
+
+    @Test
+    fun `failed first session restores host configuration and permits a later session`() {
+        // Arrange
+        val before = appenders()
+        val failure = IllegalStateException("reject first session event")
+        val filter = object : TurboFilter() {
+            override fun decide(
+                marker: Marker?,
+                logger: Logger,
+                level: Level,
+                format: String?,
+                params: Array<out Any>?,
+                t: Throwable?,
+            ): FilterReply {
+                if (logger.name == "io.canopy.engine.session") throw failure
+                return FilterReply.NEUTRAL
+            }
+        }
+        filter.start()
+        context.addTurboFilter(filter)
+        try {
+            // Act and Assert
+            assertSame(failure, assertFailsWith<IllegalStateException> { open("first-failed") })
+            assertEquals(before, appenders())
+            assertEquals(Level.INFO, root.level)
+            assertEquals(null, engine.level)
+            assertTrue(host.isStarted)
+        } finally {
+            context.turboFilterList.remove(filter)
+            filter.stop()
+        }
+        val subsequent = open("subsequent")
+        logger("example.game").info { "subsequent-unscoped" }
+        subsequent.close()
+        assertTrue("subsequent-unscoped" in directory.resolve("subsequent/app.log").readText())
+        assertEquals(before, appenders())
     }
 
     @Test
@@ -254,10 +449,11 @@ class LogbackLoggingTests {
         }
         assertEquals(retained, directory.resolve("retained/engine.log").readText())
         assertEquals(before, appenders())
-        val policy = LogbackLogging(LogbackLogging.Config(directory, banner = false))
+        val policy =
+            LogbackLogging(LogbackLogging.Config(directory, banner = false, mode = LogbackLogging.Mode.DIAGNOSTIC))
         sessions += policy.start("test-version")
         sessions += policy.start("test-version")
-        assertEquals(3, Files.list(directory).use { it.count() })
+        assertEquals(3, Files.list(directory).use { paths -> paths.filter { Files.isDirectory(it) }.count() })
     }
 
     @Test
@@ -268,7 +464,11 @@ class LogbackLoggingTests {
             override fun defaultConfig() = AppConfig()
             override fun internalLaunch(config: AppConfig, vararg args: String) = Unit
         }.apply {
-            logging(LogbackLogging(LogbackLogging.Config(directory, "app", banner = false)))
+            logging(
+                LogbackLogging(
+                    LogbackLogging.Config(directory, "app", banner = false, mode = LogbackLogging.Mode.DIAGNOSTIC)
+                )
+            )
             onExit { logger("example.game").info { "application-final-message" } }
         }
 

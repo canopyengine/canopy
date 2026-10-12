@@ -51,12 +51,15 @@ for supported syntax and extension contracts.
 
 ## Consumer setup
 
-Apply the plugin to every Kotlin game module declaring custom nodes:
+Apply the plugin to every Kotlin game module declaring custom nodes.
+The example uses this source's proposed alpha.2 version; publish it locally until
+it is available on Central. For the published alpha.1 runtime, use the matching
+alpha.1 plugin instead.
 
 ```kotlin
 plugins {
     kotlin("jvm") version "2.4.10"
-    id("io.github.canopyengine.compiler") version "0.1.0-alpha.1"
+    id("io.github.canopyengine.compiler") version "0.1.0-alpha.2"
 }
 ```
 

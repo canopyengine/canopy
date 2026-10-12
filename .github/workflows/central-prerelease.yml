@@ -6,7 +6,7 @@ on:
       version:
         description: Version committed in gradle.properties
         required: true
-        default: 0.1.0-alpha.1
+        default: 0.1.0-alpha.2
         type: string
       upload_for_validation:
         description: Upload signed bundle to Central for manual validation (does not publish)

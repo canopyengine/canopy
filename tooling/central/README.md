@@ -1,6 +1,7 @@
 # Preparing a Maven Central prerelease
 
-This workflow prepares the proposed `0.1.0-alpha.1` artifacts under verified
+`0.1.0-alpha.1` is already published and cannot be replaced. This workflow
+prepares the proposed `0.1.0-alpha.2` artifacts under verified
 namespace `io.github.canopyengine`, including plugin ID
 `io.github.canopyengine.compiler`. It does not declare stable 0.1.0 or automatically
 publish to Central. Kotlin packages remain unchanged. Follow the matching pinned
@@ -54,7 +55,7 @@ Equivalent local commands, with signing environment variables configured:
 ./gradlew test ktlintCheck build coverageReport
 ./gradlew cleanCentralStaging
 ./gradlew stageCentralPublication -PrequireSigning=true
-python3 tooling/central/bundle.py --version 0.1.0-alpha.1 --require-signatures --output build/central-bundle.zip
+python3 tooling/central/bundle.py --version 0.1.0-alpha.2 --require-signatures --output build/central-bundle.zip
 ```
 
 Run the clean command before staging; do not run separate publication builds
