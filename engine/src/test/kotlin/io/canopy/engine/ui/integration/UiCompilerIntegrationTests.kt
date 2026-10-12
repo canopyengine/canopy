@@ -80,24 +80,24 @@ class UiCompilerIntegrationTests {
             }
         }
         scenes.currScene = root
-        ui.onUpdate(0f)
+        ui.updateFrame()
         counters.getValue("a").update { 4 }
-        ui.onUpdate(0f)
+        ui.updateFrame()
         // Act
         visible.update { false }
         width.update { 1.0 }
         items.update { listOf(Item("b", "changed"), Item("a", "retained")) }
-        ui.onUpdate(0f)
+        ui.updateFrame()
         // Assert
         assertEquals(1, rootRuns)
         assertEquals(2, counterCreations)
         assertEquals(1, componentCreations)
         assertEquals(listOf("changed:0", "retained:4", "one", "two"), backend.draws.map { it.text })
         visible.update { true }
-        ui.onUpdate(0f)
+        ui.updateFrame()
         assertEquals(2, componentCreations)
         width.update { 0.75 }
-        ui.onUpdate(0f)
+        ui.updateFrame()
         assertEquals(2, componentCreations)
         assertEquals("visible:0.75", backend.draws.first().text)
     }

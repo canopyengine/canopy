@@ -8,6 +8,8 @@ import com.github.ajalt.mordant.rendering.TextStyles
 import com.github.ajalt.mordant.terminal.Terminal
 import io.canopy.adapters.mordant.input.MordantInputManager
 import io.canopy.engine.commands.CommandPrompt
+import io.canopy.engine.core.flows.events.signal
+import io.canopy.engine.core.managers.Manager
 import io.canopy.engine.core.managers.ManagersRegistry
 import io.canopy.engine.core.managers.SceneManager
 import io.canopy.engine.core.nodes.Node
@@ -40,6 +42,34 @@ class TerminalUiTests {
         assertEquals(1, output.size)
         assertEquals("final update", terminalTestRows(terminal, output)[0])
         assertFalse(output.single().contains("resize intermediate"))
+    }
+
+    @Test
+    fun `managers registered after UI update labels in the same physical frame`() {
+        val count = signal(owner = null, 0)
+        val output = mutableListOf<String>()
+        val app = TerminalApp(terminal, output::add, { Size(21, 5) }).also { this.app = it }
+        app.managers {
+            register(object : Manager {
+                override fun onUpdate(delta: Float) {
+                    count.update { it + 1 }
+                    getManager(io.canopy.engine.ui.UiManager::class).renderNow()
+                }
+            })
+        }
+        app.engineLoop.enter()
+        ManagersRegistry.getManager(SceneManager::class).currScene = UiRoot {
+            bindText("count") { "Count: ${count()}" }
+        }
+
+        app.updateTerminalFrame(0f)
+
+        assertEquals(1, output.size)
+        assertEquals("Count: 1", terminalTestRows(terminal, output)[0])
+        app.pause()
+        app.updateTerminalFrame(0f)
+        assertEquals("Count: 2", terminalTestRows(terminal, output)[0])
+        count.dispose()
     }
 
     @Test

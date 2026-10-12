@@ -9,6 +9,7 @@ import io.canopy.engine.core.managers.InjectionManager
 import io.canopy.engine.core.managers.Manager
 import io.canopy.engine.core.managers.ManagersRegistry
 import io.canopy.engine.core.managers.SceneManager
+import io.canopy.engine.core.managers.manager
 import io.canopy.engine.input.InputFocus
 import io.canopy.engine.logging.EngineLogs
 import io.canopy.engine.logging.LogContext
@@ -245,13 +246,15 @@ abstract class App<C : AppConfig> protected constructor() {
         updateSequence++
         if (!isPaused) gameplayFrames.incrementAndGet()
 
-        LogContext.with("frame" to updateSequence) {
-            val gameplayDelta = if (isPaused) 0f else delta
-            beforeUpdate(gameplayDelta)
-            onUpdate(this@App, gameplayDelta)
-        }
+        manager<UiManager>().afterUpdates {
+            LogContext.with("frame" to updateSequence) {
+                val gameplayDelta = if (isPaused) 0f else delta
+                beforeUpdate(gameplayDelta)
+                onUpdate(this@App, gameplayDelta)
+            }
 
-        ManagersRegistry.update(delta, isPaused)
+            ManagersRegistry.update(delta, isPaused)
+        }
     }
 
     private fun performPhysicsUpdate(delta: Float) = withLoggingContext {

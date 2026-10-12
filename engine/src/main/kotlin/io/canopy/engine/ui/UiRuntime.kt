@@ -249,11 +249,24 @@ class UiRoot(name: String = "UiRoot", block: UiScope.() -> Unit) : Node<UiRoot>(
     }
 }
 
-/** Shared safe-boundary scheduling and rendering, driven on every app frame including paused frames. */
+/** UI work committed after app and manager updates, including paused frames, on the engine thread. */
 class UiManager(var backend: UiBackend? = null) : Manager {
     private val roots = linkedSetOf<UiRoot>()
     private val pending = linkedSetOf<UiObserver>()
     private var lastFrame: List<Any?>? = null
+    private var updating = false
+
+    /** Defers explicit painting until all application update callbacks have completed successfully. */
+    internal fun afterUpdates(block: () -> Unit) {
+        check(!updating) { "Cannot nest UI frame updates" }
+        updating = true
+        try {
+            block()
+        } finally {
+            updating = false
+        }
+        updateFrame()
+    }
 
     /** Current host dimensions in the backend's logical units. */
     var viewport = UiSize(0.0, 0.0)
@@ -277,7 +290,14 @@ class UiManager(var backend: UiBackend? = null) : Manager {
         viewport = UiSize(width.coerceAtLeast(0).toDouble(), height.coerceAtLeast(0).toDouble())
         roots.filter { it.isValid }.forEach { it.dirty = true }
     }
-    override fun onUpdate(delta: Float) {
+
+    /**
+     * Processes one batch of reactive work and paints after all simulation and service updates.
+     * [io.canopy.engine.app.App] invokes this boundary automatically. Custom hosts invoke it once
+     * after updates; work enqueued while processing the batch remains pending for the next frame.
+     */
+    fun updateFrame() {
+        check(!updating) { "UI work must run after application updates" }
         val batch = pending.toList()
         pending.clear()
         var failure: Throwable? = null
@@ -298,6 +318,7 @@ class UiManager(var backend: UiBackend? = null) : Manager {
 
     /** Paints the current retained tree immediately without dispatching gameplay or reactive updates. */
     fun renderNow() {
+        if (updating) return
         backend?.let { renderer ->
             val logicalViewport = renderer.viewport(viewport)
             val activeRoots = roots.toList().filter {

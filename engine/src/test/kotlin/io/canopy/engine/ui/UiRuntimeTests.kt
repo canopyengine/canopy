@@ -60,6 +60,31 @@ class UiRuntimeTests {
     }
 
     @Test
+    fun `failed application updates defer painting and release the frame boundary`() {
+        val count = signal(owner = null, 0)
+        scenes.currScene = UiRoot { bindText("count") { "Count: ${count()}" } }
+        ui.updateFrame()
+        val frames = backend.frames
+        val failure = IllegalStateException("update")
+
+        assertSame(
+            failure,
+            assertFailsWith<IllegalStateException> {
+                ui.afterUpdates {
+                    count.update { 1 }
+                    ui.renderNow()
+                    assertEquals(frames, backend.frames)
+                    throw failure
+                }
+            }
+        )
+        assertEquals(frames, backend.frames)
+        ui.updateFrame()
+        assertEquals("Count: 1", backend.draws.single().text)
+        count.dispose()
+    }
+
+    @Test
     fun `targeted expressions coalesce at safe boundary and unchanged results skip frame`() {
         // Arrange
         val count = signal(owner = null, 1)
@@ -80,13 +105,13 @@ class UiRuntimeTests {
             }
         }
         scenes.currScene = root
-        ui.onUpdate(0f)
+        ui.updateFrame()
         val frames = backend.frames
         val measures = backend.measurements
         // Act
         count.update { 2 }
         count.update { 3 }
-        ui.onUpdate(0f)
+        ui.updateFrame()
         // Assert
         assertEquals(1, rootRuns)
         assertEquals(2, leftRuns)
@@ -94,7 +119,7 @@ class UiRuntimeTests {
         assertEquals(frames, backend.frames)
         assertEquals(measures, backend.measurements)
         count.update { 20 }
-        ui.onUpdate(0f)
+        ui.updateFrame()
         assertEquals(listOf("2", "static"), backend.draws.map { it.text })
     }
 
@@ -131,21 +156,21 @@ class UiRuntimeTests {
             }
         }
         scenes.currScene = root
-        ui.onUpdate(0f)
+        ui.updateFrame()
         val a = buttons.getValue("a")
         root.focus(a)
         a.activate()
-        ui.onUpdate(0f)
+        ui.updateFrame()
         // Act
         ids.update { listOf("b", "a") }
-        ui.onUpdate(0f)
+        ui.updateFrame()
         // Assert
         assertSame(a, buttons.getValue("a"))
         assertSame(a, root.focusedElement)
         assertEquals(listOf("a", "b"), creations)
         assertEquals(listOf("b:0", "a:1"), backend.draws.map { it.text })
         ids.update { listOf("b") }
-        ui.onUpdate(0f)
+        ui.updateFrame()
         scenes.onUpdate(0f)
         assertTrue(a.isFreed)
         assertNull(root.focusedElement)
@@ -154,7 +179,7 @@ class UiRuntimeTests {
         pulse.update { 1 }
         assertEquals(listOf("b"), effects)
         ids.update { listOf("a", "b") }
-        ui.onUpdate(0f)
+        ui.updateFrame()
         assertNotSame(a, buttons.getValue("a"))
         assertEquals(0, counters.getValue("a")())
     }
@@ -170,14 +195,14 @@ class UiRuntimeTests {
             bindText("count") { "${count()}" }
         }
         scenes.currScene = root
-        ui.onUpdate(0f)
+        ui.updateFrame()
         count.update { 5 }
         // Act
         root.nodeExitTree()
-        ui.onUpdate(0f)
+        ui.updateFrame()
         count.update { 7 }
         root.buildTree()
-        ui.onUpdate(0f)
+        ui.updateFrame()
         // Assert
         assertEquals(1, constructions)
         assertEquals("7", backend.draws.single().text)
@@ -194,18 +219,18 @@ class UiRuntimeTests {
             }
         }
         scenes.currScene = root
-        ui.onUpdate(0f)
+        ui.updateFrame()
         root.focus(button)
         val nextY = backend.draws.last().bounds.y
         // Act
         button.hide()
-        ui.onUpdate(0f)
+        ui.updateFrame()
         // Assert
         assertNull(root.focusedElement)
         assertEquals(listOf("next"), backend.draws.map { it.text })
         assertEquals(nextY, backend.draws.single().bounds.y)
         button.show()
-        ui.onUpdate(0f)
+        ui.updateFrame()
         assertEquals(listOf("action", "next"), backend.draws.map { it.text })
     }
 
@@ -232,13 +257,13 @@ class UiRuntimeTests {
             scenes.currScene = root
             ui.backend = metrics
             ui.onResize(100, 60)
-            ui.onUpdate(0f)
+            ui.updateFrame()
             assertEquals(24.0, left.bounds.width)
             assertEquals(69.0, right.bounds.width)
             assertTrue(metrics.draws.all { it.clip.width <= it.bounds.width })
             // Act
             ui.onResize(50, 30)
-            ui.onUpdate(0f)
+            ui.updateFrame()
             // Assert
             assertEquals(11.5, left.bounds.width)
             assertEquals(31.5, right.bounds.width)
@@ -257,16 +282,16 @@ class UiRuntimeTests {
                 actions++
             }
         }
-        ui.onUpdate(0f)
+        ui.updateFrame()
         val measures = backend.measurements
         val root = scenes.currScene as UiRoot
         root.focus(button)
-        ui.onUpdate(0f)
+        ui.updateFrame()
         assertEquals(measures, backend.measurements)
         assertTrue(backend.draws.single().focused)
         button.activate()
         pulse.update { 1 }
-        ui.onUpdate(0f)
+        ui.updateFrame()
         assertEquals(1, actions)
     }
 
@@ -282,7 +307,7 @@ class UiRuntimeTests {
             }
         }
         ui.onResize(8, 10)
-        ui.onUpdate(0f)
+        ui.updateFrame()
         assertEquals(listOf(2.0, 2.0, 4.0), backend.draws.map { it.bounds.height })
         assertEquals(listOf(0.0, 0.0, 2.0), backend.draws.map { it.bounds.y })
     }
@@ -303,19 +328,19 @@ class UiRuntimeTests {
             bindText("first") { if (first() == 1) error("bad value") else "first:${first()}" }
             bindText("second") { "second:${second()}" }
         }
-        ui.onUpdate(0f)
+        ui.updateFrame()
         val removed = local
         show.update { false }
         first.update { 1 }
         second.update { 2 }
-        assertFailsWith<IllegalStateException> { ui.onUpdate(0f) }
+        assertFailsWith<IllegalStateException> { ui.updateFrame() }
         scenes.onUpdate(0f)
         assertFailsWith<NodeDestroyedException> { removed() }
         first.update { 3 }
-        ui.onUpdate(0f)
+        ui.updateFrame()
         assertEquals(listOf("first:3", "second:2"), backend.draws.map { it.text })
         show.update { true }
-        ui.onUpdate(0f)
+        ui.updateFrame()
         assertNotSame(removed, local)
     }
 
@@ -337,13 +362,13 @@ class UiRuntimeTests {
             }
         }
         ui.onResize(80, 24)
-        ui.onUpdate(0f)
+        ui.updateFrame()
         assertEquals(10.0, rowCapped.bounds.width)
         assertEquals(70.0, rowFill.bounds.width)
         assertEquals(3.0, columnCapped.bounds.height)
         assertEquals(21.0, columnFill.bounds.height)
         ui.onResize(10, 4)
-        ui.onUpdate(0f)
+        ui.updateFrame()
         assertEquals(5.0, rowCapped.bounds.width)
         assertEquals(5.0, rowFill.bounds.width)
         assertEquals(2.0, columnCapped.bounds.height)
@@ -357,7 +382,7 @@ class UiRuntimeTests {
         root.horizontalAlignment = UiAlignment.End
         scenes.currScene = root
         ui.onResize(10, 4)
-        ui.onUpdate(0f)
+        ui.updateFrame()
         assertEquals(UiRect(6.0, 0.0, 4.0, 2.0), root.bounds)
         assertEquals(UiRect(6.0, 0.0, 4.0, 1.0), backend.draws.single().clip)
         listOf(-1.0, Double.NaN, Double.POSITIVE_INFINITY).forEach { invalid ->
@@ -376,7 +401,7 @@ class UiRuntimeTests {
             }
         }
         ui.onResize(10, 20)
-        ui.onUpdate(0f)
+        ui.updateFrame()
         assertEquals(5.0, row.bounds.height)
         assertEquals(listOf(2.0, 8.0), backend.draws.map { it.bounds.width })
         assertEquals(listOf(5.0, 2.0), backend.draws.map { it.bounds.height })
@@ -387,7 +412,7 @@ class UiRuntimeTests {
         lateinit var button: UiElement
         val root = UiRoot { button = Button("action") {} }
         scenes.currScene = root
-        ui.onUpdate(0f)
+        ui.updateFrame()
         val destructionCount = root.state("test cleanup registrations").destruction.size
         repeat(3) {
             root.focus(button)
@@ -410,12 +435,12 @@ class UiRuntimeTests {
                 key("same") { text = bindText("value") { "${tick()}" } }
             }
         }
-        ui.onUpdate(0f)
+        ui.updateFrame()
         val removals = text.state("test cleanup registrations").removal.size
         val destructions = text.state("test cleanup registrations").destruction.size
         repeat(20) { value ->
             tick.update { value + 1 }
-            ui.onUpdate(0f)
+            ui.updateFrame()
             assertEquals(removals, text.state("test cleanup registrations").removal.size)
             assertEquals(destructions, text.state("test cleanup registrations").destruction.size)
         }
@@ -437,6 +462,6 @@ class UiRuntimeTests {
         assertEquals(removals, root.state("test cleanup registrations").removal.size)
         assertEquals(destructions, root.state("test cleanup registrations").destruction.size)
         dependency.update { 1 }
-        ui.onUpdate(0f)
+        ui.updateFrame()
     }
 }
