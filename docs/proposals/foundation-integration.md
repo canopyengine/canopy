@@ -32,7 +32,7 @@ after the complete branch and required ecosystem workflows have been tested.
 | 1 | App-local screen bootstrap | Implemented; isolation regressions pass |
 | 2 | TOML public dependency exposure | Implemented; consumer regression passes |
 | 3 | Failed-frame discard and retry | Implemented; UI/terminal regressions pass |
-| 4 | App-owned runtime/services and explicit stages | Pending |
+| 4 | App-owned runtime/services and explicit stages | Implemented; full verification passes |
 | 5 | Lifetime contract and optional node-storage prototype | Pending |
 | 6 | Scoped drawing and efficient terminal rendering (#219) | Pending |
 | 7 | UiNode/components and matching compiler integration | Pending |
@@ -49,6 +49,13 @@ The first correctness batch passes `test ktlintCheck build coverageReport`:
 Screen leakage, TOML consumer compilation and failed-frame regressions were
 observed failing before their corresponding fixes. These results include current
 main's logging changes and are not the earlier audit's 491-test baseline.
+
+After app-owned manager state and single-App startup/shutdown guards, the full
+gate passes with 529 tests and 5,933 / 6,640 covered lines (89.4%). Ordinary
+manager lookup remains a lifecycle-thread facade; standalone scope replacement
+and direct teardown cannot take over a running App. Its reservation remains
+held through logging/user shutdown callbacks, and inactive App screen shortcuts
+cannot navigate the running App.
 
 ## Verification and independent onboarding
 
