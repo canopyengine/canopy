@@ -25,7 +25,7 @@ class TerminalAssetEntry(
 
     override val path: String = file.path
     override val name: String = file.name
-    override val extension: String = file.extension ?: ""
+    override val extension: String = file.extension
     override val isDirectory: Boolean = source != FileSource.Classpath && file.isDirectory
 
     override fun exists(): Boolean = if (source == FileSource.Classpath) classpathUrl != null else file.exists()
