@@ -1,8 +1,10 @@
 package io.canopy.platforms.terminal.app
 
+import kotlin.time.Duration.Companion.milliseconds
 import java.util.concurrent.atomic.AtomicBoolean
 import com.github.ajalt.mordant.input.KeyboardEvent
-import com.github.ajalt.mordant.input.coroutines.receiveEventsFlow
+import com.github.ajalt.mordant.input.MouseTracking
+import com.github.ajalt.mordant.input.enterRawMode
 import com.github.ajalt.mordant.input.isCtrlC
 import com.github.ajalt.mordant.rendering.Size
 import com.github.ajalt.mordant.terminal.Terminal
@@ -19,7 +21,6 @@ import io.canopy.engine.ui.UiManager
 import io.canopy.platforms.terminal.data.assets.TerminalAssetsManager
 import io.canopy.tooling.utils.UnstableApi
 import kotlinx.coroutines.*
-import kotlinx.coroutines.flow.takeWhile
 
 /**
  * Application hosted by the terminal runtime, with queued keyboard input and a synchronous frame loop.
@@ -179,25 +180,22 @@ class TerminalApp internal constructor(
         engineLoop.enter()
         withLoggingContext { log.info { "Starting terminal runtime" } }
 
-        // 🔹 Start async input handling
+        // Native reads run on IO and periodically return so cancellation can close raw mode.
         val inputJob = appScope.launch {
             try {
-                terminal.receiveEventsFlow()
-                    .takeWhile { !(it is KeyboardEvent && it.isCtrlC) }
-                    .collect { event ->
-                        when (event) {
-                            is KeyboardEvent -> {
+                withContext(Dispatchers.IO) {
+                    terminal.enterRawMode(MouseTracking.Normal).use { input ->
+                        while (isActive && running.get()) {
+                            val event = input.readEventOrNull(100.milliseconds) ?: continue
+                            ensureActive()
+                            if (event is KeyboardEvent) {
+                                if (event.isCtrlC) break
                                 withLoggingContext { log.trace("key" to event.key) { "Key: ${event.key}" } }
-
-                                // Forward into engine input system (converts to Canopy InputEvent)
                                 inputManager.enqueueMordantKeyEvent(event)
-                            }
-
-                            else -> {
-                                // Mordant only produces keyboard events
                             }
                         }
                     }
+                }
             } catch (e: CancellationException) {
                 // Normal shutdown
             } catch (t: Throwable) {
@@ -259,7 +257,15 @@ class TerminalApp internal constructor(
             inputJob.cancel()
             appScope.cancel()
             lineInput.cancel()
-            engineLoop.exit()
+            // An idle native read must release its raw-mode lease before the caller regains the terminal.
+            // Line fallback has already left raw mode; its blocking System.in read is not joinable here.
+            val interrupted = Thread.interrupted()
+            try {
+                if (!lineInputMode) runBlocking { inputJob.join() }
+            } finally {
+                if (interrupted) Thread.currentThread().interrupt()
+                engineLoop.exit()
+            }
         }
     }
 }
