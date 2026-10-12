@@ -28,3 +28,44 @@ jobs:
       - uses: gradle/actions/setup-gradle@v6.3.0
       - name: Test the real Gradle-to-Java launcher
         run: java tooling/launcher/LauncherTests.java .
+
+  terminal:
+    name: Terminal PTY (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-java@v6
+        id: jdk17
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: actions/setup-java@v6
+        id: jdk25
+        with:
+          distribution: temurin
+          java-version: '25'
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - uses: gradle/actions/setup-gradle@v6.3.0
+      - name: Stage matching engine and compiler artifacts
+        shell: bash
+        run: >-
+          ./gradlew stageCentralPublication --max-workers=2
+          "-Dorg.gradle.java.installations.paths=${{ steps.jdk17.outputs.path }},${{ steps.jdk25.outputs.path }}"
+      - name: Test native terminal input and restoration through the launcher
+        run: |
+          python -m pip install pyte==0.8.2
+          python tooling/launcher/TerminalAcceptance.py
+      - name: Preserve terminal acceptance evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: terminal-acceptance-${{ matrix.os }}
+          path: build/terminal-acceptance
+          if-no-files-found: warn

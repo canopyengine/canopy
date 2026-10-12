@@ -53,3 +53,34 @@ The Launcher GitHub Actions workflow runs that command on Linux, Windows and
 macOS. CI passes piped input; native terminal controls need an interactive smoke
 check on each target system. The terminal starter is suitable for checking arrows,
 Enter, Escape, command input, resizing and shutdown.
+
+### Native terminal acceptance
+
+`TerminalAcceptance.py` creates a fresh external game with the matching staged
+engine/compiler artifacts and runs it through this launcher in a controlling PTY.
+It checks RGB markers, movement, arrow focus, button activation, conditional
+clearing, command capture, explicit pause, controls while paused, draft retention
+at 80×24 → 32×10 → 100×30, resume, typed quit and Ctrl+C. Both exits must restore
+the alternate screen and native terminal flags. Installed JAR hashes must match
+the staged artifacts. No composite build or Rust CLI is involved.
+
+Use the configured JDKs and Python 3.10+ on Linux or macOS:
+
+```sh
+./gradlew stageCentralPublication
+python3 -m venv build/terminal-acceptance-venv
+build/terminal-acceptance-venv/bin/python -m pip install pyte==0.8.2
+build/terminal-acceptance-venv/bin/python tooling/launcher/TerminalAcceptance.py
+```
+
+Optional arguments: `--offline` for warm dependency caches, `--java /path/to/java`
+for launcher Java selection, `--repo /path/to/canopy`, and `--output /path/to/evidence`.
+Raw terminal streams, text/style snapshots, application logs and result JSON go
+to `build/terminal-acceptance` by default. This tool's pyte dependency is only for
+test-side terminal emulation; it is not an engine or game dependency.
+
+The Launcher workflow also runs this PTY suite on Linux and macOS. Windows keeps
+the portable launcher suite; Python's Unix PTY interface cannot exercise Windows
+console input. For manual native checks, use `TerminalAcceptance.kt` as the game
+entry point in a project with matching artifacts and launch it in a real terminal.
+The moving markers are an acceptance fixture, not the full ecosystem simulation.
