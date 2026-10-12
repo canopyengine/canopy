@@ -32,6 +32,50 @@ class TerminalUiTests {
     }
 
     @Test
+    fun `failed updates do not present partially submitted world output`() {
+        // Arrange
+        val output = mutableListOf<String>()
+        val app = TerminalApp(terminal, output::add, { Size(21, 5) }).also { this.app = it }
+        val failure = IllegalStateException("update")
+        app.engineLoop.enter()
+        app.updateTerminalFrame(0f)
+        app.renderFrame(listOf("committed"))
+        output.clear()
+        app.onUpdate {
+            app.renderFrame(listOf("partial"))
+            throw failure
+        }
+
+        // Act / Assert
+        try {
+            assertSame(failure, assertFailsWith<IllegalStateException> { app.updateTerminalFrame(0f) })
+            assertTrue(output.isEmpty())
+        } finally {
+            assertSame(failure, assertFailsWith<IllegalStateException> { app.engineLoop.exit() })
+        }
+    }
+
+    @Test
+    fun `aborting terminal UI discards pending content without submitting and permits another frame`() {
+        // Arrange
+        val submissions = mutableListOf<List<TerminalUiSpan>>()
+        val backend = TerminalUiBackend(terminal, submissions::add)
+        val bounds = UiRect(0.0, 0.0, 8.0, 1.0)
+        backend.begin(UiSize(8.0, 1.0))
+        backend.drawText("partial", bounds, bounds, false, false)
+
+        // Act
+        backend.abort()
+
+        // Assert
+        assertTrue(submissions.isEmpty())
+        backend.begin(UiSize(8.0, 1.0))
+        backend.drawText("retry", bounds, bounds, false, false)
+        backend.end()
+        assertEquals(listOf(listOf(TerminalUiSpan(0, 0, "retry"))), submissions)
+    }
+
+    @Test
     fun `resize and update callbacks share one physical frame write`() {
         val output = mutableListOf<String>()
         val app = TerminalApp(terminal, output::add, { Size(21, 5) }).also { this.app = it }

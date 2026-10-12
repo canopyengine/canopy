@@ -34,6 +34,33 @@ class TerminalCellScreenTests {
     }
 
     @Test
+    fun `aborting a frame preserves committed content and a later frame discards partial submissions`() {
+        // Arrange
+        surface.renderWorld(listOf("committed"))
+        surface.renderUi(listOf(TerminalUiSpan(0, 1, "old UI")))
+        val committed = writes.toList()
+        writes.clear()
+        surface.beginFrame()
+        surface.renderWorld(listOf("partial world"))
+        surface.renderUi(listOf(TerminalUiSpan(0, 1, "partial UI")))
+
+        // Act
+        surface.abortFrame()
+        surface.onUpdate(0f)
+
+        // Assert
+        assertTrue(writes.isEmpty())
+        surface.beginFrame()
+        surface.renderUi(listOf(TerminalUiSpan(0, 1, "new UI")))
+        surface.endFrame()
+        assertEquals(1, writes.size)
+        assertFalse(writes.single().contains("partial"))
+        val rows = terminalTestRows(terminal, committed + writes)
+        assertEquals("committed", rows[0])
+        assertEquals("new UI", rows[1])
+    }
+
+    @Test
     fun `world and UI changes within a frame commit the final composition once`() {
         surface.renderWorld(listOf("old"))
         writes.clear()

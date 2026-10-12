@@ -60,6 +60,71 @@ class UiRuntimeTests {
     }
 
     @Test
+    fun `failed frame stages abort without committing and the next frame can retry`() {
+        for (phase in listOf("begin", "paint", "end")) {
+            // Arrange
+            val failure = IllegalStateException(phase)
+            var fail = true
+            var commits = 0
+            var aborts = 0
+            var draws = 0
+            ui.backend = object : UiBackend by backend {
+                override fun begin(viewport: UiSize) {
+                    if (fail && phase == "begin") throw failure
+                    backend.begin(viewport)
+                }
+                override fun drawText(text: String, bounds: UiRect, clip: UiRect, focused: Boolean, wrap: Boolean) {
+                    draws++
+                    if (fail && phase == "paint" && draws == 2) throw failure
+                    backend.drawText(text, bounds, clip, focused, wrap)
+                }
+                override fun end() {
+                    if (fail && phase == "end") throw failure
+                    commits++
+                }
+                override fun abort() {
+                    aborts++
+                }
+            }
+            scenes.currScene = UiRoot {
+                Column {
+                    Text("first")
+                    Text("second")
+                }
+            }
+
+            // Act / Assert
+            assertSame(failure, assertFailsWith<IllegalStateException> { ui.renderNow() })
+            assertEquals(0, commits)
+            assertEquals(1, aborts)
+            fail = false
+            ui.renderNow()
+            assertEquals(1, commits)
+            assertEquals(listOf("first", "second"), backend.draws.map { it.text })
+            ui.renderNow()
+            assertEquals(1, commits)
+        }
+    }
+
+    @Test
+    fun `failed abort preserves the painting failure and suppresses the cleanup failure`() {
+        // Arrange
+        val painting = IllegalStateException("paint")
+        val cleanup = IllegalArgumentException("abort")
+        ui.backend = object : UiBackend by backend {
+            override fun drawText(text: String, bounds: UiRect, clip: UiRect, focused: Boolean, wrap: Boolean) =
+                throw painting
+            override fun end() = error("A failed paint must not commit")
+            override fun abort() = throw cleanup
+        }
+        scenes.currScene = UiRoot { Text("content") }
+
+        // Act / Assert
+        assertSame(painting, assertFailsWith<IllegalStateException> { ui.renderNow() })
+        assertEquals(listOf(cleanup), painting.suppressed.toList())
+    }
+
+    @Test
     fun `failed application updates defer painting and release the frame boundary`() {
         val count = signal(owner = null, 0)
         scenes.currScene = UiRoot { bindText("count") { "Count: ${count()}" } }

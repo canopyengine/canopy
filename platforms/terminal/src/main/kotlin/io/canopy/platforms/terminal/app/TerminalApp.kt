@@ -126,7 +126,7 @@ class TerminalApp internal constructor(
             throw failure
         } finally {
             try {
-                surface.endFrame()
+                if (frameFailure == null) surface.endFrame() else surface.abortFrame()
             } catch (failure: Throwable) {
                 if (frameFailure == null) throw failure
                 if (failure !== frameFailure) frameFailure.addSuppressed(failure)

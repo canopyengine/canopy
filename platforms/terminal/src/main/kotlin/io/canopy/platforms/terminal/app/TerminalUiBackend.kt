@@ -145,6 +145,12 @@ internal class TerminalUiBackend(private val terminal: Terminal, private val sub
         submit(spans)
     }
 
+    override fun abort() {
+        cells = emptyArray()
+        columns = 0
+        rows = 0
+    }
+
     private fun textLines(text: String, maxWidth: Double, wrap: Boolean): List<List<String>> {
         val available = floor(maxWidth).toInt().coerceAtLeast(0)
         return text.split('\n').flatMap { raw ->

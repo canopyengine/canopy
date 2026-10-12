@@ -95,8 +95,15 @@ interface UiBackend {
     fun drawButton(text: String, bounds: UiRect, clip: UiRect, focused: Boolean, enabled: Boolean, wrap: Boolean) =
         drawText(text, bounds, clip, focused, wrap)
 
-    /** Ends a frame. */
+    /** Commits a successfully painted frame. Output belongs here rather than in drawing primitives. */
     fun end() = Unit
+
+    /**
+     * Discards an incomplete frame after begin, drawing or end fails. Must not present pending content.
+     * Backends holding temporary frame state must release it here; cleanup failures are suppressed
+     * onto the original frame failure. Already emitted output cannot be rolled back.
+     */
+    fun abort() = Unit
 }
 
 /** Retained primitive/container identity. */

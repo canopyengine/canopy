@@ -14,12 +14,20 @@ internal class TerminalSurface(
     private val output: (String) -> Unit,
     private val lineMode: () -> Boolean,
 ) : Manager {
+    private data class FrameContent(
+        val world: List<String>?,
+        val ui: List<TerminalUiSpan>,
+        val prompt: CommandPromptSnapshot?,
+        val submitted: Boolean,
+    )
+
     private var world: List<String>? = null
     private var ui = emptyList<TerminalUiSpan>()
     private var prompt: CommandPromptSnapshot? = null
     private val screen = TerminalCellScreen(terminal)
     private var submitted = false
     private var batching = false
+    private var previousFrame: FrameContent? = null
     private var sessionOpen = false
     private var sessionManaged = false
     private var shutdownHook: Thread? = null
@@ -59,12 +67,27 @@ internal class TerminalSurface(
     }
 
     fun beginFrame() {
+        check(!batching) { "Cannot nest terminal frames" }
+        previousFrame = FrameContent(world, ui, prompt, submitted)
         batching = true
     }
 
     fun endFrame() {
         batching = false
+        previousFrame = null
         if (submitted) redraw()
+    }
+
+    /** Restores retained presentation without undoing gameplay state or emitting output. */
+    fun abortFrame() {
+        previousFrame?.let {
+            world = it.world
+            ui = it.ui
+            prompt = it.prompt
+            submitted = it.submitted
+        }
+        previousFrame = null
+        batching = false
     }
 
     override fun onUpdate(delta: Float) {
@@ -79,6 +102,7 @@ internal class TerminalSurface(
         screen.clear()
         submitted = false
         batching = false
+        previousFrame = null
         closeSession()
     }
 

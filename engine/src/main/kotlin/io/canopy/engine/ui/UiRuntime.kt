@@ -327,11 +327,17 @@ class UiManager(var backend: UiBackend? = null) : Manager {
             activeRoots.forEach { it.validateFocus() }
             val snapshot = listOf(renderer, logicalViewport) + activeRoots.flatMap(::snapshot)
             if (snapshot == lastFrame) return
-            renderer.begin(logicalViewport)
             try {
+                renderer.begin(logicalViewport)
                 activeRoots.forEach { it.render(renderer, logicalViewport) }
-            } finally {
                 renderer.end()
+            } catch (failure: Throwable) {
+                try {
+                    renderer.abort()
+                } catch (cleanup: Throwable) {
+                    if (cleanup !== failure) failure.addSuppressed(cleanup)
+                }
+                throw failure
             }
             lastFrame = snapshot
         }
