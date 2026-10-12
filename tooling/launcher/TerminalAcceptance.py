@@ -97,7 +97,10 @@ class Session:
             if self.child.poll() is not None:
                 break
         self.save("failure")
-        raise AssertionError(f"{label}\n{self.text()}\nSee {self.output / (self.name + '.bin')}")
+        raise AssertionError(
+            f"{label}; game exit={self.child.poll()}\n{self.text()}\n"
+            f"See {self.output / (self.name + '.bin')}"
+        )
 
     def send(self, value):
         os.write(self.master, value if isinstance(value, bytes) else value.encode())
@@ -151,6 +154,8 @@ class Session:
         logs = self.project / ".canopy/logs"
         if logs.exists():
             shutil.copytree(logs, self.output / f"{self.name}-logs", dirs_exist_ok=True)
+        for crash in self.project.glob("hs_err_pid*.log"):
+            shutil.copy(crash, self.output / f"{self.name}-{crash.name}")
 
 
 def exercise(session):

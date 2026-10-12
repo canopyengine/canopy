@@ -24,6 +24,8 @@ import kotlinx.coroutines.*
 
 /**
  * Application hosted by the terminal runtime, with queued keyboard input and a synchronous frame loop.
+ * Native reads use 100 ms cancellation deadlines on an IO worker. Host shutdown closes their
+ * raw-mode scope before application shutdown callbacks and lifecycle completion.
  * Engine and game diagnostics go to `.canopy/logs` by default, leaving terminal output for the game.
  * Select `logging(LoggingPolicy.Host)` before launch to retain host-owned logging instead.
  */
