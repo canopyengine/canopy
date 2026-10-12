@@ -5,6 +5,11 @@ import io.canopy.engine.core.flows.events.untrack
 import io.canopy.engine.core.nodes.Node
 import io.canopy.engine.core.nodes.NodeLifetime
 import io.canopy.engine.core.nodes.nodeConstruction
+import io.canopy.engine.ui.components.Box as BoxNode
+import io.canopy.engine.ui.components.Button as ButtonNode
+import io.canopy.engine.ui.components.Column as ColumnNode
+import io.canopy.engine.ui.components.Row as RowNode
+import io.canopy.engine.ui.components.Text as TextNode
 
 /** Declarative construction receiver. The compiler lowers property expressions and structural regions independently. */
 @DeclarativeUi
@@ -16,23 +21,17 @@ class UiScope internal constructor(private val root: UiRoot, private val parent:
     private var composing = false
     private var disposed = false
 
-    private class Entry(
-        val element: UiElement? = null,
-        val scope: UiScope? = null,
-        val region: UiRegion? = null,
-        val node: Node<*>? = null,
-    ) {
+    private class Entry(val node: Node<*>? = null, val scope: UiScope? = null) {
+        val element: UiNode<*>? get() = node as? UiNode<*>
+        val region: UiRegion? get() = node as? UiRegion
         var observer: UiObserver? = null
         var remembered: Any? = null
         var hasRemembered = false
         fun dispose() {
             observer?.dispose()
             scope?.dispose()
-            if (element?.isValid ==
-                true
-            ) {
-                element.content?.dispose()
-            }
+            val component = element
+            if (component?.isValid == true) component.content?.dispose()
         }
     }
     internal fun compose(block: UiScope.() -> Unit) {
@@ -81,24 +80,34 @@ class UiScope internal constructor(private val root: UiRoot, private val parent:
         requested += key
         return retained[key]
     }
-    private fun element(key: Any, kind: UiKind): UiElement {
+    private fun element(key: Any, kind: UiKind): UiNode<*> {
         val existing = claim(key)
         if (existing != null) {
             require(existing.element?.kind == kind) { "UI site '$key' changed primitive type" }
             return existing.element!!
         }
         val created = parent.withManagedChildrenMutation {
-            parent.withChildConstruction { UiElement(kind, root, "Ui${identities++}") }
+            parent.withChildConstruction {
+                val name = "Ui${identities++}"
+                when (kind) {
+                    UiKind.Text -> TextNode(name = name)
+                    UiKind.Button -> ButtonNode(name = name)
+                    UiKind.Row -> RowNode(name = name)
+                    UiKind.Column -> ColumnNode(name = name)
+                    UiKind.Box -> BoxNode(name = name)
+                }
+            }
         }
-        retained[key] = Entry(element = created)
+        retained[key] = Entry(node = created)
         enterCreated(created)
         return created
     }
 
     /**
-     * Retains an ordinary drawing/simulation node at [site]. [create] runs once per retained identity
-     * and must construct a fresh ordinary node. It shares the container's drawing area but does not
-     * participate in UI measurement. Omission destroys its subtree through normal node cleanup.
+     * Retains a UI or ordinary node at [site]. [create] runs once per retained identity and must
+     * construct one fresh child. UI nodes participate in layout; ordinary nodes share the container's
+     * drawing area. Omission destroys the subtree through normal node cleanup. The matching compiler
+     * uses this hook for direct constructors, so user declarations normally need no explicit call.
      */
     @Suppress("UNCHECKED_CAST")
     fun <N : Node<*>> node(site: Any, create: () -> N): N {
@@ -110,16 +119,15 @@ class UiScope internal constructor(private val root: UiRoot, private val parent:
         val previousChildren = parent.children.values.toSet()
         val created = nodeConstruction {
             parent.withManagedChildrenMutation {
-                parent.withChildConstruction { create() }.also {
+                untrack { parent.withChildConstruction { create() } }.also {
                     val added = parent.children.values.filter { child -> child !in previousChildren }
                     require(
                         added == listOf(it) &&
                             it.parent === parent &&
                             it !is UiRoot &&
-                            it !is UiElement &&
                             it !is UiRegion
                     ) {
-                        "A drawing declaration must construct a fresh ordinary node in this scope"
+                        "A node declaration must construct exactly one fresh child in this scope"
                     }
                 }
             }
@@ -135,19 +143,19 @@ class UiScope internal constructor(private val root: UiRoot, private val parent:
     private fun slot(prefix: String) = "$prefix:${counter++}"
 
     /** Universal horizontal container. */
-    fun Row(style: UiStyle = UiStyle(width = UiLength.Fill), block: UiScope.() -> Unit): UiElement =
-        container(UiKind.Row, style, block)
+    fun Row(style: UiStyle = UiStyle(width = UiLength.Fill), block: UiScope.() -> Unit): RowNode =
+        container(UiKind.Row, style, block) as RowNode
 
     /** Universal vertical container. */
-    fun Column(style: UiStyle = UiStyle(width = UiLength.Fill), block: UiScope.() -> Unit): UiElement =
-        container(UiKind.Column, style, block)
+    fun Column(style: UiStyle = UiStyle(width = UiLength.Fill), block: UiScope.() -> Unit): ColumnNode =
+        container(UiKind.Column, style, block) as ColumnNode
 
     /** Universal overlapping container. */
     fun Box(
         style: UiStyle = UiStyle(width = UiLength.Fill, height = UiLength.Fill),
         block: UiScope.() -> Unit,
-    ): UiElement = container(UiKind.Box, style, block)
-    private fun container(kind: UiKind, style: UiStyle, block: UiScope.() -> Unit): UiElement {
+    ): BoxNode = container(UiKind.Box, style, block) as BoxNode
+    private fun container(kind: UiKind, style: UiStyle, block: UiScope.() -> Unit): UiNode<*> {
         val element = element(slot(kind.name), kind)
         element.style = style
         val scope = element.content ?: UiScope(root, element).also { element.content = it }
@@ -156,30 +164,31 @@ class UiScope internal constructor(private val root: UiRoot, private val parent:
     }
 
     /** Text primitive. With the compiler plugin, signal reads in [value] update this property only. */
-    fun Text(value: String): UiElement = element(slot("Text"), UiKind.Text).also { it.text = value }
+    fun Text(value: String): TextNode = (element(slot("Text"), UiKind.Text) as TextNode).also { it.text = value }
 
     /** Action primitive, invoked by keyboard focus or explicit activation. */
-    fun Button(label: String, onClick: () -> Unit): UiElement = element(slot("Button"), UiKind.Button).also {
-        it.text = label
-        it.action = onClick
-    }
+    fun Button(label: String, onClick: () -> Unit): ButtonNode =
+        (element(slot("Button"), UiKind.Button) as ButtonNode).also {
+            it.text = label
+            it.action = onClick
+        }
 
     /** Compiler ABI: installs a targeted text expression observer. */
-    fun bindText(site: String, value: () -> String): UiElement = bind(site, UiKind.Text, value, null)
+    fun bindText(site: String, value: () -> String): TextNode = bind(site, UiKind.Text, value, null) as TextNode
 
     /** Compiler ABI: installs a targeted button-label observer while leaving event callbacks unobserved. */
-    fun bindButtonText(site: String, label: () -> String, onClick: () -> Unit): UiElement =
-        bind(site, UiKind.Button, label, onClick)
-    private fun bind(site: String, kind: UiKind, value: () -> String, action: (() -> Unit)?): UiElement {
+    fun bindButtonText(site: String, label: () -> String, onClick: () -> Unit): ButtonNode =
+        bind(site, UiKind.Button, label, onClick) as ButtonNode
+    private fun bind(site: String, kind: UiKind, value: () -> String, action: (() -> Unit)?): UiNode<*> {
         val element = element(site, kind)
-        element.action = action
+        if (element is ButtonNode) element.action = action ?: {}
         val entry = retained[site]!!
         entry.observer?.dispose()
         entry.observer = UiObserver(element) {
             val next = value()
-            if (element.text != next) {
-                element.text = next
-                root.dirty = true
+            when (element) {
+                is TextNode -> element.text = next
+                is ButtonNode -> element.text = next
             }
         }
         return element
@@ -204,17 +213,17 @@ class UiScope internal constructor(private val root: UiRoot, private val parent:
     }
 
     /** Compiler ABI for a targeted reactive row style. */
-    fun bindRow(site: String, style: () -> UiStyle, block: UiScope.() -> Unit): UiElement =
-        bindContainer(site, UiKind.Row, style, block)
+    fun bindRow(site: String, style: () -> UiStyle, block: UiScope.() -> Unit): RowNode =
+        bindContainer(site, UiKind.Row, style, block) as RowNode
 
     /** Compiler ABI for a targeted reactive column style. */
-    fun bindColumn(site: String, style: () -> UiStyle, block: UiScope.() -> Unit): UiElement =
-        bindContainer(site, UiKind.Column, style, block)
+    fun bindColumn(site: String, style: () -> UiStyle, block: UiScope.() -> Unit): ColumnNode =
+        bindContainer(site, UiKind.Column, style, block) as ColumnNode
 
     /** Compiler ABI for a targeted reactive box style. */
-    fun bindBox(site: String, style: () -> UiStyle, block: UiScope.() -> Unit): UiElement =
-        bindContainer(site, UiKind.Box, style, block)
-    private fun bindContainer(site: String, kind: UiKind, style: () -> UiStyle, block: UiScope.() -> Unit): UiElement {
+    fun bindBox(site: String, style: () -> UiStyle, block: UiScope.() -> Unit): BoxNode =
+        bindContainer(site, UiKind.Box, style, block) as BoxNode
+    private fun bindContainer(site: String, kind: UiKind, style: () -> UiStyle, block: UiScope.() -> Unit): UiNode<*> {
         val element = element(site, kind)
         val scope = element.content ?: UiScope(root, element).also { element.content = it }
         untrack { scope.compose(block) }
@@ -237,12 +246,12 @@ class UiScope internal constructor(private val root: UiRoot, private val parent:
     }
 
     /** Compiler ABI for a reactive universal layout property. */
-    fun bindStyle(site: String, element: UiElement, value: () -> UiStyle) = property(site, element) {
+    fun bindStyle(site: String, element: UiNode<*>, value: () -> UiStyle) = property(site, element) {
         element.style = value()
     }
 
     /** Compiler ABI for inherited visibility without pausing simulation. */
-    fun bindVisible(site: String, element: UiElement, value: () -> Boolean) = property(site, element) {
+    fun bindVisible(site: String, element: UiNode<*>, value: () -> Boolean) = property(site, element) {
         val next = value()
         if (element.isVisible != next) {
             element.isVisible = next
@@ -251,14 +260,15 @@ class UiScope internal constructor(private val root: UiRoot, private val parent:
     }
 
     /** Compiler ABI for action eligibility. */
-    fun bindEnabled(site: String, element: UiElement, value: () -> Boolean) = property(site, element) {
+    fun bindEnabled(site: String, element: UiNode<*>, value: () -> Boolean) = property(site, element) {
         val next = value()
+        require(element is ButtonNode)
         if (element.enabled != next) {
             element.enabled = next
             root.dirty = true
         }
     }
-    private fun property(site: String, element: UiElement, action: () -> Unit) {
+    private fun property(site: String, element: UiNode<*>, action: () -> Unit) {
         val existing = claim(site)
         val entry = existing ?: Entry().also { retained[site] = it }
         entry.observer?.dispose()
@@ -268,23 +278,20 @@ class UiScope internal constructor(private val root: UiRoot, private val parent:
         retained.values.forEach {
             it.observer?.suspend()
             it.scope?.suspend()
-            if (it.element?.isValid ==
-                true
-            ) {
-                it.element.content?.suspend()
-            }
+            componentScopes(it).forEach { scope -> scope.suspend() }
         }
     }
     internal fun resume() {
         retained.values.forEach {
             it.observer?.resume()
             it.scope?.resume()
-            if (it.element?.isValid ==
-                true
-            ) {
-                it.element.content?.resume()
-            }
+            componentScopes(it).forEach { scope -> scope.resume() }
         }
+    }
+    private fun componentScopes(entry: Entry): List<UiScope> = if (entry.scope == null) {
+        entry.node?.let(::layoutChildren).orEmpty().mapNotNull { if (it.isValid) it.content else null }
+    } else {
+        emptyList()
     }
     private fun region(): Entry {
         val region = parent.withManagedChildrenMutation {
@@ -293,19 +300,24 @@ class UiScope internal constructor(private val root: UiRoot, private val parent:
         val scope = UiScope(root, region)
         region.content = scope
         enterCreated(region)
-        return Entry(scope = scope, region = region)
+        return Entry(node = region, scope = scope)
     }
-    private fun entryNodes(entry: Entry): List<Node<*>> = entry.element?.let(::listOf)
-        ?: entry.node?.let(::listOf) ?: entry.region?.let(::listOf).orEmpty()
+    private fun entryNodes(entry: Entry): List<Node<*>> = entry.node?.let(::listOf).orEmpty()
     internal fun nodes(): List<Node<*>> = retained.values.flatMap { entry ->
-        entry.element?.let(::listOf) ?: entry.node?.let(::listOf) ?: entry.scope?.nodes().orEmpty()
+        entry.scope?.nodes() ?: entryNodes(entry)
     }
-    internal fun elements(): List<UiElement> = retained.values.flatMap(::entryElements)
-    private fun entryElements(entry: Entry): List<UiElement> = entry.element?.let(::listOf)
-        ?: entry.scope?.elements().orEmpty()
+    internal fun elements(): List<UiNode<*>> = nodes().flatMap(::layoutChildren)
+    private fun layoutChildren(node: Node<*>): List<UiNode<*>> {
+        if (!node.isValid) return emptyList()
+        return when (node) {
+            is UiRoot -> emptyList()
+            is UiNode<*> -> listOf(node)
+            else -> node.children.values.flatMap(::layoutChildren)
+        }
+    }
     private fun reorder() {
         val parentScope = when (parent) {
-            is UiElement -> parent.content
+            is UiNode<*> -> parent.content
             is UiRegion -> parent.content
             else -> root.content
         }

@@ -106,8 +106,8 @@ interface UiBackend {
     fun abort() = Unit
 }
 
-/** Retained primitive/container identity. */
-enum class UiKind { Row, Column, Box, Text, Button }
+/** Internal layout/primitive policy; users compose concrete components. */
+internal enum class UiKind { Row, Column, Box, Text, Button }
 
 /** Portable root composition layers; overlay roots are drawn after ordinary content. */
 enum class UiLayer { Content, Overlay }

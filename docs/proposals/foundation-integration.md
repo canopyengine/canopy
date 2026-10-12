@@ -38,7 +38,7 @@ after the complete branch and required ecosystem workflows have been tested.
 | 4 | App-owned runtime/services and explicit stages | Implemented; full verification passes |
 | 5 | Lifetime contract and node-local reactive factories | Implemented; existing guarded storage retained |
 | 6 | Scoped drawing and efficient terminal rendering (#219) | Implemented text drawing slice; full verification passes; live acceptance pending |
-| 7 | UiNode/components and matching compiler integration | Pending |
+| 7 | UiNode/components and matching compiler integration | Implemented; full verification passes |
 | 8 | Custom styles/themes and runnable examples | Pending |
 | 9 | Launcher, external consumer and headless parity | Pending |
 
@@ -98,6 +98,33 @@ context expiry and real compiler-generated conditions with node-owned Signals.
 The full test/lint/build/coverage gate passes with 540 tests, no failures/errors/
 skips and 6,073 / 6,768 covered lines (89.7%). Desktop remains disabled. These
 automated checks do not replace live terminal testing or prove an FPS improvement.
+
+UiNode now extends Node with the same self type, guarded state and lifecycle.
+UiRoot also extends UiNode; Row, Column, Box, Text and Button are individual
+classes in engine.ui.components. Shared layout/composition lives on UiNode;
+text/action state lives on the appropriate leaf class. UiKind is internal policy.
+Custom components override nodeInit and use one ui builder, then declare children
+through ordinary constructors. The compiler retains both UiNode and ordinary Node
+constructors by source site/key. Arguments initialize once without subscribing
+the surrounding structural condition to their reads; Signals provide live values.
+Existing DSL spellings now return concrete component types. UiScope remains the
+construction/binding receiver rather than a second public component model.
+
+All retained children use one Node entry, including transparent structural regions.
+Ordinary grouping nodes are layout-transparent to their first UI descendants.
+Custom UiNode drawing uses its own content area before children; lifecycle resumes
+bindings through ordinary grouping nodes. Permanent destruction skips invalidated
+facades during scope traversal. The latter cleanup regression failed before its
+guard was added. Compiler fixtures cover constructor-only conditions, keyed custom
+components, constructor state, ordinary drawing/grouping, anonymous objects,
+reentry and destruction. Typed styles/visibility/eligibility retain expression
+capture. Consumers replace UiElement with UiNode<*> or the concrete leaf type and
+recompile against matching engine/compiler artifacts. Colors/themes remain unit 8.
+
+The final component gate passes test, ktlintCheck, build and coverageReport:
+546 tests, no failures/errors/skips, 6,162 / 6,891 covered lines (89.4%). Companion
+docs explain the API, UiScope's purpose and frame/ownership flow. Independent
+onboarding and live terminal acceptance have not been established by these checks.
 
 ## Verification and independent onboarding
 

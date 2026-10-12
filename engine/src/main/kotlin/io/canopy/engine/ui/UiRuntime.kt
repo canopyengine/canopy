@@ -15,75 +15,11 @@ import io.canopy.engine.input.events.InputEvent
 import io.canopy.engine.input.events.InputState
 import io.canopy.engine.input.events.KeyInputEvent
 import io.canopy.engine.input.events.MouseButtonEvent
+import io.canopy.engine.ui.components.Button
 
 /** Marks a declarative builder receiver for the Canopy compiler's selective expression lowering. */
 @Target(AnnotationTarget.CLASS)
 annotation class DeclarativeUi
-
-/** Retained UI node; state and lifecycle use ordinary guarded engine nodes. */
-class UiElement internal constructor(kind: UiKind, root: UiRoot, name: String) : Node<UiElement>(name) {
-    /** Primitive or universal layout container. */
-    val kind by nodeProperty(kind)
-    internal val root by nodeProperty(root)
-
-    /** Universal sizing and arrangement policy. */
-    private var storedStyle by nodeProperty(UiStyle())
-    var style: UiStyle
-        get() = storedStyle
-        set(value) {
-            if (storedStyle != value) {
-                storedStyle = value
-                root.dirty = true
-            }
-        }
-
-    /** Accessible semantic role derived from the shared primitive. */
-    val role: String get() = if (kind == UiKind.Button) {
-        "button"
-    } else if (kind == UiKind.Text) {
-        "text"
-    } else {
-        "container"
-    }
-
-    /** Accessible label shared by terminal and graphical backends. */
-    val accessibleLabel: String get() = text
-
-    /** Current text or button label. */
-    private var storedText by nodeProperty("")
-    var text: String
-        get() = storedText
-        set(value) {
-            if (storedText != value) {
-                storedText = value
-                root.dirty = true
-            }
-        }
-
-    /** Disabled actions retain layout but cannot receive focus or activate. */
-    var enabled by nodeProperty(true)
-
-    /** Most recent logical layout bounds. */
-    var bounds by nodeProperty(UiRect(0.0, 0.0, 0.0, 0.0))
-        internal set
-    internal var measurementKey by nodeProperty<List<Any?>>(emptyList())
-    internal var measured by nodeProperty(UiSize(0.0, 0.0))
-    internal var action by nodeProperty<(() -> Unit)?>(null)
-    internal var content by nodeProperty<UiScope?>(null)
-    override fun nodeInit() {
-        markChildrenManaged()
-    }
-
-    /** Invokes an enabled visible action without changing simulation pause state. */
-    fun activate() {
-        if (enabled &&
-            isInsideTree &&
-            isVisibleInTree
-        ) {
-            io.canopy.engine.core.flows.events.untrack { NodeLifetime.withOwner(this) { action?.invoke() } }
-        }
-    }
-}
 
 internal class UiRegion(root: UiRoot, name: String) : Node<UiRegion>(name, skipOnSearch = true) {
     internal val root by nodeProperty(root)
@@ -94,13 +30,8 @@ internal class UiRegion(root: UiRoot, name: String) : Node<UiRegion>(name, skipO
 }
 
 /** A retained declarative tree initialized once; viewport changes recompute its universal layout. */
-class UiRoot(name: String = "UiRoot", block: UiScope.() -> Unit) : Node<UiRoot>(name) {
-    /** Root sizing policy; defaults to filling the current viewport. */
-    var style by nodeProperty(UiStyle(width = UiLength.Fill, height = UiLength.Fill))
-
-    /** Most recent root bounds, used consistently by rendering and pointer clipping. */
-    var bounds by nodeProperty(UiRect(0.0, 0.0, 0.0, 0.0))
-        internal set
+class UiRoot(name: String = "UiRoot", block: UiScope.() -> Unit) :
+    UiNode<UiRoot>(name, UiStyle(width = UiLength.Fill, height = UiLength.Fill)) {
     private var viewportBounds by nodeProperty(UiRect(0.0, 0.0, 0.0, 0.0))
 
     /** Common presentation layer; overlays paint above content regardless of content zIndex. */
@@ -115,10 +46,9 @@ class UiRoot(name: String = "UiRoot", block: UiScope.() -> Unit) : Node<UiRoot>(
     /** Painter order for overlays; higher values paint above lower values. */
     var zIndex by nodeProperty(0)
     private var initializer by nodeProperty<(UiScope.() -> Unit)?>(block)
-    internal var content by nodeProperty<UiScope?>(null)
 
     /** Focus is retained by element identity across keyed reorder. */
-    var focusedElement by nodeProperty<UiElement?>(null)
+    var focusedElement by nodeProperty<UiNode<*>?>(null)
         private set
     internal var dirty by nodeProperty(true)
     private var lastLayout by nodeProperty<List<Any?>>(emptyList())
@@ -153,15 +83,17 @@ class UiRoot(name: String = "UiRoot", block: UiScope.() -> Unit) : Node<UiRoot>(
     }
 
     /** Moves keyboard focus to a visible entered button in this tree, or releases focus. */
-    fun focus(element: UiElement?) {
-        require(element == null || element.root === this && element.kind == UiKind.Button)
-        if (element != null) manager<UiManager>().releaseOtherFocus(this)
-        focusedElement = element?.takeIf { it.enabled && it.isInsideTree && it.isVisibleInTree }
+    fun focus(element: UiNode<*>?) {
+        require(element == null || element is Button)
+        val target = element?.takeIf { it.isInsideTree && it.isVisibleInTree && it.actionEnabled }
+        require(target == null || target.root === this)
+        if (target != null) manager<UiManager>().releaseOtherFocus(this)
+        focusedElement = target
         dirty = true
     }
     internal fun validateFocus() {
         val focused = focusedElement ?: return
-        if (!focused.isValid || !focused.enabled || !focused.isInsideTree || !focused.isVisibleInTree) focus(null)
+        if (!focused.isValid || !focused.actionEnabled || !focused.isInsideTree || !focused.isVisibleInTree) focus(null)
     }
     private fun input(event: InputEvent): Boolean {
         validateFocus()
@@ -169,18 +101,18 @@ class UiRoot(name: String = "UiRoot", block: UiScope.() -> Unit) : Node<UiRoot>(
         if (event is MouseButtonEvent) {
             val hit = content?.elements()?.flatMap { descendants(it) }?.lastOrNull {
                 it.kind == UiKind.Button &&
-                    it.enabled &&
+                    it.actionEnabled &&
                     it.isInsideTree &&
                     it.isVisibleInTree &&
                     hit(it, event.screenPos.x.toDouble(), event.screenPos.y.toDouble())
             } ?: return false
             focus(hit)
-            hit.activate()
+            (hit as Button).activate()
             return true
         }
         if (event !is KeyInputEvent) return false
         val buttons = content?.elements()?.flatMap { descendants(it) }
-            ?.filter { it.kind == UiKind.Button && it.enabled && it.isInsideTree && it.isVisibleInTree }.orEmpty()
+            ?.filter { it.kind == UiKind.Button && it.actionEnabled && it.isInsideTree && it.isVisibleInTree }.orEmpty()
         return when (event.key) {
             Key.DOWN, Key.RIGHT -> {
                 if (buttons.isEmpty()) {
@@ -205,27 +137,28 @@ class UiRoot(name: String = "UiRoot", block: UiScope.() -> Unit) : Node<UiRoot>(
                 false
             }
             Key.ENTER, Key.SPACE -> focusedElement?.let {
-                it.activate()
+                (it as Button).activate()
                 true
             } ?: false
             else -> false
         }
     }
-    private fun hit(element: UiElement, x: Double, y: Double): Boolean {
+    private fun hit(element: UiNode<*>, x: Double, y: Double): Boolean {
         var clip = element.bounds.intersect(viewportBounds)
         if (style.clip) clip = clip.intersect(bounds)
         var ancestor = element.parent
         while (ancestor != null) {
-            if (ancestor is UiElement && ancestor.style.clip) clip = clip.intersect(ancestor.bounds)
+            if (ancestor is UiNode<*> && ancestor.style.clip) clip = clip.intersect(ancestor.bounds)
             ancestor = ancestor.parent
         }
         return x >= clip.x && x < clip.x + clip.width && y >= clip.y && y < clip.y + clip.height
     }
-    private fun descendants(element: UiElement): List<UiElement> =
+    private fun descendants(element: UiNode<*>): List<UiNode<*>> =
         listOf(element) + element.content?.elements().orEmpty().flatMap(::descendants)
 
-    private fun layoutSnapshot(element: UiElement): List<Any?> = listOf(element.nodeId, element.style, element.text) +
-        element.content?.elements().orEmpty().flatMap(::layoutSnapshot)
+    private fun layoutSnapshot(element: UiNode<*>): List<Any?> =
+        listOf(element.nodeId, element.style, element.contentText) +
+            element.content?.elements().orEmpty().flatMap(::layoutSnapshot)
 
     /** Layouts and paints using backend metrics, independently of gameplay pause eligibility. */
     fun render(backend: UiBackend, viewport: UiSize) {
@@ -251,7 +184,7 @@ class UiRoot(name: String = "UiRoot", block: UiScope.() -> Unit) : Node<UiRoot>(
                 it,
                 backend,
                 area,
-                if (it is UiElement) rootClip else contentClip,
+                if (it is UiNode<*>) rootClip else contentClip,
                 focusedElement
             )
         }
@@ -370,8 +303,8 @@ class UiManager(var backend: UiBackend? = null) : Manager {
         root.focusedElement?.nodeId,
         root.zIndex
     ) + root.content?.elements().orEmpty().flatMap(::snapshot)
-    private fun snapshot(element: UiElement): List<Any?> =
-        listOf(element.nodeId, element.isVisibleInTree, element.style, element.text, element.enabled) +
+    private fun snapshot(element: UiNode<*>): List<Any?> =
+        listOf(element.nodeId, element.isVisibleInTree, element.style, element.contentText, element.actionEnabled) +
             element.content?.elements().orEmpty().flatMap(::snapshot)
     override fun onExit() {
         lastFrame = null

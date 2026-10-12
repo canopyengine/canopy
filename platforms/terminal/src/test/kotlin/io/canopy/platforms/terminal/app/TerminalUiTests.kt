@@ -13,12 +13,13 @@ import io.canopy.engine.core.managers.Manager
 import io.canopy.engine.core.managers.ManagersRegistry
 import io.canopy.engine.core.managers.SceneManager
 import io.canopy.engine.core.nodes.Node
-import io.canopy.engine.ui.UiElement
 import io.canopy.engine.ui.UiLength
+import io.canopy.engine.ui.UiNode
 import io.canopy.engine.ui.UiRect
 import io.canopy.engine.ui.UiRoot
 import io.canopy.engine.ui.UiSize
 import io.canopy.engine.ui.UiStyle
+import io.canopy.engine.ui.components.Button
 import org.junit.jupiter.api.AfterEach
 
 class TerminalUiTests {
@@ -122,10 +123,10 @@ class TerminalUiTests {
         val output = mutableListOf<String>()
         val app = TerminalApp(terminal, output::add, { viewport }).also { this.app = it }
         app.engineLoop.enter()
-        lateinit var column: UiElement
-        lateinit var row: UiElement
-        lateinit var first: UiElement
-        lateinit var second: UiElement
+        lateinit var column: UiNode<*>
+        lateinit var row: UiNode<*>
+        lateinit var first: UiNode<*>
+        lateinit var second: UiNode<*>
         val ui =
             UiRoot {
                 column =
@@ -217,7 +218,7 @@ class TerminalUiTests {
         app.engineLoop.enter()
         var clicks = 0
         var executions = 0
-        lateinit var button: UiElement
+        lateinit var button: Button
         val root = UiRoot { button = Button("game action") { clicks++ } }
         root.zIndex = Int.MAX_VALUE
         val scene = UiTestScene()

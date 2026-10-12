@@ -608,6 +608,16 @@ abstract class Node<N : Node<N>> protected constructor(
 
     internal val draws: Boolean get() = NodeDefinition.draws(javaClass)
 
+    internal fun drawSelf(context: DrawContext) {
+        if (!isValid || !isInsideTree || !isVisibleInTree || !draws) return
+        val local = context.fork()
+        try {
+            callback("draw") { onDraw(local) }
+        } finally {
+            local.close()
+        }
+    }
+
     internal fun drawSubtree(context: DrawContext, exclude: (Node<*>) -> Boolean) {
         val pending = ArrayDeque<Pair<Node<*>, Node<*>?>>()
         pending.addLast(this to parent)
@@ -621,14 +631,7 @@ abstract class Node<N : Node<N>> protected constructor(
             ) {
                 continue
             }
-            if (node.draws) {
-                val local = context.fork()
-                try {
-                    node.callback("draw") { node.onDraw(local) }
-                } finally {
-                    local.close()
-                }
-            }
+            node.drawSelf(context)
             if (!node.isValid || !node.isInsideTree) continue
             val children = node.childSnapshot()
             for (index in children.indices.reversed()) pending.addLast(children[index] to node)

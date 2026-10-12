@@ -8,6 +8,7 @@ import io.canopy.engine.core.flows.events.signal
 import io.canopy.engine.core.managers.ManagersRegistry
 import io.canopy.engine.core.managers.SceneManager
 import io.canopy.engine.input.InputFocus
+import io.canopy.engine.ui.components.Button
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.BeforeEach
 
@@ -241,7 +242,7 @@ class UiRuntimeTests {
         val ids = signal(owner = null, listOf("a", "b"))
         val pulse = signal(owner = null, 0)
         val counters = mutableMapOf<String, Signal<Int>>()
-        val buttons = mutableMapOf<String, UiElement>()
+        val buttons = mutableMapOf<String, Button>()
         val creations = mutableListOf<String>()
         val effects = mutableListOf<String>()
         val root = UiRoot {
@@ -323,7 +324,7 @@ class UiRuntimeTests {
     @Test
     fun `hidden element reserves layout space but cannot draw or retain focus`() {
         // Arrange
-        lateinit var button: UiElement
+        lateinit var button: Button
         val root = UiRoot {
             Column {
                 button = Button("action") {}
@@ -350,8 +351,8 @@ class UiRuntimeTests {
     fun `resize recomputes fractions fill gap padding alignment and clipping in cell and pixel metrics`() {
         for (metrics in listOf(RecordingBackend(), RecordingBackend(8.0, 16.0))) {
             // Arrange
-            lateinit var left: UiElement
-            lateinit var right: UiElement
+            lateinit var left: UiNode<*>
+            lateinit var right: UiNode<*>
             val root = UiRoot {
                 Row(
                     UiStyle(
@@ -387,7 +388,7 @@ class UiRuntimeTests {
     fun `focus draws without measurement and action reads never become reactive dependencies`() {
         val pulse = signal(owner = null, 0)
         var actions = 0
-        lateinit var button: UiElement
+        lateinit var button: Button
         scenes.currScene = UiRoot {
             button = Button("action") {
                 pulse()
@@ -458,10 +459,10 @@ class UiRuntimeTests {
 
     @Test
     fun `fill caps redistribute space on both layout axes and resize`() {
-        lateinit var rowCapped: UiElement
-        lateinit var rowFill: UiElement
-        lateinit var columnCapped: UiElement
-        lateinit var columnFill: UiElement
+        lateinit var rowCapped: UiNode<*>
+        lateinit var rowFill: UiNode<*>
+        lateinit var columnCapped: UiNode<*>
+        lateinit var columnFill: UiNode<*>
         scenes.currScene = UiRoot {
             Row(UiStyle(width = UiLength.Fill, height = UiLength.Fill)) {
                 rowCapped = Text("left").also { it.style = UiStyle(width = UiLength.Fill, maxWidth = 10.0) }
@@ -505,7 +506,7 @@ class UiRuntimeTests {
 
     @Test
     fun `wrapped capped fill measurement matches final redistributed allocation`() {
-        lateinit var row: UiElement
+        lateinit var row: UiNode<*>
         scenes.currScene = UiRoot {
             row = Row {
                 Text("abcdefghij").also { it.style = UiStyle(width = UiLength.Fill, maxWidth = 2.0) }
@@ -521,7 +522,7 @@ class UiRuntimeTests {
 
     @Test
     fun `reusable root exit releases focus and renews cleanup without accumulating destruction handlers`() {
-        lateinit var button: UiElement
+        lateinit var button: Button
         val root = UiRoot { button = Button("action") {} }
         scenes.currScene = root
         ui.updateFrame()
@@ -540,7 +541,7 @@ class UiRuntimeTests {
     @Test
     fun `repeated keyed observer replacement retains bounded cleanup registrations`() {
         val tick = signal(owner = null, 0)
-        lateinit var text: UiElement
+        lateinit var text: UiNode<*>
         scenes.currScene = UiRoot {
             structure("list") {
                 tick()

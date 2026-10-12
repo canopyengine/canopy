@@ -9,12 +9,12 @@ import io.canopy.engine.commands.CommandPrompt
 import io.canopy.engine.commands.CommandPromptSnapshot
 import io.canopy.engine.core.managers.manager
 import io.canopy.engine.ui.UiAlignment
-import io.canopy.engine.ui.UiElement
 import io.canopy.engine.ui.UiLayer
 import io.canopy.engine.ui.UiLength
 import io.canopy.engine.ui.UiManager
 import io.canopy.engine.ui.UiRoot
 import io.canopy.engine.ui.UiStyle
+import io.canopy.engine.ui.components.Text as UiText
 
 /** Prompt-owned retained UI uses the same layout, clipping and terminal primitives as application screens. */
 internal class TerminalCommandUi(
@@ -26,8 +26,8 @@ internal class TerminalCommandUi(
 ) {
     private var owner: CommandPrompt? = null
     private var root: UiRoot? = null
-    private var transcript: UiElement? = null
-    private var editor: UiElement? = null
+    private var transcript: UiText? = null
+    private var editor: UiText? = null
 
     fun bind(prompt: CommandPrompt?) {
         if (owner === prompt) return

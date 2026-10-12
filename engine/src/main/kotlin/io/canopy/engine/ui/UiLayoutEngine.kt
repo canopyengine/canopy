@@ -36,7 +36,7 @@ internal object UiLayoutEngine {
             )
         }
     }
-    private fun measure(element: UiElement, backend: UiBackend, available: UiSize): UiSize {
+    private fun measure(element: UiNode<*>, backend: UiBackend, available: UiSize): UiSize {
         val style = element.style
         val children = element.content?.elements().orEmpty()
         val constrainedWidth = when (val width = style.width) {
@@ -77,7 +77,7 @@ internal object UiLayoutEngine {
         }
         val key = listOf(
             backend,
-            element.text,
+            element.contentText,
             style,
             constrainedWidth,
             allocatedHeight,
@@ -86,8 +86,8 @@ internal object UiLayoutEngine {
         )
         if (key == element.measurementKey) return element.measured
         val intrinsic = when (element.kind) {
-            UiKind.Text -> backend.measureText(element.text, inner.width, style.wrap)
-            UiKind.Button -> backend.measureButton(element.text, inner.width, style.wrap)
+            UiKind.Text -> backend.measureText(element.contentText, inner.width, style.wrap)
+            UiKind.Button -> backend.measureButton(element.contentText, inner.width, style.wrap)
             UiKind.Row -> UiSize(
                 measures.sumOf { it.width } + max(0, children.size - 1) * style.gap,
                 measures.maxOfOrNull { it.height } ?: 0.0
@@ -119,7 +119,7 @@ internal object UiLayoutEngine {
         element.measured = measured
         return measured
     }
-    private fun place(element: UiElement, backend: UiBackend, bounds: UiRect) {
+    private fun place(element: UiNode<*>, backend: UiBackend, bounds: UiRect) {
         element.bounds = bounds
         val style = element.style
         val inner = UiRect(
@@ -191,11 +191,11 @@ internal object UiLayoutEngine {
         }
     }
     private fun allocateFills(
-        children: List<UiElement>,
+        children: List<UiNode<*>>,
         horizontal: Boolean,
         available: Double,
-    ): Map<UiElement, Double> {
-        val allocations = mutableMapOf<UiElement, Double>()
+    ): Map<UiNode<*>, Double> {
+        val allocations = mutableMapOf<UiNode<*>, Double>()
         var remaining = available
         val unallocated = children.filter {
             (if (horizontal) it.style.width else it.style.height) == UiLength.Fill
@@ -219,9 +219,24 @@ internal object UiLayoutEngine {
         }
         return allocations
     }
-    fun paint(element: UiElement, backend: UiBackend, clip: UiRect, focused: UiElement?) {
+    fun paint(element: UiNode<*>, backend: UiBackend, clip: UiRect, focused: UiNode<*>?) {
         if (!element.isVisibleInTree) return
         val ownClip = if (element.style.clip) clip.intersect(element.bounds) else clip
+        if (element.draws) {
+            val padding = element.style.padding
+            val area = UiRect(
+                element.bounds.x + padding,
+                element.bounds.y + padding,
+                max(0.0, element.bounds.width - 2 * padding),
+                max(0.0, element.bounds.height - 2 * padding)
+            )
+            val context = DrawContext(backend, area, if (element.style.clip) ownClip.intersect(area) else ownClip)
+            try {
+                element.drawSelf(context)
+            } finally {
+                context.close()
+            }
+        }
         when (element.kind) {
             UiKind.Text, UiKind.Button -> {
                 val padding = element.style.padding
@@ -234,15 +249,15 @@ internal object UiLayoutEngine {
                 )
                 if (element.kind == UiKind.Button) {
                     backend.drawButton(
-                        element.text,
+                        element.contentText,
                         textBounds,
                         ownClip,
                         element === focused,
-                        element.enabled,
+                        element.actionEnabled,
                         element.style.wrap
                     )
                 } else {
-                    backend.drawText(element.text, textBounds, ownClip, element === focused, element.style.wrap)
+                    backend.drawText(element.contentText, textBounds, ownClip, element === focused, element.style.wrap)
                 }
             }
             else -> {
@@ -255,19 +270,28 @@ internal object UiLayoutEngine {
                 )
                 val contentClip = if (element.style.clip) ownClip.intersect(area) else ownClip
                 element.content?.nodes()?.forEach {
-                    paintNode(it, backend, area, if (it is UiElement) ownClip else contentClip, focused)
+                    paintNode(it, backend, area, if (it is UiNode<*>) ownClip else contentClip, focused)
                 }
             }
         }
     }
 
-    fun paintNode(node: Node<*>, backend: UiBackend, area: UiRect, clip: UiRect, focused: UiElement?) {
-        if (node is UiElement) {
+    fun paintNode(node: Node<*>, backend: UiBackend, area: UiRect, clip: UiRect, focused: UiNode<*>?) {
+        if (node is UiNode<*>) {
             paint(node, backend, clip, focused)
         } else {
             val context = DrawContext(backend, area, clip)
             try {
-                node.drawSubtree(context) { it is UiRoot }
+                node.drawSubtree(context) {
+                    when (it) {
+                        is UiRoot -> true
+                        is UiNode<*> -> {
+                            paint(it, backend, clip, focused)
+                            true
+                        }
+                        else -> false
+                    }
+                }
             } finally {
                 context.close()
             }

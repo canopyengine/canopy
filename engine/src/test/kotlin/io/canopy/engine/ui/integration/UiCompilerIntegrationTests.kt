@@ -9,10 +9,49 @@ import io.canopy.engine.core.nodes.Node
 import io.canopy.engine.graphics.DrawContext
 import io.canopy.engine.input.InputFocus
 import io.canopy.engine.ui.*
+import io.canopy.engine.ui.components.Button
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.BeforeEach
 
 class UiCompilerIntegrationTests {
+    private class CounterCard(name: String, initial: Int, created: () -> Unit) : UiNode<CounterCard>(name) {
+        val count = signal(initial)
+        var increment: Button? = null
+        init {
+            created()
+        }
+        override fun nodeInit() {
+            ui {
+                Column {
+                    Text("Count: ${count()}")
+                    increment = Button("Add") { count.update { it + 1 } }
+                    MapMarker()
+                }
+            }
+        }
+    }
+
+    private open class MapMarker : Node<MapMarker>("Map") {
+        override fun onDraw(context: DrawContext) {
+            context.text("map")
+        }
+    }
+
+    private class Canvas :
+        UiNode<Canvas>(
+            "Canvas",
+            UiStyle(width = UiLength.Fixed(4.0), height = UiLength.Fixed(3.0), padding = 1.0)
+        ) {
+        override fun nodeInit() {
+            ui { Text("overlay") }
+        }
+        override fun onDraw(context: DrawContext) {
+            context.text("canvas")
+        }
+    }
+
+    private class Group(block: Group.() -> Unit) : Node<Group>("Group", block = block)
+
     private class CounterNode(created: () -> Unit) : Node<CounterNode>("Counter") {
         val count = signal(0)
         init {
@@ -56,6 +95,154 @@ class UiCompilerIntegrationTests {
         override fun drawText(text: String, bounds: UiRect, clip: UiRect, focused: Boolean, wrap: Boolean) {
             draws += Draw(text, bounds)
         }
+    }
+
+    @Test
+    fun `UI bindings inside ordinary grouping nodes resume after reusable tree removal`() {
+        // Arrange
+        lateinit var card: CounterCard
+        var creations = 0
+        val root = UiRoot {
+            Group { CounterCard("wrapped", 0) { creations++ }.also { card = it } }
+        }
+        scenes.currScene = root
+        ui.updateFrame()
+
+        // Act
+        root.nodeExitTree()
+        card.count.update { 7 }
+        root.buildTree()
+        ui.updateFrame()
+
+        // Assert
+        assertEquals(1, creations)
+        assertEquals("Count: 7", backend.draws.first().text)
+        card.count.update { 8 }
+        ui.updateFrame()
+        assertEquals("Count: 8", backend.draws.first().text)
+        root.queueFree()
+        scenes.onUpdate(0f)
+        assertTrue(root.isFreed)
+    }
+
+    @Test
+    fun `custom UiNode drawing precedes composed children and uses its own padded bounds`() {
+        // Arrange
+        scenes.currScene = UiRoot { Canvas() }
+
+        // Act
+        ui.updateFrame()
+
+        // Assert
+        assertEquals(listOf("canvas", "overlay"), backend.draws.map { it.text })
+        assertEquals(UiRect(1.0, 1.0, 2.0, 1.0), backend.draws.first().bounds)
+    }
+
+    @Test
+    fun `ordinary grouping nodes preserve UI descendants in layout and painting`() {
+        // Arrange
+        scenes.currScene = UiRoot {
+            Column {
+                Group { io.canopy.engine.ui.components.Text("wrapped", name = "label") }
+                Text("next")
+            }
+        }
+
+        // Act
+        ui.updateFrame()
+
+        // Assert
+        assertEquals(listOf("wrapped", "next"), backend.draws.map { it.text })
+        assertEquals(listOf(0.0, 1.0), backend.draws.map { it.bounds.y })
+    }
+
+    @Test
+    fun `anonymous ordinary nodes preserve object literal lowering in reactive UI declarations`() {
+        // Arrange
+        val visible = signal(owner = null, true)
+        scenes.currScene = UiRoot {
+            if (visible()) {
+                object : MapMarker() {
+                    override fun onDraw(context: DrawContext) {
+                        context.text("anonymous")
+                    }
+                }
+            }
+        }
+
+        // Act / Assert
+        ui.updateFrame()
+        assertEquals("anonymous", backend.draws.single().text)
+        visible.update { false }
+        ui.updateFrame()
+        assertTrue(backend.draws.isEmpty())
+        visible.dispose()
+    }
+
+    @Test
+    fun `custom UiNodes compose typed controls and ordinary nodes with retained constructor state`() {
+        // Arrange
+        val ids = signal(owner = null, listOf("a", "b"))
+        val initial = signal(owner = null, 2)
+        val cards = mutableMapOf<String, CounterCard>()
+        var creations = 0
+        scenes.currScene = UiRoot {
+            Column {
+                for (id in ids()) {
+                    key(id) {
+                        val card = CounterCard(id, initial()) { creations++ }
+                        cards[id] = card
+                    }
+                }
+            }
+        }
+        ui.updateFrame()
+        val first = cards.getValue("a")
+        first.increment!!.activate()
+        ui.updateFrame()
+
+        // Act / Assert
+        initial.update { 9 }
+        ids.update { listOf("b", "a") }
+        ui.updateFrame()
+        assertEquals(2, creations)
+        assertSame(first, cards["a"])
+        assertEquals(listOf("Count: 2", "Add", "map", "Count: 3", "Add", "map"), backend.draws.map { it.text })
+        ids.update { listOf("b") }
+        ui.updateFrame()
+        scenes.onUpdate(0f)
+        assertTrue(first.isFreed)
+        ids.update { listOf("a", "b") }
+        ui.updateFrame()
+        assertEquals(3, creations)
+        assertNotSame(first, cards["a"])
+        assertEquals(9, cards.getValue("a").count())
+        ids.dispose()
+        initial.dispose()
+    }
+
+    @Test
+    fun `constructor-only condition is reactive and omission clears a custom component`() {
+        // Arrange
+        val visible = signal(owner = null, true)
+        var creations = 0
+        scenes.currScene = UiRoot {
+            if (visible()) {
+                CounterCard("counter", 0) { creations++ }
+            }
+        }
+
+        // Act / Assert
+        ui.updateFrame()
+        assertEquals(1, creations)
+        assertEquals(listOf("Count: 0", "Add", "map"), backend.draws.map { it.text })
+        visible.update { false }
+        ui.updateFrame()
+        assertTrue(backend.draws.isEmpty())
+        visible.update { true }
+        ui.updateFrame()
+        assertEquals(2, creations)
+        visible.dispose()
     }
 
     @Test

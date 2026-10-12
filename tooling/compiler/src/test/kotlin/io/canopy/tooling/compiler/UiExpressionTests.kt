@@ -96,7 +96,7 @@ class UiExpressionTests {
                 var width = 2
                 var shown = true
                 val scope = UiScope()
-                lateinit var element: UiElement
+                lateinit var element: UiNode
                 with(scope) {
                     element = Text("hello")
                     element.style = UiStyle(width)
@@ -216,7 +216,7 @@ class UiExpressionTests {
                     package io.canopy.engine.ui
                     data class UiStyle(val width: Int)
                     open class BaseNode { var isVisible = true }
-                    class UiElement : BaseNode() { var style = UiStyle(0); var enabled = true }
+                    class UiNode : BaseNode() { var style = UiStyle(0); var enabled = true }
                     class UiScope {
                         val remembered = mutableMapOf<String, Any?>()
                         @Suppress("UNCHECKED_CAST")
@@ -227,14 +227,14 @@ class UiExpressionTests {
                         val evaluators = mutableListOf<() -> String>()
                         val values = mutableListOf<String>()
                         var handler: () -> Unit = {}
-                        fun Text(value: String): UiElement { values += value; return UiElement() }
-                        fun Button(label: String, onClick: () -> Unit): UiElement {
-                            handler = onClick; values += label; return UiElement()
+                        fun Text(value: String): UiNode { values += value; return UiNode() }
+                        fun Button(label: String, onClick: () -> Unit): UiNode {
+                            handler = onClick; values += label; return UiNode()
                         }
-                        fun bindText(site: String, value: () -> String): UiElement {
-                            evaluators += value; values += value(); return UiElement()
+                        fun bindText(site: String, value: () -> String): UiNode {
+                            evaluators += value; values += value(); return UiNode()
                         }
-                        fun bindButtonText(site: String, label: () -> String, onClick: () -> Unit): UiElement {
+                        fun bindButtonText(site: String, label: () -> String, onClick: () -> Unit): UiNode {
                             handler = onClick; return bindText(site, label)
                         }
                         fun structure(site: String, content: UiScope.() -> Unit) {
@@ -246,13 +246,13 @@ class UiExpressionTests {
                             try { content() } finally { evaluatingRegion = previous }
                         }
                         fun key(value: Any, content: UiScope.() -> Unit) = content()
-                        fun bindStyle(site: String, element: UiElement, value: () -> UiStyle) {
+                        fun bindStyle(site: String, element: UiNode, value: () -> UiStyle) {
                             properties += { element.style = value() }; element.style = value()
                         }
-                        fun bindVisible(site: String, element: UiElement, value: () -> Boolean) {
+                        fun bindVisible(site: String, element: UiNode, value: () -> Boolean) {
                             properties += { element.isVisible = value() }; element.isVisible = value()
                         }
-                        fun bindEnabled(site: String, element: UiElement, value: () -> Boolean) {
+                        fun bindEnabled(site: String, element: UiNode, value: () -> Boolean) {
                             properties += { element.enabled = value() }; element.enabled = value()
                         }
                         fun flush() {
