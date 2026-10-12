@@ -1,7 +1,6 @@
 package io.canopy.engine.ui
 
-import io.canopy.engine.core.flows.events.EventDisconnectHandler
-import io.canopy.engine.core.flows.events.Signal
+import io.canopy.engine.core.flows.events.DependencySubscriptions
 import io.canopy.engine.core.flows.events.TrackingContext
 import io.canopy.engine.core.managers.Manager
 import io.canopy.engine.core.managers.manager
@@ -363,8 +362,7 @@ class UiManager(var backend: UiBackend? = null) : Manager {
 }
 
 internal class UiObserver(private val owner: Node<*>, private var action: (() -> Unit)?) {
-    private var dependencies = emptySet<Signal<*>>()
-    private val handlers = mutableMapOf<Signal<*>, EventDisconnectHandler>()
+    private val subscriptions = DependencySubscriptions()
     private var disposed = false
     private var suspended = false
     private var cancelRemoval: (() -> Unit)? = null
@@ -387,11 +385,7 @@ internal class UiObserver(private val owner: Node<*>, private var action: (() ->
         } finally {
             TrackingContext.pop()
             if (!disposed && !suspended && owner.isValid) {
-                for (dep in dependencies - frame) handlers.remove(dep)?.disconnect()
-                for (dep in frame - dependencies) {
-                    handlers[dep] = NodeLifetime.withOwner(null) { dep.connect { manager<UiManager>().enqueue(this) } }
-                }
-                dependencies = frame
+                subscriptions.reconcile(frame) { manager<UiManager>().enqueue(this) }
             }
         }
     }
@@ -400,9 +394,7 @@ internal class UiObserver(private val owner: Node<*>, private var action: (() ->
         suspended = true
         cancelRemoval?.invoke()
         cancelRemoval = null
-        handlers.values.forEach { it.disconnect() }
-        handlers.clear()
-        dependencies = emptySet()
+        subscriptions.clear()
         manager<UiManager>().cancel(this)
     }
     fun resume() {
@@ -420,8 +412,7 @@ internal class UiObserver(private val owner: Node<*>, private var action: (() ->
         cancelDestruction?.invoke()
         cancelDestruction = null
         action = null
-        handlers.values.forEach { it.disconnect() }
-        handlers.clear()
+        subscriptions.clear()
         manager<UiManager>().cancel(this)
     }
 }

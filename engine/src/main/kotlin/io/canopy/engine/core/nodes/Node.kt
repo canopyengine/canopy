@@ -5,6 +5,12 @@ import java.lang.ref.WeakReference
 import java.util.concurrent.atomic.AtomicLong
 import io.canopy.engine.core.CleanupFailures
 import io.canopy.engine.core.exceptions.*
+import io.canopy.engine.core.flows.events.Computed
+import io.canopy.engine.core.flows.events.Effect
+import io.canopy.engine.core.flows.events.NoArgEvent
+import io.canopy.engine.core.flows.events.OneArgEvent
+import io.canopy.engine.core.flows.events.Signal
+import io.canopy.engine.core.flows.events.TwoArgsEvent
 import io.canopy.engine.core.managers.SceneManager
 import io.canopy.engine.core.managers.manager
 import io.canopy.engine.input.events.InputEvent
@@ -294,6 +300,35 @@ abstract class Node<N : Node<N>> protected constructor(
         state("create property").properties[key] = initial
         return NodeProperty.create(key)
     }
+
+    /**
+     * Creates signal state owned by this node, including when called from a subclass initializer.
+     * State survives reusable detachment and is disposed on destruction. Global factories with an
+     * explicit null owner remain available for shared state. Use on the lifecycle thread.
+     */
+    fun <T> signal(value: T): Signal<T> = Signal(value, this)
+
+    /** Creates a zero-argument event owned until this node is destroyed. Listener ownership is independent. */
+    fun event(): NoArgEvent = NoArgEvent(this)
+
+    /** Creates a one-argument event owned until this node is destroyed. Listener ownership is independent. */
+    fun <A> event(): OneArgEvent<A> = OneArgEvent(this)
+
+    /** Creates a two-argument event owned until this node is destroyed. Listener ownership is independent. */
+    fun <A, B> event(): TwoArgsEvent<A, B> = TwoArgsEvent(this)
+
+    /**
+     * Creates a calculation owned by this node and disposed on tree exit or destruction.
+     * Create it in [onEnterTree] when it must be renewed on reentry. Use on the lifecycle thread.
+     */
+    fun <T> computed(block: () -> T): Computed<T> = Computed(block, this)
+
+    /**
+     * Creates an immediately running reaction retained until this node exits or is destroyed.
+     * Create it in [onEnterTree] when it must be renewed on reentry. The reaction's later runs do not
+     * establish ambient ownership; this factory always uses its explicit node receiver.
+     */
+    fun effect(block: () -> Unit): Effect = NodeLifetime.withOwner(this) { Effect(block) }
 
     /**
      * Compiler storage ABI: reads a declaring-class-qualified slot without retaining its value on the facade.
