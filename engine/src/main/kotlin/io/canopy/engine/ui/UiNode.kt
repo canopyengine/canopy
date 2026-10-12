@@ -78,14 +78,15 @@ abstract class UiNode<N : UiNode<N>> protected constructor(
 
     internal fun appearance(focused: Boolean = false): UiAppearance {
         val theme = resolvedTheme
-        var result = if (kind == UiKind.Button) theme.text.merge(theme.button) else theme.text
-        val ancestors = mutableListOf<UiNode<*>>()
+        var overrides = UiAppearance.Empty
         var node: Node<*>? = this
         while (node != null) {
-            if (node is UiNode<*>) ancestors += node
+            // Walk outward: nearer explicit properties override farther ancestors.
+            if (node is UiNode<*>) overrides = node.style.appearance.merge(overrides)
             node = node.parent
         }
-        ancestors.asReversed().forEach { result = result.merge(it.style.appearance) }
+        val defaults = if (kind == UiKind.Button) theme.text.merge(theme.button) else theme.text
+        val result = defaults.merge(overrides)
         return when {
             kind == UiKind.Button && !actionEnabled -> result.merge(theme.disabledButton)
             kind == UiKind.Button && focused -> result.merge(theme.focusedButton)

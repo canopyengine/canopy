@@ -294,7 +294,9 @@ class UiScope internal constructor(private val root: UiRoot, private val parent:
         }
     }
     private fun componentScopes(entry: Entry): List<UiScope> = if (entry.scope == null) {
-        entry.node?.let(::layoutChildren).orEmpty().mapNotNull { if (it.isValid) it.content else null }
+        buildList {
+            entry.node?.let { node -> layoutChildren(node) { if (it.isValid) it.content?.let { add(it) } } }
+        }
     } else {
         emptyList()
     }
@@ -308,16 +310,23 @@ class UiScope internal constructor(private val root: UiRoot, private val parent:
         return Entry(node = region, scope = scope)
     }
     private fun entryNodes(entry: Entry): List<Node<*>> = entry.node?.let(::listOf).orEmpty()
-    internal fun nodes(): List<Node<*>> = retained.values.flatMap { entry ->
-        entry.scope?.nodes() ?: entryNodes(entry)
+    internal fun nodes(): List<Node<*>> = buildList { forEachNode { add(it) } }
+    internal fun elements(): List<UiNode<*>> = buildList { forEachElement { add(it) } }
+    internal fun forEachNode(action: (Node<*>) -> Unit) {
+        retained.values.forEach { entry ->
+            val scope = entry.scope
+            if (scope != null) scope.forEachNode(action) else entry.node?.let(action)
+        }
     }
-    internal fun elements(): List<UiNode<*>> = nodes().flatMap(::layoutChildren)
-    private fun layoutChildren(node: Node<*>): List<UiNode<*>> {
-        if (!node.isValid) return emptyList()
-        return when (node) {
-            is UiRoot -> emptyList()
-            is UiNode<*> -> listOf(node)
-            else -> node.children.values.flatMap(::layoutChildren)
+    internal fun forEachElement(action: (UiNode<*>) -> Unit) {
+        forEachNode { layoutChildren(it, action) }
+    }
+    private fun layoutChildren(node: Node<*>, action: (UiNode<*>) -> Unit) {
+        if (!node.isValid) return
+        when (node) {
+            is UiRoot -> Unit
+            is UiNode<*> -> action(node)
+            else -> node.children.values.forEach { layoutChildren(it, action) }
         }
     }
     private fun reorder() {

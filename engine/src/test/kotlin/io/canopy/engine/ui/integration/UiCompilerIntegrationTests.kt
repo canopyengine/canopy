@@ -191,6 +191,34 @@ class UiCompilerIntegrationTests {
     }
 
     @Test
+    fun `direct changes beneath ordinary grouping nodes invalidate an otherwise equal frame`() {
+        // Arrange
+        lateinit var group: Group
+        lateinit var label: io.canopy.engine.ui.components.Text
+        val root = UiRoot {
+            group = Group { label = io.canopy.engine.ui.components.Text("first", name = "label") }
+        }
+        scenes.currScene = root
+        ui.updateFrame()
+
+        // Act / Assert
+        group.hide()
+        ui.updateFrame()
+        assertTrue(backend.draws.isEmpty())
+        group.show()
+        label.text = "second"
+        ui.updateFrame()
+        assertEquals("second", backend.draws.single().text)
+        label.hide()
+        ui.updateFrame()
+        assertTrue(backend.draws.isEmpty())
+        label.show()
+        ui.onResize(3, 24)
+        ui.updateFrame()
+        assertEquals(3.0, backend.draws.single().bounds.width)
+    }
+
+    @Test
     fun `anonymous ordinary nodes preserve object literal lowering in reactive UI declarations`() {
         // Arrange
         val visible = signal(owner = null, true)

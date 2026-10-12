@@ -167,9 +167,13 @@ class UiRoot(name: String = "UiRoot", block: UiScope.() -> Unit) :
     private fun descendants(element: UiNode<*>): List<UiNode<*>> =
         listOf(element) + element.content?.elements().orEmpty().flatMap(::descendants)
 
-    private fun layoutSnapshot(element: UiNode<*>): List<Any?> =
-        listOf(element.nodeId, element.style.layoutKey, element.resolvedBorder, element.contentText) +
-            element.content?.elements().orEmpty().flatMap(::layoutSnapshot)
+    private fun layoutSnapshot(element: UiNode<*>, snapshot: MutableList<Any?>) {
+        snapshot.add(element)
+        snapshot.add(element.style.layoutKey)
+        snapshot.add(element.resolvedBorder)
+        snapshot.add(element.contentText)
+        element.content?.forEachElement { layoutSnapshot(it, snapshot) }
+    }
 
     /** Layouts and paints using backend metrics, independently of gameplay pause eligibility. */
     fun render(backend: UiBackend, viewport: UiSize) {
@@ -177,8 +181,15 @@ class UiRoot(name: String = "UiRoot", block: UiScope.() -> Unit) :
         if (!isVisibleInTree) return
         viewportBounds = UiRect(0.0, 0.0, viewport.width, viewport.height)
         val layoutKey =
-            listOf(backend, viewport, style.layoutKey, resolvedBorder, verticalAlignment, horizontalAlignment) +
-                content?.elements().orEmpty().flatMap(::layoutSnapshot)
+            buildList {
+                add(backend)
+                add(viewport)
+                add(style.layoutKey)
+                add(resolvedBorder)
+                add(verticalAlignment)
+                add(horizontalAlignment)
+                content?.forEachElement { layoutSnapshot(it, this) }
+            }
         if (layoutKey != lastLayout) {
             UiLayoutEngine.layout(this, backend, viewport)
             lastLayout = layoutKey
@@ -211,7 +222,11 @@ class UiRoot(name: String = "UiRoot", block: UiScope.() -> Unit) :
 class UiManager(var backend: UiBackend? = null) : Manager {
     private val roots = linkedSetOf<UiRoot>()
     private val pending = linkedSetOf<UiObserver>()
-    private var lastFrame: List<Any?>? = null
+
+    // Buffers swap only after a successful end. Equal/failed frames clear scratch references.
+    private var lastFrame = ArrayList<Any?>()
+    private var nextFrame = ArrayList<Any?>()
+    private var hasFrame = false
     private var updating = false
 
     /** Defers explicit painting until all application update callbacks have completed successfully. */
@@ -285,51 +300,67 @@ class UiManager(var backend: UiBackend? = null) : Manager {
             }.sortedWith(compareBy<UiRoot> { it.layer.ordinal }.thenBy { it.zIndex })
             activeRoots.forEach { it.validateFocus() }
             val draws = scene.hasDrawables
-            val snapshot = listOf(renderer, logicalViewport, draws) + activeRoots.flatMap(::snapshot)
-            if (!draws && snapshot == lastFrame) return
             try {
-                renderer.begin(logicalViewport)
-                val area = UiRect(0.0, 0.0, logicalViewport.width, logicalViewport.height)
-                val context = DrawContext(renderer, area, area)
+                nextFrame.add(renderer)
+                nextFrame.add(logicalViewport)
+                nextFrame.add(draws)
+                activeRoots.forEach { snapshot(it, nextFrame) }
+                if (!draws && hasFrame && nextFrame == lastFrame) return
                 try {
-                    scene.currScene?.drawSubtree(context) { it is UiRoot }
-                } finally {
-                    context.close()
+                    renderer.begin(logicalViewport)
+                    val area = UiRect(0.0, 0.0, logicalViewport.width, logicalViewport.height)
+                    val context = DrawContext(renderer, area, area)
+                    try {
+                        scene.currScene?.drawSubtree(context) { it is UiRoot }
+                    } finally {
+                        context.close()
+                    }
+                    activeRoots.forEach { it.render(renderer, logicalViewport) }
+                    renderer.end()
+                } catch (failure: Throwable) {
+                    try {
+                        renderer.abort()
+                    } catch (cleanup: Throwable) {
+                        if (cleanup !== failure) failure.addSuppressed(cleanup)
+                    }
+                    throw failure
                 }
-                activeRoots.forEach { it.render(renderer, logicalViewport) }
-                renderer.end()
-            } catch (failure: Throwable) {
-                try {
-                    renderer.abort()
-                } catch (cleanup: Throwable) {
-                    if (cleanup !== failure) failure.addSuppressed(cleanup)
-                }
-                throw failure
+                val previous = lastFrame
+                lastFrame = nextFrame
+                nextFrame = previous
+                hasFrame = true
+            } finally {
+                nextFrame.clear()
             }
-            lastFrame = snapshot
         }
     }
-    private fun snapshot(root: UiRoot): List<Any?> = listOf(
-        root.nodeId,
-        root.isVisibleInTree,
-        root.style,
-        root.theme,
-        root.verticalAlignment,
-        root.horizontalAlignment,
-        root.focusedElement?.nodeId,
-        root.zIndex
-    ) + root.content?.elements().orEmpty().flatMap(::snapshot)
-    private fun snapshot(element: UiNode<*>): List<Any?> = listOf(
-        element.nodeId,
-        element.isVisibleInTree,
-        element.style,
-        element.theme,
-        element.contentText,
-        element.actionEnabled
-    ) +
-        element.content?.elements().orEmpty().flatMap(::snapshot)
+    private fun snapshot(root: UiRoot, snapshot: MutableList<Any?>) {
+        snapshot.add(root)
+        snapshot.add(root.isVisibleInTree)
+        snapshot.add(root.style)
+        snapshot.add(root.theme)
+        snapshot.add(root.verticalAlignment)
+        snapshot.add(root.horizontalAlignment)
+        snapshot.add(root.focusedElement)
+        snapshot.add(root.layer)
+        snapshot.add(root.zIndex)
+        root.content?.forEachElement { snapshot(it, snapshot) }
+    }
+    private fun snapshot(element: UiNode<*>, snapshot: MutableList<Any?>) {
+        snapshot.add(element)
+        snapshot.add(element.isVisibleInTree)
+        snapshot.add(element.style)
+        snapshot.add(element.theme)
+        snapshot.add(element.contentText)
+        snapshot.add(element.actionEnabled)
+        element.content?.forEachElement { snapshot(it, snapshot) }
+    }
     override fun onExit() {
-        lastFrame = null
+        hasFrame = false
+        lastFrame.clear()
+        lastFrame.trimToSize()
+        nextFrame.clear()
+        nextFrame.trimToSize()
         pending.toList().forEach { it.dispose() }
         pending.clear()
         roots.clear()

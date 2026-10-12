@@ -7,6 +7,7 @@ import io.canopy.engine.core.flows.events.effect
 import io.canopy.engine.core.flows.events.signal
 import io.canopy.engine.core.managers.ManagersRegistry
 import io.canopy.engine.core.managers.SceneManager
+import io.canopy.engine.core.nodes.types.empty.EmptyNode
 import io.canopy.engine.input.InputFocus
 import io.canopy.engine.ui.components.Button
 import org.junit.jupiter.api.AfterEach
@@ -180,6 +181,108 @@ class UiRuntimeTests {
             ui.renderNow()
             assertEquals(1, commits)
         }
+    }
+
+    @Test
+    fun `a failed changed frame retains the last successful comparison and retries current content`() {
+        // Arrange
+        lateinit var label: io.canopy.engine.ui.components.Text
+        scenes.currScene = UiRoot { label = Text("first") }
+        ui.updateFrame()
+        var fail = true
+        var commits = 0
+        ui.backend = object : UiBackend by backend {
+            override fun end() {
+                if (fail) error("commit")
+                commits++
+            }
+        }
+        label.text = "second"
+
+        // Act / Assert
+        repeat(2) { assertFailsWith<IllegalStateException> { ui.updateFrame() } }
+        assertEquals(0, commits)
+        label.text = "third"
+        fail = false
+        ui.updateFrame()
+        assertEquals(1, commits)
+        assertEquals("third", backend.draws.single().text)
+        repeat(3) { ui.updateFrame() }
+        assertEquals(1, commits)
+        label.text = "first"
+        ui.updateFrame()
+        assertEquals(2, commits)
+        assertEquals("first", backend.draws.single().text)
+    }
+
+    @Test
+    fun `nearest explicit appearance wins across nested containers and theme defaults`() {
+        // Arrange
+        val red = UiColor.Rgb(200, 20, 20)
+        val green = UiColor.Rgb(20, 200, 20)
+        val blue = UiColor.Rgb(20, 20, 200)
+        lateinit var inner: io.canopy.engine.ui.components.Box
+        val root = UiRoot {
+            Box(UiStyle(appearance = UiAppearance(foreground = red, bold = true))) {
+                inner = Box(UiStyle(appearance = UiAppearance(background = blue, bold = false))) {
+                    Text("label").style = UiStyle(appearance = UiAppearance(foreground = UiColor.Default))
+                }
+            }
+        }
+        root.theme = UiTheme(text = UiAppearance(foreground = green, italic = true))
+        scenes.currScene = root
+
+        // Act / Assert
+        ui.updateFrame()
+        assertEquals(
+            UiAppearance(foreground = UiColor.Default, background = blue, bold = false, italic = true),
+            backend.draws.single().appearance
+        )
+        inner.style = inner.style.copy(appearance = UiAppearance(background = blue))
+        ui.updateFrame()
+        assertEquals(true, backend.draws.single().appearance.bold)
+        root.theme = UiTheme(text = UiAppearance(italic = false))
+        ui.updateFrame()
+        assertEquals(false, backend.draws.single().appearance.italic)
+    }
+
+    @Test
+    fun `root order visibility and removal remain detectable between equal frames`() {
+        // Arrange
+        val first = UiRoot("First") { Text("first") }
+        val second = UiRoot("Second") { Text("second") }
+        val world = EmptyNode("World").also {
+            it.addChild(first)
+            it.addChild(second)
+        }
+        scenes.currScene = world
+        ui.updateFrame()
+        assertEquals(listOf("first", "second"), backend.draws.map { it.text })
+        val frames = backend.frames
+        ui.updateFrame()
+        assertEquals(frames, backend.frames)
+
+        // Act / Assert
+        first.layer = UiLayer.Overlay
+        ui.updateFrame()
+        assertEquals(listOf("second", "first"), backend.draws.map { it.text })
+        second.layer = UiLayer.Overlay
+        first.zIndex = 1
+        ui.updateFrame()
+        assertEquals(listOf("second", "first"), backend.draws.map { it.text })
+        second.zIndex = 2
+        ui.updateFrame()
+        assertEquals(listOf("first", "second"), backend.draws.map { it.text })
+        second.hide()
+        ui.updateFrame()
+        assertEquals("first", backend.draws.single().text)
+        world.removeChild(second)
+        ui.updateFrame()
+        assertEquals("first", backend.draws.single().text)
+        second.show()
+        world.addChild(second)
+        ui.updateFrame()
+        assertEquals(listOf("first", "second"), backend.draws.map { it.text })
     }
 
     @Test
