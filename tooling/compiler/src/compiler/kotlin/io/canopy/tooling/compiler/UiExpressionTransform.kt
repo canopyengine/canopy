@@ -445,6 +445,7 @@ internal class UiExpressionTransform(private val messages: MessageCollector) : I
                     if (receiver != null && isUiComponent) {
                         val hookName = when (target.name.asString()) {
                             "<set-style>" -> "bindStyle"
+                            "<set-theme>" -> "bindTheme"
                             "<set-isVisible>" -> "bindVisible"
                             "<set-enabled>" -> "bindEnabled"
                             else -> null

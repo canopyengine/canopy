@@ -1,6 +1,7 @@
 package io.canopy.engine.graphics
 
 import kotlin.math.max
+import io.canopy.engine.ui.UiAppearance
 import io.canopy.engine.ui.UiBackend
 import io.canopy.engine.ui.UiRect
 import io.canopy.engine.ui.UiSize
@@ -15,6 +16,7 @@ class DrawContext internal constructor(
     private val backend: UiBackend,
     private val area: UiRect,
     private val inheritedClip: UiRect,
+    private val inheritedAppearance: UiAppearance = UiAppearance(),
 ) {
     private var active = true
 
@@ -36,15 +38,23 @@ class DrawContext internal constructor(
         width: Double = max(0.0, size.width - x),
         height: Double = max(0.0, size.height - y),
         wrap: Boolean = true,
+        appearance: UiAppearance = UiAppearance(),
     ) {
         checkActive()
         val bounds = UiRect(area.x + x, area.y + y, width, height)
-        backend.drawText(text, bounds, inheritedClip.intersect(bounds), focused = false, wrap = wrap)
+        backend.drawText(
+            text,
+            bounds,
+            inheritedClip.intersect(bounds),
+            focused = false,
+            wrap = wrap,
+            appearance = inheritedAppearance.merge(appearance)
+        )
     }
 
     private fun checkActive() = check(active) { "DrawContext is only valid during its drawing callback" }
 
-    internal fun fork() = DrawContext(backend, area, inheritedClip)
+    internal fun fork() = DrawContext(backend, area, inheritedClip, inheritedAppearance)
 
     internal fun close() {
         active = false

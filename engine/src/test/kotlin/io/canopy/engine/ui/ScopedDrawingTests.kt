@@ -19,7 +19,7 @@ class ScopedDrawingTests {
     }
 
     private class Backend : UiBackend {
-        data class Draw(val text: String, val bounds: UiRect, val clip: UiRect)
+        data class Draw(val text: String, val bounds: UiRect, val clip: UiRect, val appearance: UiAppearance)
         val draws = mutableListOf<Draw>()
         var frames = 0
         var commits = 0
@@ -30,8 +30,15 @@ class ScopedDrawingTests {
             frames++
             draws.clear()
         }
-        override fun drawText(text: String, bounds: UiRect, clip: UiRect, focused: Boolean, wrap: Boolean) {
-            draws += Draw(text, bounds, clip)
+        override fun drawText(
+            text: String,
+            bounds: UiRect,
+            clip: UiRect,
+            focused: Boolean,
+            wrap: Boolean,
+            appearance: UiAppearance,
+        ) {
+            draws += Draw(text, bounds, clip, appearance)
         }
         override fun end() {
             commits++
@@ -61,6 +68,31 @@ class ScopedDrawingTests {
 
     @AfterEach
     fun cleanup() = ManagersRegistry.exit()
+
+    @Test
+    fun `ordinary drawing inherits appearance and agents can override their own colors`() {
+        // Arrange
+        val red = UiColor.Rgb(255, 0, 0)
+        val green = UiColor.Rgb(0, 255, 0)
+        val blue = UiColor.Rgb(0, 0, 255)
+        scenes.currScene = UiRoot {
+            Box(UiStyle(appearance = UiAppearance(foreground = red, background = blue, bold = true))) {
+                node("agents") {
+                    DrawingNode("agents", {
+                        it.text("r", appearance = UiAppearance(foreground = green, bold = false))
+                        it.text("f", x = 1.0)
+                    })
+                }
+            }
+        }
+
+        // Act
+        ui.updateFrame()
+
+        // Assert
+        assertEquals(UiAppearance(foreground = green, background = blue, bold = false), backend.draws[0].appearance)
+        assertEquals(UiAppearance(foreground = red, background = blue, bold = true), backend.draws[1].appearance)
+    }
 
     @Test
     fun `drawing declaration rejects factories creating untracked siblings and rolls them back`() {

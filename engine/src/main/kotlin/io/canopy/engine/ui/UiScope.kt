@@ -250,6 +250,11 @@ class UiScope internal constructor(private val root: UiRoot, private val parent:
         element.style = value()
     }
 
+    /** Compiler ABI for a reactive subtree theme. */
+    fun bindTheme(site: String, element: UiNode<*>, value: () -> UiTheme?) = property(site, element) {
+        element.theme = value()
+    }
+
     /** Compiler ABI for inherited visibility without pausing simulation. */
     fun bindVisible(site: String, element: UiNode<*>, value: () -> Boolean) = property(site, element) {
         val next = value()

@@ -145,10 +145,21 @@ class UiRoot(name: String = "UiRoot", block: UiScope.() -> Unit) :
     }
     private fun hit(element: UiNode<*>, x: Double, y: Double): Boolean {
         var clip = element.bounds.intersect(viewportBounds)
-        if (style.clip) clip = clip.intersect(bounds)
+        if (style.clip) clip = clip.intersect(if (resolvedBorder == UiBorder.None) bounds else contentBounds)
         var ancestor = element.parent
         while (ancestor != null) {
-            if (ancestor is UiNode<*> && ancestor.style.clip) clip = clip.intersect(ancestor.bounds)
+            if (ancestor is UiNode<*> && ancestor.style.clip) {
+                clip =
+                    clip.intersect(
+                        if (ancestor.resolvedBorder ==
+                            UiBorder.None
+                        ) {
+                            ancestor.bounds
+                        } else {
+                            ancestor.contentBounds
+                        }
+                    )
+            }
             ancestor = ancestor.parent
         }
         return x >= clip.x && x < clip.x + clip.width && y >= clip.y && y < clip.y + clip.height
@@ -157,7 +168,7 @@ class UiRoot(name: String = "UiRoot", block: UiScope.() -> Unit) :
         listOf(element) + element.content?.elements().orEmpty().flatMap(::descendants)
 
     private fun layoutSnapshot(element: UiNode<*>): List<Any?> =
-        listOf(element.nodeId, element.style, element.contentText) +
+        listOf(element.nodeId, element.style.layoutKey, element.resolvedBorder, element.contentText) +
             element.content?.elements().orEmpty().flatMap(::layoutSnapshot)
 
     /** Layouts and paints using backend metrics, independently of gameplay pause eligibility. */
@@ -165,18 +176,21 @@ class UiRoot(name: String = "UiRoot", block: UiScope.() -> Unit) :
         validateFocus()
         if (!isVisibleInTree) return
         viewportBounds = UiRect(0.0, 0.0, viewport.width, viewport.height)
-        val layoutKey = listOf(backend, viewport, style, verticalAlignment, horizontalAlignment) +
-            content?.elements().orEmpty().flatMap(::layoutSnapshot)
+        val layoutKey =
+            listOf(backend, viewport, style.layoutKey, resolvedBorder, verticalAlignment, horizontalAlignment) +
+                content?.elements().orEmpty().flatMap(::layoutSnapshot)
         if (layoutKey != lastLayout) {
             UiLayoutEngine.layout(this, backend, viewport)
             lastLayout = layoutKey
         }
         val rootClip = if (style.clip) viewportBounds.intersect(bounds) else viewportBounds
+        val appearance = appearance()
+        backend.drawBox(bounds, rootClip, appearance, resolvedBorder)
         val area = UiRect(
-            bounds.x + style.padding,
-            bounds.y + style.padding,
-            max(0.0, bounds.width - 2 * style.padding),
-            max(0.0, bounds.height - 2 * style.padding)
+            bounds.x + contentInset,
+            bounds.y + contentInset,
+            max(0.0, bounds.width - 2 * contentInset),
+            max(0.0, bounds.height - 2 * contentInset)
         )
         val contentClip = if (style.clip) rootClip.intersect(area) else rootClip
         content?.nodes()?.forEach {
@@ -184,8 +198,9 @@ class UiRoot(name: String = "UiRoot", block: UiScope.() -> Unit) :
                 it,
                 backend,
                 area,
-                if (it is UiNode<*>) rootClip else contentClip,
-                focusedElement
+                if (it is UiNode<*> && resolvedBorder == UiBorder.None) rootClip else contentClip,
+                focusedElement,
+                appearance
             )
         }
         dirty = false
@@ -298,14 +313,21 @@ class UiManager(var backend: UiBackend? = null) : Manager {
         root.nodeId,
         root.isVisibleInTree,
         root.style,
+        root.theme,
         root.verticalAlignment,
         root.horizontalAlignment,
         root.focusedElement?.nodeId,
         root.zIndex
     ) + root.content?.elements().orEmpty().flatMap(::snapshot)
-    private fun snapshot(element: UiNode<*>): List<Any?> =
-        listOf(element.nodeId, element.isVisibleInTree, element.style, element.contentText, element.actionEnabled) +
-            element.content?.elements().orEmpty().flatMap(::snapshot)
+    private fun snapshot(element: UiNode<*>): List<Any?> = listOf(
+        element.nodeId,
+        element.isVisibleInTree,
+        element.style,
+        element.theme,
+        element.contentText,
+        element.actionEnabled
+    ) +
+        element.content?.elements().orEmpty().flatMap(::snapshot)
     override fun onExit() {
         lastFrame = null
         pending.toList().forEach { it.dispose() }

@@ -38,7 +38,13 @@ class UiRuntimeTests {
 
     private class RecordingBackend(private val glyphWidth: Double = 1.0, private val lineHeight: Double = 1.0) :
         UiBackend {
-        data class Draw(val text: String, val bounds: UiRect, val clip: UiRect, val focused: Boolean)
+        data class Draw(
+            val text: String,
+            val bounds: UiRect,
+            val clip: UiRect,
+            val focused: Boolean,
+            val appearance: UiAppearance,
+        )
         var frames = 0
         var measurements = 0
         val draws = mutableListOf<Draw>()
@@ -55,9 +61,71 @@ class UiRuntimeTests {
                 kotlin.math.ceil(rawWidth / maxWidth).coerceAtLeast(1.0) * lineHeight
             )
         }
-        override fun drawText(text: String, bounds: UiRect, clip: UiRect, focused: Boolean, wrap: Boolean) {
-            draws += Draw(text, bounds, clip, focused)
+        override fun drawText(
+            text: String,
+            bounds: UiRect,
+            clip: UiRect,
+            focused: Boolean,
+            wrap: Boolean,
+            appearance: UiAppearance,
+        ) {
+            draws += Draw(text, bounds, clip, focused, appearance)
         }
+    }
+
+    @Test
+    fun `appearance and theme changes repaint without remeasuring and explicit overrides reset inheritance`() {
+        // Arrange
+        lateinit var label: io.canopy.engine.ui.components.Text
+        lateinit var button: Button
+        val red = UiColor.Rgb(230, 40, 50)
+        val blue = UiColor.Rgb(40, 80, 230)
+        val root = UiRoot {
+            Column(UiStyle(appearance = UiAppearance(foreground = red, bold = true))) {
+                label = Text("label")
+                button = Button("action") {}
+            }
+        }
+        scenes.currScene = root
+        ui.updateFrame()
+        val measurements = backend.measurements
+        assertEquals(red, backend.draws.first().appearance.foreground)
+        assertEquals(true, backend.draws.first().appearance.bold)
+
+        // Act / Assert
+        label.style = label.style.copy(appearance = UiAppearance(foreground = UiColor.Default, bold = false))
+        root.theme = UiTheme(button = UiAppearance(foreground = blue))
+        ui.updateFrame()
+        assertEquals(measurements, backend.measurements)
+        assertEquals(UiColor.Default, backend.draws.first().appearance.foreground)
+        assertEquals(false, backend.draws.first().appearance.bold)
+        root.focus(button)
+        ui.updateFrame()
+        assertEquals(measurements, backend.measurements)
+        assertEquals(true, backend.draws.last().appearance.inverse)
+        button.enabled = false
+        ui.updateFrame()
+        assertEquals(UiColor.Default, backend.draws.last().appearance.foreground)
+        assertEquals(true, backend.draws.last().appearance.dim)
+    }
+
+    @Test
+    fun `borders reserve content space once and update child placement`() {
+        // Arrange
+        lateinit var box: io.canopy.engine.ui.components.Box
+        scenes.currScene = UiRoot {
+            box = Box(UiStyle(width = UiLength.Fixed(8.0), height = UiLength.Fixed(4.0), border = UiBorder.Double)) {
+                Text("inside")
+            }
+        }
+
+        // Act / Assert
+        ui.updateFrame()
+        assertEquals(UiRect(1.0, 1.0, 6.0, 1.0), backend.draws.single().bounds)
+        box.style = box.style.copy(border = UiBorder.None)
+        ui.updateFrame()
+        assertEquals(UiRect(0.0, 0.0, 6.0, 1.0), backend.draws.single().bounds)
+        assertFailsWith<IllegalArgumentException> { UiColor.Rgb(256, 0, 0) }
     }
 
     @Test
@@ -74,7 +142,14 @@ class UiRuntimeTests {
                     if (fail && phase == "begin") throw failure
                     backend.begin(viewport)
                 }
-                override fun drawText(text: String, bounds: UiRect, clip: UiRect, focused: Boolean, wrap: Boolean) {
+                override fun drawText(
+                    text: String,
+                    bounds: UiRect,
+                    clip: UiRect,
+                    focused: Boolean,
+                    wrap: Boolean,
+                    appearance: UiAppearance,
+                ) {
                     draws++
                     if (fail && phase == "paint" && draws == 2) throw failure
                     backend.drawText(text, bounds, clip, focused, wrap)
@@ -113,8 +188,14 @@ class UiRuntimeTests {
         val painting = IllegalStateException("paint")
         val cleanup = IllegalArgumentException("abort")
         ui.backend = object : UiBackend by backend {
-            override fun drawText(text: String, bounds: UiRect, clip: UiRect, focused: Boolean, wrap: Boolean) =
-                throw painting
+            override fun drawText(
+                text: String,
+                bounds: UiRect,
+                clip: UiRect,
+                focused: Boolean,
+                wrap: Boolean,
+                appearance: UiAppearance,
+            ) = throw painting
             override fun end() = error("A failed paint must not commit")
             override fun abort() = throw cleanup
         }

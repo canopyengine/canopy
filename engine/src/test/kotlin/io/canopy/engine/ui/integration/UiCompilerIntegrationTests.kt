@@ -92,9 +92,43 @@ class UiCompilerIntegrationTests {
         }
         override fun measureText(text: String, maxWidth: Double, wrap: Boolean): UiSize =
             UiSize(text.length.toDouble().coerceAtMost(maxWidth), 1.0)
-        override fun drawText(text: String, bounds: UiRect, clip: UiRect, focused: Boolean, wrap: Boolean) {
+        override fun drawText(
+            text: String,
+            bounds: UiRect,
+            clip: UiRect,
+            focused: Boolean,
+            wrap: Boolean,
+            appearance: UiAppearance,
+        ) {
             draws += Draw(text, bounds)
         }
+    }
+
+    @Test
+    fun `compiler captures reactive appearance and subtree theme assignments`() {
+        // Arrange
+        val color = signal(owner = null, UiColor.Rgb(255, 0, 0))
+        val theme = signal(owner = null, UiTheme())
+        lateinit var label: io.canopy.engine.ui.components.Text
+        lateinit var column: io.canopy.engine.ui.components.Column
+        scenes.currScene = UiRoot {
+            column = Column {
+                label = Text("styled").also { it.style = UiStyle(appearance = UiAppearance(foreground = color())) }
+            }.also { it.theme = theme() }
+        }
+        ui.updateFrame()
+
+        // Act
+        color.update { UiColor.Rgb(0, 255, 0) }
+        val next = UiTheme(buttonBorder = UiBorder.Double)
+        theme.update { next }
+        ui.updateFrame()
+
+        // Assert
+        assertEquals(UiColor.Rgb(0, 255, 0), label.style.appearance.foreground)
+        assertEquals(next, column.theme)
+        color.dispose()
+        theme.dispose()
     }
 
     @Test

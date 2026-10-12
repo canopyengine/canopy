@@ -39,7 +39,7 @@ after the complete branch and required ecosystem workflows have been tested.
 | 5 | Lifetime contract and node-local reactive factories | Implemented; existing guarded storage retained |
 | 6 | Scoped drawing and efficient terminal rendering (#219) | Implemented text drawing slice; full verification passes; live acceptance pending |
 | 7 | UiNode/components and matching compiler integration | Implemented; full verification passes |
-| 8 | Custom styles/themes and runnable examples | Pending |
+| 8 | Custom styles/themes and runnable examples | Implemented; full verification passes; interactive acceptance pending |
 | 9 | Launcher, external consumer and headless parity | Pending |
 
 Keep independently reviewable commits. Component/compiler changes ship together.
@@ -125,6 +125,33 @@ The final component gate passes test, ktlintCheck, build and coverageReport:
 546 tests, no failures/errors/skips, 6,162 / 6,891 covered lines (89.4%). Companion
 docs explain the API, UiScope's purpose and frame/ownership flow. Independent
 onboarding and live terminal acceptance have not been established by these checks.
+
+Styling now uses immutable UiAppearance, UiColor RGB/default values and UiTheme
+defaults on UiNode subtrees. Null inherits; explicit Default colors and false
+emphasis reset inherited values. Component appearances override defaults and
+ancestor appearances; focused/disabled button appearances apply last. Borders
+may be absent, rounded, square or double and reserve one logical unit per edge.
+Button backend measurement includes its chrome without double-counting borders.
+UiStyle separates its cached geometry key from appearance, so color/emphasis
+changes repaint without text measurement. The compiler also captures theme
+assignments. Drawing contexts inherit appearance and accept per-agent overrides.
+
+The terminal backend converts styles through Mordant and paints into the existing
+buffer. Backgrounds include control padding; border/background work is clipped
+before allocation, even with huge off-screen bounds. Per-glyph focus storage is
+removed because the resolved appearance already supplies it. The terminal smoke
+now includes a styled, bordered map with moving colored markers; it remains an
+API example rather than the required full ecosystem simulation.
+
+The styling gate passes test, ktlintCheck, build and coverageReport: 556 tests,
+no failures/errors/skips, 6,350 / 7,095 covered lines (89.5%). Regressions cover
+paint-only changes, explicit inheritance resets, theme capture, layout insets,
+per-agent appearance, border variants, button backgrounds and bounded off-screen
+painting. Bordered clipping containers also protect their content area from
+oversized UI descendants, with the same clip used for pointer targeting.
+A color-only label update produces one terminal write, leaves the stable
+row untouched, avoids screen clearing and submits nothing on the next equal frame.
+No application FPS claim is inferred from these checks. Desktop remains disabled.
 
 ## Verification and independent onboarding
 

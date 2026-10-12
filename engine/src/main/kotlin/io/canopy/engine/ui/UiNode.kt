@@ -1,5 +1,6 @@
 package io.canopy.engine.ui
 
+import kotlin.math.max
 import io.canopy.engine.core.flows.events.untrack
 import io.canopy.engine.core.nodes.Node
 
@@ -51,6 +52,46 @@ abstract class UiNode<N : UiNode<N>> protected constructor(
     internal var measurementKey by nodeProperty<List<Any?>>(emptyList())
     internal var measured by nodeProperty(UiSize(0.0, 0.0))
     internal var content by nodeProperty<UiScope?>(null)
+
+    /** Nearest explicit theme applies to this subtree; null inherits from ancestors. */
+    var theme by nodeProperty<UiTheme?>(null)
+    internal val resolvedTheme: UiTheme
+        get() {
+            var node: Node<*>? = this
+            while (node != null) {
+                if (node is UiNode<*>) node.theme?.let { return it }
+                node = node.parent
+            }
+            return UiTheme.Default
+        }
+    internal val resolvedBorder: UiBorder
+        get() = style.border ?: if (kind == UiKind.Button) resolvedTheme.buttonBorder else UiBorder.None
+    internal val contentInset: Double
+        get() = style.padding + if (kind != UiKind.Button && resolvedBorder != UiBorder.None) 1.0 else 0.0
+    internal val contentBounds: UiRect
+        get() = UiRect(
+            bounds.x + contentInset,
+            bounds.y + contentInset,
+            max(0.0, bounds.width - 2 * contentInset),
+            max(0.0, bounds.height - 2 * contentInset)
+        )
+
+    internal fun appearance(focused: Boolean = false): UiAppearance {
+        val theme = resolvedTheme
+        var result = if (kind == UiKind.Button) theme.text.merge(theme.button) else theme.text
+        val ancestors = mutableListOf<UiNode<*>>()
+        var node: Node<*>? = this
+        while (node != null) {
+            if (node is UiNode<*>) ancestors += node
+            node = node.parent
+        }
+        ancestors.asReversed().forEach { result = result.merge(it.style.appearance) }
+        return when {
+            kind == UiKind.Button && !actionEnabled -> result.merge(theme.disabledButton)
+            kind == UiKind.Button && focused -> result.merge(theme.focusedButton)
+            else -> result
+        }
+    }
 
     override fun nodeInit() {
         markChildrenManaged()

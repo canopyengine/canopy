@@ -66,7 +66,10 @@ data class UiStyle(
     val clip: Boolean = true,
     val maxWidth: Double? = null,
     val maxHeight: Double? = null,
+    val border: UiBorder? = null,
+    val appearance: UiAppearance = UiAppearance(),
 ) {
+    internal val layoutKey = listOf(width, height, padding, gap, alignment, wrap, clip, maxWidth, maxHeight, border)
     init {
         require(padding.isFinite() && gap.isFinite() && padding >= 0 && gap >= 0)
         require(maxWidth == null || maxWidth.isFinite() && maxWidth >= 0)
@@ -83,17 +86,44 @@ interface UiBackend {
     fun measureText(text: String, maxWidth: Double, wrap: Boolean): UiSize
 
     /** Measures an action including backend control decoration; defaults to plain text metrics. */
-    fun measureButton(text: String, maxWidth: Double, wrap: Boolean): UiSize = measureText(text, maxWidth, wrap)
+    fun measureButton(text: String, maxWidth: Double, wrap: Boolean, border: UiBorder = UiBorder.Rounded): UiSize =
+        measureText(text, maxWidth, wrap)
 
     /** Starts a frame. */
     fun begin(viewport: UiSize) = Unit
 
     /** Draws text within its allocated bounds and ancestor clipping rectangle. */
-    fun drawText(text: String, bounds: UiRect, clip: UiRect, focused: Boolean, wrap: Boolean = true)
+    fun drawText(
+        text: String,
+        bounds: UiRect,
+        clip: UiRect,
+        focused: Boolean,
+        wrap: Boolean = true,
+        appearance: UiAppearance = UiAppearance(),
+    )
 
     /** Paints an action with its focus and eligibility; defaults to the backend's text primitive. */
-    fun drawButton(text: String, bounds: UiRect, clip: UiRect, focused: Boolean, enabled: Boolean, wrap: Boolean) =
-        drawText(text, bounds, clip, focused, wrap)
+    fun drawButton(
+        text: String,
+        bounds: UiRect,
+        clip: UiRect,
+        focused: Boolean,
+        enabled: Boolean,
+        wrap: Boolean,
+        appearance: UiAppearance = UiTheme.Default.button.merge(
+            if (!enabled) {
+                UiTheme.Default.disabledButton
+            } else if (focused) {
+                UiTheme.Default.focusedButton
+            } else {
+                UiAppearance.Empty
+            }
+        ),
+        border: UiBorder = UiBorder.Rounded,
+    ) = drawText(text, bounds, clip, focused, wrap, appearance)
+
+    /** Fills a background and paints a border inside allocated bounds; containers remain shared layout. */
+    fun drawBox(bounds: UiRect, clip: UiRect, appearance: UiAppearance, border: UiBorder) = Unit
 
     /** Commits a successfully painted frame. Output belongs here rather than in drawing primitives. */
     fun end() = Unit

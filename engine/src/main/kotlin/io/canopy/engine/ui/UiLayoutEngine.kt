@@ -15,7 +15,7 @@ internal object UiLayoutEngine {
         val x = align(root.horizontalAlignment, viewport.width, available.width)
         val y = align(root.verticalAlignment, viewport.height, available.height)
         root.bounds = UiRect(x, y, available.width, available.height)
-        val padding = root.style.padding
+        val padding = root.contentInset
         val inner = UiRect(
             x + padding,
             y + padding,
@@ -45,8 +45,8 @@ internal object UiLayoutEngine {
             is UiLength.Fraction -> available.width * width.value
         }.coerceAtMost(style.maxWidth ?: Double.MAX_VALUE)
         val inner = UiSize(
-            max(0.0, constrainedWidth - style.padding * 2),
-            max(0.0, available.height - style.padding * 2)
+            max(0.0, constrainedWidth - element.contentInset * 2),
+            max(0.0, available.height - element.contentInset * 2)
         )
         var measures = children.map { measure(it, backend, inner) }
         if (element.kind == UiKind.Row) {
@@ -78,7 +78,8 @@ internal object UiLayoutEngine {
         val key = listOf(
             backend,
             element.contentText,
-            style,
+            style.layoutKey,
+            element.resolvedBorder,
             constrainedWidth,
             allocatedHeight,
             children.map { it.nodeId },
@@ -87,7 +88,7 @@ internal object UiLayoutEngine {
         if (key == element.measurementKey) return element.measured
         val intrinsic = when (element.kind) {
             UiKind.Text -> backend.measureText(element.contentText, inner.width, style.wrap)
-            UiKind.Button -> backend.measureButton(element.contentText, inner.width, style.wrap)
+            UiKind.Button -> backend.measureButton(element.contentText, inner.width, style.wrap, element.resolvedBorder)
             UiKind.Row -> UiSize(
                 measures.sumOf { it.width } + max(0, children.size - 1) * style.gap,
                 measures.maxOfOrNull { it.height } ?: 0.0
@@ -105,13 +106,13 @@ internal object UiLayoutEngine {
             resolve(
                 style.width,
                 available.width,
-                intrinsic.width + style.padding * 2,
+                intrinsic.width + element.contentInset * 2,
                 style.maxWidth
             ),
             resolve(
                 style.height,
                 available.height,
-                intrinsic.height + style.padding * 2,
+                intrinsic.height + element.contentInset * 2,
                 style.maxHeight
             )
         )
@@ -123,10 +124,10 @@ internal object UiLayoutEngine {
         element.bounds = bounds
         val style = element.style
         val inner = UiRect(
-            bounds.x + style.padding,
-            bounds.y + style.padding,
-            max(0.0, bounds.width - style.padding * 2),
-            max(0.0, bounds.height - style.padding * 2)
+            bounds.x + element.contentInset,
+            bounds.y + element.contentInset,
+            max(0.0, bounds.width - element.contentInset * 2),
+            max(0.0, bounds.height - element.contentInset * 2)
         )
         val children = element.content?.elements().orEmpty()
         if (children.isEmpty()) return
@@ -222,15 +223,23 @@ internal object UiLayoutEngine {
     fun paint(element: UiNode<*>, backend: UiBackend, clip: UiRect, focused: UiNode<*>?) {
         if (!element.isVisibleInTree) return
         val ownClip = if (element.style.clip) clip.intersect(element.bounds) else clip
+        val appearance = element.appearance(element === focused)
+        backend.drawBox(
+            element.bounds,
+            ownClip,
+            appearance,
+            if (element.kind == UiKind.Button) UiBorder.None else element.resolvedBorder
+        )
         if (element.draws) {
-            val padding = element.style.padding
+            val padding = element.contentInset
             val area = UiRect(
                 element.bounds.x + padding,
                 element.bounds.y + padding,
                 max(0.0, element.bounds.width - 2 * padding),
                 max(0.0, element.bounds.height - 2 * padding)
             )
-            val context = DrawContext(backend, area, if (element.style.clip) ownClip.intersect(area) else ownClip)
+            val context =
+                DrawContext(backend, area, if (element.style.clip) ownClip.intersect(area) else ownClip, appearance)
             try {
                 element.drawSelf(context)
             } finally {
@@ -239,7 +248,7 @@ internal object UiLayoutEngine {
         }
         when (element.kind) {
             UiKind.Text, UiKind.Button -> {
-                val padding = element.style.padding
+                val padding = element.contentInset
                 val bounds = element.bounds
                 val textBounds = UiRect(
                     bounds.x + padding,
@@ -254,14 +263,23 @@ internal object UiLayoutEngine {
                         ownClip,
                         element === focused,
                         element.actionEnabled,
-                        element.style.wrap
+                        element.style.wrap,
+                        appearance,
+                        element.resolvedBorder
                     )
                 } else {
-                    backend.drawText(element.contentText, textBounds, ownClip, element === focused, element.style.wrap)
+                    backend.drawText(
+                        element.contentText,
+                        textBounds,
+                        ownClip,
+                        element === focused,
+                        element.style.wrap,
+                        appearance
+                    )
                 }
             }
             else -> {
-                val padding = element.style.padding
+                val padding = element.contentInset
                 val area = UiRect(
                     element.bounds.x + padding,
                     element.bounds.y + padding,
@@ -270,17 +288,31 @@ internal object UiLayoutEngine {
                 )
                 val contentClip = if (element.style.clip) ownClip.intersect(area) else ownClip
                 element.content?.nodes()?.forEach {
-                    paintNode(it, backend, area, if (it is UiNode<*>) ownClip else contentClip, focused)
+                    paintNode(
+                        it,
+                        backend,
+                        area,
+                        if (it is UiNode<*> && element.resolvedBorder == UiBorder.None) ownClip else contentClip,
+                        focused,
+                        appearance
+                    )
                 }
             }
         }
     }
 
-    fun paintNode(node: Node<*>, backend: UiBackend, area: UiRect, clip: UiRect, focused: UiNode<*>?) {
+    fun paintNode(
+        node: Node<*>,
+        backend: UiBackend,
+        area: UiRect,
+        clip: UiRect,
+        focused: UiNode<*>?,
+        appearance: UiAppearance = UiAppearance(),
+    ) {
         if (node is UiNode<*>) {
             paint(node, backend, clip, focused)
         } else {
-            val context = DrawContext(backend, area, clip)
+            val context = DrawContext(backend, area, clip, appearance)
             try {
                 node.drawSubtree(context) {
                     when (it) {
