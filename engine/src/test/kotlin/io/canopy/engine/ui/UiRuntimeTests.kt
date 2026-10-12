@@ -150,6 +150,53 @@ class UiRuntimeTests {
     }
 
     @Test
+    fun `column labels measure once and updating one label only remeasures that label`() {
+        // Arrange
+        val value = signal(owner = null, "first")
+        scenes.currScene = UiRoot {
+            Column {
+                bindText("live") { value() }
+                repeat(9) { Text("fixed") }
+            }
+        }
+
+        // Act / Assert
+        ui.updateFrame()
+        assertEquals(10, backend.measurements)
+        value.update { "other" }
+        ui.updateFrame()
+        assertEquals(11, backend.measurements)
+        assertEquals("other", backend.draws.first().text)
+        assertEquals((0..9).map(Int::toDouble), backend.draws.map { it.bounds.y })
+        value.dispose()
+    }
+
+    @Test
+    fun `height resize reuses text metrics while width resize updates wrapping and placement`() {
+        // Arrange
+        scenes.currScene = UiRoot {
+            Column {
+                Text("abcdefgh")
+                Text("next")
+            }
+        }
+        ui.onResize(8, 10)
+        ui.updateFrame()
+        val measurements = backend.measurements
+
+        // Act / Assert
+        ui.onResize(8, 20)
+        ui.updateFrame()
+        assertEquals(measurements, backend.measurements)
+        assertEquals(listOf(0.0, 1.0), backend.draws.map { it.bounds.y })
+        ui.onResize(4, 20)
+        ui.updateFrame()
+        assertEquals(measurements + 2, backend.measurements)
+        assertEquals(listOf(2.0, 1.0), backend.draws.map { it.bounds.height })
+        assertEquals(listOf(0.0, 2.0), backend.draws.map { it.bounds.y })
+    }
+
+    @Test
     fun `targeted expressions coalesce at safe boundary and unchanged results skip frame`() {
         // Arrange
         val count = signal(owner = null, 1)

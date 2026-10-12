@@ -19,6 +19,9 @@ after the complete branch and required ecosystem workflows have been tested.
   UiManager handles reactive composition/layout/focus, and the host presents.
 - Reactive conditions subscribe to their dependencies; do not poll expressions
   every frame. Ordinary animated content may need drawing every frame.
+- Constructor arguments initialize a retained component once. Signals provide
+  live values, as with ordinary Nodes. Keyed reordering preserves initialization
+  and state; omission destroys the component through the normal node lifecycle.
 - A failed update or paint does not present pending content. Cleanup preserves
   the original error. Display preparation is not application-state rollback.
 - Preserve node identity, guarded state, safe mutations, input consumption,
@@ -34,7 +37,7 @@ after the complete branch and required ecosystem workflows have been tested.
 | 3 | Failed-frame discard and retry | Implemented; UI/terminal regressions pass |
 | 4 | App-owned runtime/services and explicit stages | Implemented; full verification passes |
 | 5 | Lifetime contract and node-local reactive factories | Implemented; existing guarded storage retained |
-| 6 | Scoped drawing and efficient terminal rendering (#219) | Pending |
+| 6 | Scoped drawing and efficient terminal rendering (#219) | In progress: measurement cache corrected; scoped drawing pending |
 | 7 | UiNode/components and matching compiler integration | Pending |
 | 8 | Custom styles/themes and runnable examples | Pending |
 | 9 | Launcher, external consumer and headless parity | Pending |
@@ -63,6 +66,17 @@ explicit ownership. UI observers reuse the core dependency-subscription helper.
 The lifetime gate passes with 531 tests and 5,932 / 6,639 covered lines (89.4%).
 An optional storage replacement is deferred: no measured evidence yet justifies
 changing retained-facade, detached-resource or reusable scene-manager contracts.
+
+Layout measurement now keys constrained width separately from allocated height.
+Content/Fixed heights reuse metrics across height-only allocation changes;
+Fill/Fraction heights and measured child sizes remain part of layout dependencies.
+Regressions reproduced ten labels being measured twenty times and sibling labels
+being measured again on a height-only resize. They now verify ten initial calls,
+one call for one changed label, no height-only calls and correct width wrapping.
+The full gate passes with 533 tests and 5,942 / 6,649 covered lines (89.4%).
+These counts describe the fixture, not an application FPS claim. Changed frames
+still paint the tree into memory before terminal cell diffing. This does not
+complete scoped drawing or the UiNode/compiler migration.
 
 ## Verification and independent onboarding
 

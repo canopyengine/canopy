@@ -67,7 +67,21 @@ internal object UiLayoutEngine {
                 }
             }
         }
-        val key = listOf(backend, element.text, style, available, children.map { it.nodeId }, measures)
+        // Text metrics depend on constrained width, not the height left by a layout pass.
+        // Fill/fraction heights still depend on allocation; containers also retain child measurements.
+        val allocatedHeight = when (style.height) {
+            UiLength.Content, is UiLength.Fixed -> null
+            UiLength.Fill, is UiLength.Fraction -> available.height
+        }
+        val key = listOf(
+            backend,
+            element.text,
+            style,
+            constrainedWidth,
+            allocatedHeight,
+            children.map { it.nodeId },
+            measures
+        )
         if (key == element.measurementKey) return element.measured
         val intrinsic = when (element.kind) {
             UiKind.Text -> backend.measureText(element.text, inner.width, style.wrap)
