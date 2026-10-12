@@ -37,10 +37,10 @@ after the complete branch and required ecosystem workflows have been tested.
 | 3 | Failed-frame discard and retry | Implemented; UI/terminal regressions pass |
 | 4 | App-owned runtime/services and explicit stages | Implemented; full verification passes |
 | 5 | Lifetime contract and node-local reactive factories | Implemented; existing guarded storage retained |
-| 6 | Scoped drawing and efficient terminal rendering (#219) | Implemented text drawing slice; full verification passes; live acceptance pending |
+| 6 | Scoped drawing and efficient terminal rendering (#219) | Implemented text drawing slice; full verification and Linux/macOS PTY pass |
 | 7 | UiNode/components and matching compiler integration | Implemented; full verification passes |
-| 8 | Custom styles/themes and runnable examples | Implemented; full verification passes; interactive acceptance pending |
-| 9 | Launcher, external consumer and headless parity | Linux verification passes; cross-platform native acceptance pending |
+| 8 | Custom styles/themes and runnable examples | Implemented; full verification and Linux/macOS PTY pass |
+| 9 | Launcher, external consumer and headless parity | Three-platform launcher and Linux/macOS PTY pass; Windows console acceptance pending |
 
 Keep independently reviewable commits. Component/compiler changes ship together.
 Node-storage replacement and headless-host replacement require evidence and are
@@ -212,3 +212,19 @@ workflows. Profile actual demo workloads before adding a more elaborate partial
 painting mechanism. Independent onboarding still needs a developer to complete
 the documented exercises. No Rust CLI, main merge, Central publication or release
 declaration is part of this verification.
+
+
+Native Linux acceptance now passes all 24 checks through a fresh Maven consumer
+and the launcher, including visual cell/style assertions, pause/focus/actions,
+draft-preserving narrow/wide resize, quit and Ctrl+C. This exposed and fixed an
+idle-input shutdown leak: native input now closes before teardown, with bounded
+IO reads and preserved interrupted status. Both regression cases fail before
+`88c0092` and pass after it. The final local gate is 562 tests, zero failures/
+errors/skips and 90.2% line coverage. Launcher CI passes on Linux/Windows/macOS.
+Native macOS PTY acceptance now passes twice in CI; Linux PTY and all three
+launcher jobs pass too. The first early macOS exit is recorded with improved
+diagnostics for any recurrence. Windows console acceptance, the complete
+ecosystem workflows and independent onboarding remain separate acceptance.
+The old demo scaffold compiles unchanged against the new artifacts in a temporary
+version/repository migration and loads configuration at runtime; its actual
+checkout has not been modified.

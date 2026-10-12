@@ -95,3 +95,51 @@ See the benchmark README/CSV for all samples, baseline comparison and remaining
 costs. The previous distribution/PTY results above belong to `917af22`; this
 follow-up changes internal shared traversal and comparisons, with no public API
 change. Live platform acceptance and ecosystem workflows remain required.
+
+## Native terminal follow-up
+
+The fresh-consumer PTY fixture now exercises 21 input/rendering checks and three
+checks on a second Ctrl+C launch. Linux passes all 24: moving green/orange markers,
+keyboard focus, button actions, conditional clearing, command capture without
+pausing, explicit pause, controls while paused, closing without implicit resume,
+draft-preserving 80×24 → 32×10 → 100×30 resizing, resume, quit and Ctrl+C.
+Both launches return zero, log a normal session end, restore the alternate screen
+and restore the native input/output/control/local flag words. Installed engine
+and terminal JAR SHA-256 values match the staged Maven artifacts.
+
+This test reproduced a real shutdown bug: the game entered with local flags
+`0x8a3b` and returned with raw flags `0x0a30`. The old coroutine flow blocked
+indefinitely in native input; cancellation alone did not close it before JVM exit.
+Two regressions (requested exit and interrupted launch) fail before `88c0092`
+and pass after it. Native reads now use 100 ms deadlines on IO, and host shutdown
+awaits their raw-mode cleanup before teardown. Interrupted status is preserved.
+Line fallback retains its existing blocking System.in path; it has already left
+raw mode and is not joined by this cleanup. This timeout concerns native input
+cancellation; UI conditions remain subscription-driven.
+
+The final local test/lint/build/coverage gate passes 562 tests, no failures/errors/
+skips, with 6,434 / 7,136 covered lines (90.2%). Local Maven staging also passes.
+The standalone fixture/source and exact reproduction steps are in
+[launcher verification](../../tooling/launcher/README.md#native-terminal-acceptance).
+Its emulator dependency is test-only and adds no game/engine dependency.
+
+The [three-platform launcher run](https://github.com/canopyengine/canopy/actions/runs/38313249086)
+passes all groups on Linux, Windows and macOS. The expanded
+[native workflow](https://github.com/canopyengine/canopy/actions/runs/38317590561)
+passes all five jobs: launcher checks on Linux/Windows/macOS and native PTY
+acceptance on Linux/macOS. The macOS PTY job also passes its targeted repeat.
+The earlier run `38316173156` exited before the first macOS frame; that early
+exit has not reproduced in either subsequent run. Exit-status/crash diagnostics
+are now retained rather than assuming a transient failure is fixed. Track any
+recurrence with the stored evidence. Windows native console acceptance remains
+manual because Python's Unix PTY interface does not exercise ConPTY. These
+launcher checks are not Windows native rendering acceptance.
+
+
+The existing ecosystem scaffold was tested in a temporary copy, changing only
+its Canopy version to `0.1.0-alpha.2` and adding the staging repository to plugin/
+dependency resolution. Its Kotlin sources compile unchanged, configuration loads
+at runtime and Ctrl+C exits zero with native flag/screen restoration. The actual
+`canopy-demos` checkout remains unchanged. This proves scaffold compatibility;
+it does not implement the still-missing rabbit/fox simulation, calendar, weather,
+resource decisions or narration.
