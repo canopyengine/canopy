@@ -4,7 +4,7 @@ These synthetic probes separate shared UI CPU/allocation from terminal cell
 composition. They exclude physical console I/O, game simulation and application
 FPS. Java source lives outside enabled modules and is compiled explicitly.
 
-Results compare audit commit `e648702` with integration `917af22`, on the same
+The original results compare audit commit `e648702` with integration `917af22`, on the same
 managed Linux host and JDK 25.0.4.1. Candidate forks ran after builds and launcher
 checks finished; preliminary concurrent runs were discarded. Historical baseline
 runs occurred earlier in the session, so latency ratios are indicative rather
@@ -31,9 +31,41 @@ submissions. Changing one label evaluates/measures one label but paints all
 probe deliberately composes a complete frame even when idle; normal UI can skip
 submission. The probes are separate and their timings must not be added.
 
-The allocation increase is real in this workload: about 13.5% idle and 21.7%
-changed. Full-tree snapshot/paint work remains a follow-up; these results do not
-establish a rendering performance improvement.
+The first integration allocation increase was about 13.5% idle and 21.7%
+changed. The following measured slice addresses that regression.
+
+## Reusable snapshot/appearance traversal (`99f4dee`)
+
+The same shared UI probe was rerun in three JVM forks after the full gate,
+with no active builds/tests. No cell backend code changed, so the earlier cell
+samples remain historical data rather than being represented as new runs.
+The workload and probe source were unchanged. Median of 15 samples per case:
+
+| 1,000 labels | Before bytes/frame | After bytes/frame | Allocation reduction | Before ms/frame | After ms/frame |
+|---|---:|---:|---:|---:|---:|
+| Idle | 666,736 | 256 | 99.96% | 0.209 | 0.067 |
+| One changed | 2,045,480 | 734,112 | 64.11% | 1.268 | 1.049 |
+
+The new allocations are also below the original audit baseline: 587,528 idle
+and 1,680,344 changed. Idle allocation no longer grows with label count in this
+fixture: medians are 440 bytes at 10 labels, 360 at 100 and 256 at 1,000. Small
+JIT-dependent differences are not a guarantee of zero allocation. Traversal
+still scans the retained state in O(nodes); this is not condition evaluation.
+
+Operation counts remain zero expressions/measurements/paints/submissions when
+idle. One change evaluates/measures one label, paints all 1,000 and submits once.
+The remaining changed-frame allocation includes measurement keys, layout and
+painting. Latencies are indicative on this shared host, not an application FPS
+claim or a paired interleaved regression gate. Raw CSV includes all three
+revisions, with the candidate tagged `integration-99f4dee`.
+
+The implementation keeps two flat frame-value buffers, swapping only after
+successful end; equal/failed frames clear scratch references. Metadata traversal
+collects no per-element lists or boxed node identities. Layout values are also
+flattened, and appearance walks from the nearest ancestor outward without a
+list. Painting keeps stable child snapshots for lifecycle mutation safety.
+No new public API, invalidation notification framework or renderer is added.
+
 
 ## Reproduce
 

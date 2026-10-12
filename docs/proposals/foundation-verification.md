@@ -14,7 +14,7 @@ Main and the Rust CLI were unchanged. These checks do not publish a release.
 | Separate consumer | Compiles and launches using staged Maven coordinates | Warm dependency cache; offline resolution |
 | Real headless host | Two successive Apps complete, custom styled UiNode updates, one shutdown callback each | No terminal rendering backend |
 | Real terminal through launcher | PTY renders starter, crosses 80×24 → 100×30 resize, Escape opens prompt, typed quit exits zero | Automated stream evidence; no human visual acceptance |
-| Rendering comparison | Raw samples and reproducer committed | Allocation regression remains |
+| Rendering comparison | Initial regression recorded; reusable-buffer follow-up reduces allocations | Synthetic probe, full changed-tree painting remains |
 
 The launcher's integration groups cover invalid options; classpath/submodule
 application with custom distribution, JVM options, literal arguments, stdin and
@@ -71,6 +71,27 @@ Windows/macOS native behavior.
 The preceding complete production gate passed 556 tests with no failures,
 errors or skips and 6,350 / 7,095 covered lines (89.5%). This verification adds
 benchmark sources/evidence, not production behavior. Desktop remains disabled.
-See [benchmark data](../../tooling/benchmarks/ui/README.md) for the measured
-allocation increase and [integration plan](foundation-integration.md) for the
-performance, live acceptance and ecosystem work remaining before main.
+See [benchmark data](../../tooling/benchmarks/ui/README.md) for the initial
+allocation increase and follow-up below, and [integration plan](foundation-integration.md)
+for live acceptance and ecosystem work remaining before main.
+
+## Rendering follow-up (`99f4dee`)
+
+The full gate now passes 560 tests with no failures/errors/skips and 6,385 /
+7,129 covered lines (89.6%). New contract checks exercise repeated changed-frame
+commit failure/retry, direct visibility/text/resize changes under ordinary
+nodes, root layering/order/removal/reentry, and nearest style/theme overrides.
+Existing focus, compiler, abort and terminal partial-output tests also pass.
+
+The unchanged shared UI probe ran three forks after the gate. At 1,000 labels,
+median idle allocation falls from 666,736 to 256 bytes/frame, and one changed
+label from 2,045,480 to 734,112. Idle backend submissions remain zero; one change
+still evaluates/measures one label and paints all 1,000. Median CPU time is
+0.067 ms idle and 1.049 ms changed, compared with the prior integration's
+0.209 and 1.268 ms. Allocation/operation counts are stronger evidence than
+shared-host latency ratios; these results do not measure game FPS.
+
+See the benchmark README/CSV for all samples, baseline comparison and remaining
+costs. The previous distribution/PTY results above belong to `917af22`; this
+follow-up changes internal shared traversal and comparisons, with no public API
+change. Live platform acceptance and ecosystem workflows remain required.

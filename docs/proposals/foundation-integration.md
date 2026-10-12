@@ -191,16 +191,24 @@ with Escape, types `quit` and exits with status zero. Windows/macOS native
 terminal controls and visual resize/pause/focus acceptance remain unverified.
 See [verification evidence](foundation-verification.md) for exact scope and commands.
 
-The allocation comparison does not meet the audit's rendering goals: 1,000-label
-idle snapshots allocate 666,736 bytes/frame versus 587,528 at the baseline; one
-changed label allocates 2,045,480 versus 1,680,344 and still paints all 1,000 labels.
-Terminal cell composition allocations and zero unchanged writes are preserved.
-The next implementation slice should profile and remove avoidable snapshot and
-appearance work while retaining visibility, theme, focus, hierarchy and failure
-invalidation. Do not replace the snapshot with a dirty flag before those
-contracts are covered. Re-run these probes after the change.
+The first allocation comparison exposed a regression. The follow-up at
+`99f4dee` streams metadata into reusable frame buffers, flattens layout keys and
+child collection, and resolves appearance without an ancestor list. Frame state
+is committed only after successful end; stable child snapshots remain during
+painting. Direct state, visibility, theme, focus, order/removal and retry
+contracts stay covered without a new public API or dirty-notification system.
 
-Before main: complete that performance slice, native terminal acceptance and the
-required ecosystem workflows. Independent onboarding still needs a developer to
-complete the documented exercises. No Rust CLI, main merge, Central publication
-or release declaration is part of this verification.
+The full gate passes 560 tests, no failures/errors/skips, with 6,385 / 7,129
+covered lines (89.6%). The unchanged three-fork shared UI probe at 1,000 labels
+now allocates a median 256 bytes/frame idle (previously 666,736) and 734,112 when
+one label changes (previously 2,045,480). These are below the original audit
+baseline too. Idle frames still evaluate/measure/paint/submit nothing; a changed
+label evaluates and measures once but paints all 1,000. State comparison remains
+O(nodes), and changed-frame layout/paint costs remain visible. See the committed
+[raw data and reproducer](../../tooling/benchmarks/ui/README.md).
+
+Before main: complete native terminal acceptance and the required ecosystem
+workflows. Profile actual demo workloads before adding a more elaborate partial
+painting mechanism. Independent onboarding still needs a developer to complete
+the documented exercises. No Rust CLI, main merge, Central publication or release
+declaration is part of this verification.
