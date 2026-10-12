@@ -40,6 +40,8 @@ class SceneManager(val physicsStep: Float = 1f / 60f, private val block: SceneMa
 
     /** Node equality is final identity equality; paths do not define membership. */
     private val indexedNodes = linkedSetOf<Node<*>>()
+    private val drawingNodes = linkedSetOf<Node<*>>()
+    internal val hasDrawables: Boolean get() = drawingNodes.any { it.isValid && it.isInsideTree }
     private val ownedStates = mutableMapOf<Long, NodeState>()
     internal val retainedStateCount: Int get() = ownedStates.size
     internal val indexedNodeCount: Int get() = indexedNodes.size
@@ -203,6 +205,7 @@ class SceneManager(val physicsStep: Float = 1f / 60f, private val block: SceneMa
             val children = node.childSnapshot()
             for (i in children.indices.reversed()) pending.addLast(children[i])
             indexedNodes.add(node)
+            if (node.draws) drawingNodes.add(node)
 
             systemsFor(node).toList().forEach { sys ->
                 if (
@@ -244,6 +247,7 @@ class SceneManager(val physicsStep: Float = 1f / 60f, private val block: SceneMa
         val failures = CleanupFailures()
         for (node in nodes) {
             if (indexedNodes.remove(node)) indexRemovalCount++
+            drawingNodes.remove(node)
             groupsByNode.remove(node)?.forEach { group ->
                 groups[group]?.remove(node)
                 if (groups[group].isNullOrEmpty()) groups.remove(group)

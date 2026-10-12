@@ -2,6 +2,8 @@ package io.canopy.engine.ui
 
 import kotlin.math.max
 import kotlin.math.min
+import io.canopy.engine.core.nodes.Node
+import io.canopy.engine.graphics.DrawContext
 
 internal object UiLayoutEngine {
     fun layout(root: UiRoot, backend: UiBackend, viewport: UiSize) {
@@ -243,7 +245,32 @@ internal object UiLayoutEngine {
                     backend.drawText(element.text, textBounds, ownClip, element === focused, element.style.wrap)
                 }
             }
-            else -> element.content?.elements()?.forEach { paint(it, backend, ownClip, focused) }
+            else -> {
+                val padding = element.style.padding
+                val area = UiRect(
+                    element.bounds.x + padding,
+                    element.bounds.y + padding,
+                    max(0.0, element.bounds.width - 2 * padding),
+                    max(0.0, element.bounds.height - 2 * padding)
+                )
+                val contentClip = if (element.style.clip) ownClip.intersect(area) else ownClip
+                element.content?.nodes()?.forEach {
+                    paintNode(it, backend, area, if (it is UiElement) ownClip else contentClip, focused)
+                }
+            }
+        }
+    }
+
+    fun paintNode(node: Node<*>, backend: UiBackend, area: UiRect, clip: UiRect, focused: UiElement?) {
+        if (node is UiElement) {
+            paint(node, backend, clip, focused)
+        } else {
+            val context = DrawContext(backend, area, clip)
+            try {
+                node.drawSubtree(context) { it is UiRoot }
+            } finally {
+                context.close()
+            }
         }
     }
     private fun resolve(policy: UiLength, available: Double, content: Double, cap: Double?): Double = min(

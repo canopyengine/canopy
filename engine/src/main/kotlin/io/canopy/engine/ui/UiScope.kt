@@ -4,6 +4,7 @@ import io.canopy.engine.core.CleanupFailures
 import io.canopy.engine.core.flows.events.untrack
 import io.canopy.engine.core.nodes.Node
 import io.canopy.engine.core.nodes.NodeLifetime
+import io.canopy.engine.core.nodes.nodeConstruction
 
 /** Declarative construction receiver. The compiler lowers property expressions and structural regions independently. */
 @DeclarativeUi
@@ -15,7 +16,12 @@ class UiScope internal constructor(private val root: UiRoot, private val parent:
     private var composing = false
     private var disposed = false
 
-    private class Entry(val element: UiElement? = null, val scope: UiScope? = null, val region: UiRegion? = null) {
+    private class Entry(
+        val element: UiElement? = null,
+        val scope: UiScope? = null,
+        val region: UiRegion? = null,
+        val node: Node<*>? = null,
+    ) {
         var observer: UiObserver? = null
         var remembered: Any? = null
         var hasRemembered = false
@@ -85,8 +91,46 @@ class UiScope internal constructor(private val root: UiRoot, private val parent:
             parent.withChildConstruction { UiElement(kind, root, "Ui${identities++}") }
         }
         retained[key] = Entry(element = created)
-        if (parent.isInsideTree) created.buildTree()
+        enterCreated(created)
         return created
+    }
+
+    /**
+     * Retains an ordinary drawing/simulation node at [site]. [create] runs once per retained identity
+     * and must construct a fresh ordinary node. It shares the container's drawing area but does not
+     * participate in UI measurement. Omission destroys its subtree through normal node cleanup.
+     */
+    @Suppress("UNCHECKED_CAST")
+    fun <N : Node<*>> node(site: Any, create: () -> N): N {
+        val existing = claim(site)
+        if (existing != null) {
+            require(existing.node != null) { "UI site '$site' changed declaration type" }
+            return existing.node as N
+        }
+        val previousChildren = parent.children.values.toSet()
+        val created = nodeConstruction {
+            parent.withManagedChildrenMutation {
+                parent.withChildConstruction { create() }.also {
+                    val added = parent.children.values.filter { child -> child !in previousChildren }
+                    require(
+                        added == listOf(it) &&
+                            it.parent === parent &&
+                            it !is UiRoot &&
+                            it !is UiElement &&
+                            it !is UiRegion
+                    ) {
+                        "A drawing declaration must construct a fresh ordinary node in this scope"
+                    }
+                }
+            }
+        }
+        retained[site] = Entry(node = created)
+        enterCreated(created)
+        return created
+    }
+
+    private fun enterCreated(node: Node<*>) {
+        if (parent.isInsideTree && !parent.state("enter UI child").initializing) node.buildTree()
     }
     private fun slot(prefix: String) = "$prefix:${counter++}"
 
@@ -248,11 +292,14 @@ class UiScope internal constructor(private val root: UiRoot, private val parent:
         }
         val scope = UiScope(root, region)
         region.content = scope
-        if (parent.isInsideTree) region.buildTree()
+        enterCreated(region)
         return Entry(scope = scope, region = region)
     }
     private fun entryNodes(entry: Entry): List<Node<*>> = entry.element?.let(::listOf)
-        ?: entry.region?.let(::listOf).orEmpty()
+        ?: entry.node?.let(::listOf) ?: entry.region?.let(::listOf).orEmpty()
+    internal fun nodes(): List<Node<*>> = retained.values.flatMap { entry ->
+        entry.element?.let(::listOf) ?: entry.node?.let(::listOf) ?: entry.scope?.nodes().orEmpty()
+    }
     internal fun elements(): List<UiElement> = retained.values.flatMap(::entryElements)
     private fun entryElements(entry: Entry): List<UiElement> = entry.element?.let(::listOf)
         ?: entry.scope?.elements().orEmpty()

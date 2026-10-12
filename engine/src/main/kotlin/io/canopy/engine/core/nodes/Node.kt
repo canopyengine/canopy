@@ -13,6 +13,7 @@ import io.canopy.engine.core.flows.events.Signal
 import io.canopy.engine.core.flows.events.TwoArgsEvent
 import io.canopy.engine.core.managers.SceneManager
 import io.canopy.engine.core.managers.manager
+import io.canopy.engine.graphics.DrawContext
 import io.canopy.engine.input.events.InputEvent
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
@@ -597,6 +598,42 @@ abstract class Node<N : Node<N>> protected constructor(
 
     /** Custom eligible input hook. Consuming the event stops remaining descendants and behavior callbacks. */
     protected open fun onInput(event: InputEvent) {}
+
+    /**
+     * Paints into the host's pending frame after updates, including while simulation is paused.
+     * Hidden or detached nodes do not draw. Inside UI, [context] uses the container's content area;
+     * ordinary descendants inherit it. The context expires when this callback returns.
+     */
+    protected open fun onDraw(context: DrawContext) {}
+
+    internal val draws: Boolean get() = NodeDefinition.draws(javaClass)
+
+    internal fun drawSubtree(context: DrawContext, exclude: (Node<*>) -> Boolean) {
+        val pending = ArrayDeque<Pair<Node<*>, Node<*>?>>()
+        pending.addLast(this to parent)
+        while (pending.isNotEmpty()) {
+            val (node, expectedParent) = pending.removeLast()
+            if (!node.isValid ||
+                !node.isInsideTree ||
+                node.parent !== expectedParent ||
+                !node.isVisibleInTree ||
+                exclude(node)
+            ) {
+                continue
+            }
+            if (node.draws) {
+                val local = context.fork()
+                try {
+                    node.callback("draw") { node.onDraw(local) }
+                } finally {
+                    local.close()
+                }
+            }
+            if (!node.isValid || !node.isInsideTree) continue
+            val children = node.childSnapshot()
+            for (index in children.indices.reversed()) pending.addLast(children[index] to node)
+        }
+    }
 
     /** Builds and enters the class-named DSL once, then runs readiness. */
     fun buildTree() {

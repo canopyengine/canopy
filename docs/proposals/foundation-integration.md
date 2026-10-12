@@ -37,7 +37,7 @@ after the complete branch and required ecosystem workflows have been tested.
 | 3 | Failed-frame discard and retry | Implemented; UI/terminal regressions pass |
 | 4 | App-owned runtime/services and explicit stages | Implemented; full verification passes |
 | 5 | Lifetime contract and node-local reactive factories | Implemented; existing guarded storage retained |
-| 6 | Scoped drawing and efficient terminal rendering (#219) | In progress: measurement cache corrected; scoped drawing pending |
+| 6 | Scoped drawing and efficient terminal rendering (#219) | Implemented text drawing slice; full verification passes; live acceptance pending |
 | 7 | UiNode/components and matching compiler integration | Pending |
 | 8 | Custom styles/themes and runnable examples | Pending |
 | 9 | Launcher, external consumer and headless parity | Pending |
@@ -76,7 +76,28 @@ one call for one changed label, no height-only calls and correct width wrapping.
 The full gate passes with 533 tests and 5,942 / 6,649 covered lines (89.4%).
 These counts describe the fixture, not an application FPS claim. Changed frames
 still paint the tree into memory before terminal cell diffing. This does not
-complete scoped drawing or the UiNode/compiler migration.
+complete the UiNode/compiler migration.
+
+The scoped drawing slice adds Node.onDraw(DrawContext), ordinary subtree drawing
+and retained ordinary children inside UI scopes. App's existing post-update UI
+boundary coordinates drawing; SceneManager tracks entered drawing-node membership,
+and the existing backend buffers/presents. No extra rendering manager or public
+viewport renderer is introduced. Drawing uses container-local logical units and
+automatic clipping, not Node2D transforms. Text is the initial shared primitive;
+custom colors/backgrounds/borders remain in unit 8. Contexts expire after callbacks.
+Drawing remains live each frame while entered, including while paused; hidden or
+detached subtrees do not draw. UI-only equal frames still skip submission. Reactive
+conditions remain subscription-driven. Managed construction now defers child entry
+while a parent initializes, preserving normal parent-first lifecycle ordering.
+
+The current UiScope.node(site) factory retains exactly one fresh ordinary child;
+unit 7 will supply direct declarations in the new component/compiler API. Reorder
+retains constructor state; omission queues normal destruction. Regressions cover
+clipping/overflow, order, pause, clearing, invalid-factory rollback, failure retry,
+context expiry and real compiler-generated conditions with node-owned Signals.
+The full test/lint/build/coverage gate passes with 540 tests, no failures/errors/
+skips and 6,073 / 6,768 covered lines (89.7%). Desktop remains disabled. These
+automated checks do not replace live terminal testing or prove an FPS improvement.
 
 ## Verification and independent onboarding
 

@@ -1,11 +1,14 @@
 package io.canopy.engine.ui
 
+import kotlin.math.max
 import io.canopy.engine.core.flows.events.DependencySubscriptions
 import io.canopy.engine.core.flows.events.TrackingContext
 import io.canopy.engine.core.managers.Manager
+import io.canopy.engine.core.managers.SceneManager
 import io.canopy.engine.core.managers.manager
 import io.canopy.engine.core.nodes.Node
 import io.canopy.engine.core.nodes.NodeLifetime
+import io.canopy.engine.graphics.DrawContext
 import io.canopy.engine.input.InputFocus
 import io.canopy.engine.input.binds.Key
 import io.canopy.engine.input.events.InputEvent
@@ -236,11 +239,19 @@ class UiRoot(name: String = "UiRoot", block: UiScope.() -> Unit) : Node<UiRoot>(
             lastLayout = layoutKey
         }
         val rootClip = if (style.clip) viewportBounds.intersect(bounds) else viewportBounds
-        content?.elements()?.forEach {
-            UiLayoutEngine.paint(
+        val area = UiRect(
+            bounds.x + style.padding,
+            bounds.y + style.padding,
+            max(0.0, bounds.width - 2 * style.padding),
+            max(0.0, bounds.height - 2 * style.padding)
+        )
+        val contentClip = if (style.clip) rootClip.intersect(area) else rootClip
+        content?.nodes()?.forEach {
+            UiLayoutEngine.paintNode(
                 it,
                 backend,
-                rootClip,
+                area,
+                if (it is UiElement) rootClip else contentClip,
                 focusedElement
             )
         }
@@ -319,15 +330,24 @@ class UiManager(var backend: UiBackend? = null) : Manager {
     fun renderNow() {
         if (updating) return
         backend?.let { renderer ->
+            val scene = manager<SceneManager>()
             val logicalViewport = renderer.viewport(viewport)
             val activeRoots = roots.toList().filter {
                 it.isValid && it.isInsideTree
             }.sortedWith(compareBy<UiRoot> { it.layer.ordinal }.thenBy { it.zIndex })
             activeRoots.forEach { it.validateFocus() }
-            val snapshot = listOf(renderer, logicalViewport) + activeRoots.flatMap(::snapshot)
-            if (snapshot == lastFrame) return
+            val draws = scene.hasDrawables
+            val snapshot = listOf(renderer, logicalViewport, draws) + activeRoots.flatMap(::snapshot)
+            if (!draws && snapshot == lastFrame) return
             try {
                 renderer.begin(logicalViewport)
+                val area = UiRect(0.0, 0.0, logicalViewport.width, logicalViewport.height)
+                val context = DrawContext(renderer, area, area)
+                try {
+                    scene.currScene?.drawSubtree(context) { it is UiRoot }
+                } finally {
+                    context.close()
+                }
                 activeRoots.forEach { it.render(renderer, logicalViewport) }
                 renderer.end()
             } catch (failure: Throwable) {

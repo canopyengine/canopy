@@ -5,12 +5,24 @@ import io.canopy.engine.core.flows.events.Signal
 import io.canopy.engine.core.flows.events.signal
 import io.canopy.engine.core.managers.ManagersRegistry
 import io.canopy.engine.core.managers.SceneManager
+import io.canopy.engine.core.nodes.Node
+import io.canopy.engine.graphics.DrawContext
 import io.canopy.engine.input.InputFocus
 import io.canopy.engine.ui.*
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.BeforeEach
 
 class UiCompilerIntegrationTests {
+    private class CounterNode(created: () -> Unit) : Node<CounterNode>("Counter") {
+        val count = signal(0)
+        init {
+            created()
+        }
+        override fun onDraw(context: DrawContext) {
+            context.text("Count: ${count()}")
+        }
+    }
+
     private lateinit var scenes: SceneManager
     private lateinit var ui: UiManager
     private lateinit var backend: RecordingBackend
@@ -44,6 +56,40 @@ class UiCompilerIntegrationTests {
         override fun drawText(text: String, bounds: UiRect, clip: UiRect, focused: Boolean, wrap: Boolean) {
             draws += Draw(text, bounds)
         }
+    }
+
+    @Test
+    fun `compiler conditional drawing node owns live state and initializes once until omission`() {
+        // Arrange
+        val show = signal(owner = null, true)
+        var creations = 0
+        lateinit var counter: CounterNode
+        scenes.currScene = UiRoot {
+            Box {
+                if (show()) {
+                    node("counter") { CounterNode { creations++ }.also { counter = it } }
+                }
+            }
+        }
+        ui.updateFrame()
+        val first = counter
+
+        // Act / Assert
+        counter.count.update { 4 }
+        ui.updateFrame()
+        assertEquals("Count: 4", backend.draws.single().text)
+        assertEquals(1, creations)
+        show.update { false }
+        ui.updateFrame()
+        scenes.onUpdate(0f)
+        assertTrue(first.isFreed)
+        assertTrue(backend.draws.isEmpty())
+        show.update { true }
+        ui.updateFrame()
+        assertEquals(2, creations)
+        assertNotSame(first, counter)
+        assertEquals("Count: 0", backend.draws.single().text)
+        show.dispose()
     }
 
     @Test

@@ -6,9 +6,28 @@ import io.canopy.engine.core.exceptions.InvalidNodeDefinitionException
 import io.canopy.engine.core.queries.GlobalDependency
 import io.canopy.engine.core.queries.NodeDependency
 import io.canopy.engine.data.assets.AssetDelegate
+import io.canopy.engine.graphics.DrawContext
 
 /** Cache immutable class metadata, never node instances. Also protects Java and precompiled consumers. */
 internal object NodeDefinition {
+    private val draws = object : ClassValue<Boolean>() {
+        override fun computeValue(type: Class<*>): Boolean {
+            var current: Class<*>? = type
+            while (current != null && current != Node::class.java) {
+                if (current.declaredMethods.any {
+                        it.name == "onDraw" && it.parameterTypes.contentEquals(arrayOf(DrawContext::class.java))
+                    }
+                ) {
+                    return true
+                }
+                current = current.superclass
+            }
+            return false
+        }
+    }
+
+    fun draws(type: Class<*>): Boolean = draws.get(type)
+
     private val invalidFields = object : ClassValue<List<String>>() {
         override fun computeValue(type: Class<*>): List<String> {
             val result = mutableListOf<String>()
