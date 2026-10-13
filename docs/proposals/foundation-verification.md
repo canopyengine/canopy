@@ -489,3 +489,46 @@ Manual pointer/color/resize acceptance still belongs to the Windows live
 checklist. To retest an existing starter, rebuild/publish matching engine
 artifacts before launching; replacing only its launcher cannot update the
 terminal runtime. Main and the Rust CLI are unchanged.
+
+## Bounded grids and compact controls — 13 October 2026
+
+Implementation: `9b860bd`. `GridNode` extends UiNode, measures itself through the
+backend and stores sparse cell overrides. `GridSymbol` is an immutable printable
+ASCII glyph/color value. Concise set/index/clear/fill operations retain content;
+fill uses constant space, and coordinate validation precedes mutation. Layout
+keys include spacing while presentation keys include the cell revision, keeping
+color/content changes out of layout. Platform drawing is synchronous and clipped.
+`Divider` fills its allocated width without focus or default mouse participation.
+Terminal buttons now occupy one row, using bracketed labels or borderless padding;
+long labels truncate at grapheme boundaries and newlines/tabs become spaces.
+
+Verification:
+
+- `./gradlew test ktlintCheck build coverageReport stageCentralPublication
+  --offline --max-workers=2 --console=plain` passes: 586 tests, zero
+  failures/errors/skips, 6,696 / 7,405 covered lines (90.4%). Nine new regressions
+  cover grid operations/lifetime/cache/resize, bounded rendering and dividers.
+  Existing button metrics, Unicode and pointer-capture tests were updated for
+  single-row geometry. The two Python harness checks also pass.
+- A fresh staged-artifact consumer uses GridNode and Divider directly through
+  the matching compiler. All 28 local native PTY checks pass, including moving
+  colored cells, mouse/focus/actions, explicit pause, command capture, retained
+  narrow/wide drafts and quit/Ctrl+C restoration. An initial fixture placed its
+  divider above the tick counter, hiding the counter behind the 32x10 command
+  overlay; moving the divider below the counter corrected that fixture layout.
+- A real owned xterm under Xvfb displays the dotted grid, colored agents,
+  divider and compact focused button. Typed quit exits zero and closes the
+  owned window. Screenshots and logs are in the local grid acceptance evidence.
+- [Full Linux build and Windows terminal tests](https://github.com/canopyengine/canopy/actions/runs/38456579985)
+  and [all six launcher/consumer jobs](https://github.com/canopyengine/canopy/actions/runs/38456583786)
+  pass at the implementation commit. macOS repeats five paired native launches.
+  Windows native ANSI restoration passes; physical pointer/resize interaction
+  remains covered by the separate live checklist rather than the consumer build.
+- Docs checks and demo build/lint pass. The demo distribution's terminal JAR
+  hash matches the staged runtime. Documentation companion: `54b3dfe`; demo pin:
+  `76609a0`. Ecosystem gameplay and the copied launcher are unchanged.
+
+The backend contract adds grid/divider measurement and drawing. Default drawing
+reports unsupported components explicitly; custom renderers supporting them must
+provide the methods. Desktop rendering and platformConfig are still deferred.
+No main merge, version bump, Rust CLI change or Central publication is included.
