@@ -340,3 +340,58 @@ assertions passing. This is a recurring, intermittent startup failure requiring
 separate runtime investigation; successful pointer checks do not establish
 reliable macOS launch behavior. Linux passes both launches and all 28 checks;
 Windows consumer and all three portable launcher jobs pass.
+
+
+## macOS native memory workaround (`dcae5b9`, 13 October 2026)
+
+Investigation identifies an out-of-bounds native write in Mordant 3.1.0's FFM
+macOS terminal interface. Its `termios` layout allocates four 8-byte flags and
+32 control bytes: **64 bytes**. Darwin uses 20 control bytes, padding and two
+8-byte speeds: **72 bytes**. `tcgetattr` writes the output speed at offset 64,
+beyond the FFM allocation. Both retained JVM crashes dereference `0x258c`, with
+a damaged pointer of `0x2580` (9600, a terminal speed). This supports native
+buffer corruption rather than the earlier suspected general JVM startup issue.
+An isolated reflection probe against the actual staged Mordant JAR confirms
+`MemoryLayout.byteSize() == 64` without calling the unsafe native function.
+
+Primary sources:
+
+- [Mordant 3.1.0 FFM macOS layout](https://github.com/ajalt/mordant/blob/3.1.0/mordant-jvm-ffm/src/jvmMain/kotlin/com/github/ajalt/mordant/terminal/terminalinterface/ffm/TerminalInterface.ffm.macos.kt)
+- [Darwin termios definition](https://github.com/apple-oss-distributions/xnu/blob/main/bsd/sys/termios.h)
+- [Mordant 3.1.0 JNA macOS layout](https://github.com/ajalt/mordant/blob/3.1.0/mordant-jvm-jna/src/jvmMain/kotlin/com/github/ajalt/mordant/terminal/terminalinterface/jna/TerminalInterface.jna.macos.kt)
+
+The macOS terminal factory now delegates input/settings to Mordant JNA, which
+has the correct native layout. Geometry retains the default backend's safe
+query; on JDK 25 this uses FFM ioctl rather than spawning `stty` each frame.
+No launcher options, JDK downgrade, parser fork, JVM crash retry or user API
+change is required. JNA was already present in Mordant's omnibus runtime graph;
+its explicit dependency now permits direct provider selection. Remove this
+localized workaround when the upstream FFM layout is corrected.
+
+The routing regression proves raw-mode acquisition/restoration, event reads and
+hidden line input use the safe backend, while geometry and automatic resize
+queries use the native backend. The full local gate passes **576 tests**, zero
+failures/errors/skips, and **6,578 / 7,261 covered lines (90.6%)**:
+
+```sh
+./gradlew :platforms:terminal:ktlintFormat test ktlintCheck build coverageReport stageCentralPublication --offline --max-workers=2 --console=plain
+python -m unittest discover -s tooling/launcher -p 'test_*.py'
+python tooling/launcher/TerminalAcceptance.py --offline --repeat 2 --java /path/to/jdk-25/bin/java --output /path/to/evidence
+```
+
+Both Python harness tests pass. The repeated Linux PTY fixture passes **56
+checks across four fresh launches**, all exiting zero with terminal restoration.
+Companion documentation at `canopy-docs` commit `9200b00` passes content/link
+checks. The macOS workflow now runs five complete native iterations (ten fresh
+launches); each retains separate evidence. Main, Rust CLI and demo gameplay are
+unchanged.
+
+The [full build](https://github.com/canopyengine/canopy/actions/runs/38398024043)
+and [six-job native workflow](https://github.com/canopyengine/canopy/actions/runs/38398019313)
+pass at `dcae5b9`. The unchanged JDK 25 macOS runner completes **ten fresh
+launches / 140 acceptance checks**, including native click/wheel input, command
+capture, pause/resume, narrow/wide resizing, typed quit and Ctrl+C restoration.
+All ten processes exit zero. Linux native acceptance, Windows staged-consumer
+verification, all three portable launcher jobs, and Linux/Windows build tests
+also pass. These replace the failed macOS acceptance at `8e8538e`; no Windows
+physical pointer acceptance is inferred from its consumer build.
