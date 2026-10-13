@@ -454,3 +454,38 @@ remain live desktop acceptance.** Windows native console creation is automated;
 physical pointer/color/resize interaction remains in the live checklist.
 Companion docs: `a8e422c`; demo launcher/pin: `96825e8`. Main and Rust CLI remain
 unchanged. No release or Central publication is performed by these checks.
+
+## Windows ANSI output follow-up — 13 October 2026
+
+A live Windows 10 starter opened its own console successfully but displayed
+literal ANSI color and cursor sequences. Mordant 3.1.0's Windows input backend
+does not enable virtual terminal output processing. The terminal surface now
+enables processed output and virtual terminal processing on stdout/stderr before
+its first screen write, then restores their original modes after screen cleanup.
+Redirected handles are skipped. This uses the existing JDK FFM capability,
+adds no dependency, and performs no native mode work during frames.
+
+Runtime fix: `b87944f`; final regression fixture: `53223c6`. The native Windows
+regression creates a new console with ANSI explicitly disabled, opens the real
+terminal surface, checks both mode words and interpreted cursor positioning,
+then requires restoration of the disabled modes. Two initial CI runs failed
+before the probe started; the corrected fixture uses Gradle's declared runtime
+classpath and a Java argument file, with startup/native diagnostics in CI logs.
+
+Verification:
+
+- Full local `test ktlintCheck build coverageReport` passes: 577 tests, zero
+  failures/errors/skips, 90.2% aggregate line coverage. The Windows-only native
+  assertions run on Windows CI, rather than on this Linux workspace.
+- [Windows filesystem/terminal CI](https://github.com/canopyengine/canopy/actions/runs/38419828071)
+  passes at `53223c6`, including the real console rendering/mode regression.
+- [All six launcher/consumer jobs](https://github.com/canopyengine/canopy/actions/runs/38417897722)
+  pass at the runtime fix on Windows, Linux and macOS.
+- Demo build/lint and documentation checks pass. The demo distribution's
+  terminal JAR hash matches the staged fixed runtime. Docs companion: `0d498c7`;
+  demo runtime pin: `0f556ef`. The Java launcher source is unchanged.
+
+Manual pointer/color/resize acceptance still belongs to the Windows live
+checklist. To retest an existing starter, rebuild/publish matching engine
+artifacts before launching; replacing only its launcher cannot update the
+terminal runtime. Main and the Rust CLI are unchanged.
