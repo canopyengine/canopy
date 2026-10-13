@@ -8,6 +8,7 @@ import java.net.URL
 import java.net.URLClassLoader
 import java.net.URLConnection
 import java.net.URLStreamHandler
+import java.nio.file.Files
 import java.nio.file.Path
 import java.util.jar.JarEntry
 import java.util.jar.JarOutputStream
@@ -110,6 +111,35 @@ class TerminalAssetEntryTests {
             }
         }
         assertEquals("file resource", directory.resolve("resource.txt").toFile().readText())
+    }
+
+    @Test
+    fun `jar reads release the archive and observe its replacement`() {
+        // Arrange
+        val jar = directory.resolve("replaceable.jar")
+        fun writeJar(text: String) {
+            JarOutputStream(Files.newOutputStream(jar)).use {
+                it.putNextEntry(JarEntry("resource.txt"))
+                it.write(text.encodeToByteArray())
+                it.closeEntry()
+            }
+        }
+        writeJar("original")
+        val entry = TerminalAssetEntry(
+            File("resource.txt"),
+            FileSource.Classpath,
+            URL("jar:${jar.toUri()}!/resource.txt")
+        )
+
+        // Act
+        assertEquals("original", entry.readText())
+        Files.delete(jar)
+        writeJar("replacement")
+
+        // Assert
+        assertEquals("replacement", entry.readText())
+        Files.delete(jar)
+        assertFalse(Files.exists(jar))
     }
 
     @Test
