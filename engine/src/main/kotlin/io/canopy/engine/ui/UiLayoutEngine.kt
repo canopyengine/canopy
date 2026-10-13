@@ -78,6 +78,7 @@ internal object UiLayoutEngine {
         val key = listOf(
             backend,
             element.contentText,
+            element.contentMeasureKey,
             style.layoutKey,
             element.resolvedBorder,
             constrainedWidth,
@@ -86,7 +87,7 @@ internal object UiLayoutEngine {
             measures
         )
         if (key == element.measurementKey) return element.measured
-        val intrinsic = when (element.kind) {
+        val intrinsic = element.measureContent(backend, inner) ?: when (element.kind) {
             UiKind.Text -> backend.measureText(element.contentText, inner.width, style.wrap)
             UiKind.Button -> backend.measureButton(element.contentText, inner.width, style.wrap, element.resolvedBorder)
             UiKind.Row -> UiSize(
@@ -230,6 +231,7 @@ internal object UiLayoutEngine {
             appearance,
             if (element.kind == UiKind.Button) UiBorder.None else element.resolvedBorder
         )
+        element.paintContent(backend, ownClip, appearance)
         if (element.draws) {
             val padding = element.contentInset
             val area = UiRect(

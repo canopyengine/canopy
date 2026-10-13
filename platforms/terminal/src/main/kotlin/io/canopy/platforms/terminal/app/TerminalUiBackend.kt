@@ -7,12 +7,9 @@ import com.github.ajalt.mordant.rendering.TextColors
 import com.github.ajalt.mordant.rendering.TextStyle
 import com.github.ajalt.mordant.rendering.TextStyles
 import com.github.ajalt.mordant.rendering.Whitespace
-import com.github.ajalt.mordant.rendering.Widget
 import com.github.ajalt.mordant.terminal.Terminal
-import com.github.ajalt.mordant.widgets.Padding
-import com.github.ajalt.mordant.widgets.Panel
 import com.github.ajalt.mordant.widgets.Text
-import com.github.ajalt.mordant.widgets.withPadding
+import io.canopy.engine.graphics.GridContent
 import io.canopy.engine.ui.UiAppearance
 import io.canopy.engine.ui.UiBackend
 import io.canopy.engine.ui.UiBorder
@@ -36,11 +33,55 @@ internal class TerminalUiBackend(private val terminal: Terminal, private val sub
 
     override fun viewport(size: UiSize) = UiSize((size.width - 1).coerceAtLeast(0.0), size.height)
 
+    override fun measureGrid(columns: Int, rows: Int, columnGap: Int) =
+        UiSize(columns.toDouble() * (columnGap.toDouble() + 1) - columnGap, rows.toDouble())
+
+    override fun drawGrid(grid: GridContent, bounds: UiRect, clip: UiRect, appearance: UiAppearance) {
+        val visible = bounds.intersect(clip).intersect(UiRect(0.0, 0.0, columns.toDouble(), rows.toDouble()))
+        if (visible.width <= 0 || visible.height <= 0) return
+        val pitch = grid.columnGap.toDouble() + 1
+        val left = floor((visible.x - bounds.x) / pitch).toInt().coerceIn(0, grid.columns)
+        val right = ceil((visible.x + visible.width - bounds.x) / pitch).toInt().coerceIn(left, grid.columns)
+        val top = floor(visible.y - bounds.y).toInt().coerceIn(0, grid.rows)
+        val bottom = ceil(visible.y + visible.height - bounds.y).toInt().coerceIn(top, grid.rows)
+        for (y in top until bottom) {
+            for (x in left until right) {
+                val symbol = grid[x, y]
+                drawText(
+                    symbol.glyph.toString(),
+                    UiRect(bounds.x + x * pitch, bounds.y + y, 1.0, 1.0),
+                    visible,
+                    false,
+                    false,
+                    appearance.merge(UiAppearance(foreground = symbol.color))
+                )
+            }
+        }
+    }
+
+    override fun measureDivider(width: Double) = UiSize(width, 1.0)
+
+    override fun drawDivider(bounds: UiRect, clip: UiRect, appearance: UiAppearance) {
+        val visible = bounds.intersect(clip).intersect(UiRect(0.0, 0.0, columns.toDouble(), rows.toDouble()))
+        val left = ceil(visible.x).toInt()
+        val right = floor(visible.x + visible.width).toInt()
+        val y = ceil(bounds.y).toInt()
+        if (right <= left || y < visible.y || y + 1 > visible.y + visible.height) return
+        drawText(
+            "─".repeat(right - left),
+            UiRect(left.toDouble(), y.toDouble(), (right - left).toDouble(), 1.0),
+            visible,
+            false,
+            false,
+            appearance
+        )
+    }
+
     override fun measureButton(text: String, maxWidth: Double, wrap: Boolean, border: UiBorder): UiSize {
         val available = floor(maxWidth).toInt().coerceAtLeast(0)
         if (available == 0) return UiSize(0.0, 0.0)
-        val rendered = buttonWidget(text, available, wrap, UiAppearance(), border).render(terminal, available)
-        return UiSize(rendered.width.coerceAtMost(available).toDouble(), rendered.height.toDouble())
+        val measured = measureText(buttonLine(text, available, border), available.toDouble(), false)
+        return UiSize(measured.width.coerceAtMost(available.toDouble()), 1.0)
     }
 
     override fun drawButton(
@@ -55,44 +96,26 @@ internal class TerminalUiBackend(private val terminal: Terminal, private val sub
     ) {
         val available = floor(bounds.width).toInt().coerceAtLeast(0)
         if (available == 0 || bounds.height < 1) return
-        val lines =
-            buttonWidget(text, available, wrap, appearance, border)
-                .render(terminal, available)
-                .lines
-                .map { line -> line.joinToString("") { it.style(it.text) } }
-        // Widget rendering remains in memory; the surface owns output and partial repainting.
-        drawText(lines.joinToString("\n"), bounds, clip, false, false, appearance)
+        drawText(buttonLine(text, available, border), bounds, clip.intersect(bounds), false, false, appearance)
     }
 
-    private fun buttonWidget(
-        text: String,
-        available: Int,
-        wrap: Boolean,
-        appearance: UiAppearance,
-        border: UiBorder,
-    ): Widget {
-        val style = appearance.mordant()
-        val safe = safeTerminalText(text)
-        fun label(value: String, width: Int): Text {
-            // Keep Canopy's grapheme wrapping: Mordant's word breaking can duplicate wide labels.
-            val lines = textLines(value, width.toDouble(), wrap).joinToString("\n") { it.joinToString("") }
-            return Text(style(lines), whitespace = Whitespace.PRE)
+    private fun buttonLine(text: String, available: Int, border: UiBorder): String {
+        val safe = safeTerminalText(text.replace('\n', ' ').replace('\r', ' ').replace('\t', ' '))
+        val prefix = if (border == UiBorder.None) " " else "[ "
+        val suffix = if (border == UiBorder.None) " " else " ]"
+        val chrome = prefix.length + suffix.length
+        if (available <= chrome) return prefix + safe + suffix
+        val label = textLines(safe, (available - chrome).toDouble(), false).firstOrNull().orEmpty()
+        var used = 0
+        val clipped = buildString {
+            for (cluster in label) {
+                val size = width(cluster)
+                if (used + size > available - chrome) break
+                append(cluster)
+                used += size
+            }
         }
-        // A panel needs two border cells, two padding cells and at least one content cell.
-        if (border == UiBorder.None) {
-            if (available < 3) return label(safe, available)
-            return label(safe, available - 2).withPadding(Padding(0, 1, 0, 1))
-        }
-        if (available < 5) {
-            val compact = safe.split('\n').joinToString("\n") { "[ $it ]" }
-            return label(compact, available)
-        }
-        return Panel(
-            label(safe, available - 4),
-            padding = Padding(0, 1, 0, 1),
-            borderType = border.mordant(),
-            borderStyle = style
-        )
+        return prefix + clipped + suffix
     }
 
     override fun drawBox(bounds: UiRect, clip: UiRect, appearance: UiAppearance, border: UiBorder) {

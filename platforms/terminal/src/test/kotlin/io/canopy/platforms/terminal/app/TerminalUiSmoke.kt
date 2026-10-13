@@ -7,7 +7,7 @@ import io.canopy.engine.core.flows.events.signal
 import io.canopy.engine.core.managers.SceneManager
 import io.canopy.engine.core.managers.manager
 import io.canopy.engine.core.nodes.Node
-import io.canopy.engine.graphics.DrawContext
+import io.canopy.engine.graphics.GridSymbol
 import io.canopy.engine.ui.UiAppearance
 import io.canopy.engine.ui.UiBorder
 import io.canopy.engine.ui.UiColor
@@ -16,6 +16,8 @@ import io.canopy.engine.ui.UiNode
 import io.canopy.engine.ui.UiRoot
 import io.canopy.engine.ui.UiStyle
 import io.canopy.engine.ui.UiTheme
+import io.canopy.engine.ui.components.Divider
+import io.canopy.engine.ui.components.GridNode
 
 /** Real terminal smoke: responsive declarative cells, reactive text, actions, keyed list and command overlay. */
 fun main() {
@@ -35,7 +37,8 @@ fun main() {
                         it.style =
                             UiStyle(appearance = UiAppearance(foreground = UiColor.Rgb(120, 220, 160), bold = true))
                     }
-                    ColoredMap()
+                    node("map") { ColoredMap() }
+                    node("divider") { Divider() }
                     Row(UiStyle(width = UiLength.Fill, height = UiLength.Fraction(0.5), gap = 1.0)) {
                         Column(UiStyle(width = UiLength.Fraction(0.5), height = UiLength.Fill)) {
                             Text("Population: ${population()}")
@@ -90,25 +93,23 @@ private class ColoredMap :
             appearance = UiAppearance(background = UiColor.Rgb(16, 28, 22))
         )
     ) {
-    private var elapsed = 0f
+    private var elapsed by nodeProperty(0f)
+    private var map by nodeProperty<GridNode?>(null)
+
+    override fun nodeInit() {
+        super.nodeInit()
+        ui {
+            map = node("grid") { GridNode(columns = 24, rows = 3) }
+        }
+    }
+
     override fun onUpdate(delta: Float) {
         elapsed += delta
-    }
-    override fun onDraw(context: DrawContext) {
-        val columns = context.size.width.toInt()
-        if (columns == 0) return
-        val colors = listOf(UiColor.Rgb(120, 240, 120), UiColor.Rgb(255, 140, 70), UiColor.Rgb(120, 190, 255))
-        colors.forEachIndexed { index, color ->
-            if (index < context.size.height) {
-                context.text(
-                    if (index == 1) "f" else "r",
-                    x = ((elapsed * 5).toInt() + index * 7).mod(columns).toDouble(),
-                    y = index.toDouble(),
-                    width = 1.0,
-                    height = 1.0,
-                    appearance = UiAppearance(foreground = color, bold = true)
-                )
-            }
-        }
+        val grid = map ?: return
+        val column = (elapsed * 5).toInt().mod(grid.columns)
+        grid.clear()
+        grid[column, 0] = GridSymbol('r', UiColor.Rgb(120, 240, 120))
+        grid[(column + 7).mod(grid.columns), 1] = GridSymbol('f', UiColor.Rgb(255, 140, 70))
+        grid[(column + 14).mod(grid.columns), 2] = GridSymbol('r', UiColor.Rgb(120, 190, 255))
     }
 }

@@ -13,6 +13,7 @@ import io.canopy.engine.core.managers.Manager
 import io.canopy.engine.core.managers.ManagersRegistry
 import io.canopy.engine.core.managers.SceneManager
 import io.canopy.engine.core.nodes.Node
+import io.canopy.engine.ui.UiAppearance
 import io.canopy.engine.ui.UiLength
 import io.canopy.engine.ui.UiNode
 import io.canopy.engine.ui.UiRect
@@ -265,44 +266,55 @@ class TerminalUiTests {
     }
 
     @Test
-    fun `buttons measure their chrome and paint distinct enabled focused and disabled states`() {
+    fun `buttons use one row and paint distinct enabled focused and disabled states`() {
+        // Arrange
         var spans = emptyList<TerminalUiSpan>()
         val backend = TerminalUiBackend(terminal) { spans = it }
-        assertEquals(UiSize(7.0, 3.0), backend.measureButton("Add", 20.0, false))
-        val clip = UiRect(0.0, 0.0, 20.0, 9.0)
-        backend.begin(UiSize(20.0, 9.0))
+        assertEquals(UiSize(7.0, 1.0), backend.measureButton("Add", 20.0, false))
+        val clip = UiRect(0.0, 0.0, 20.0, 3.0)
+        backend.begin(UiSize(20.0, 3.0))
+
+        // Act
         for (y in 0..2) {
-            backend.drawButton("Add", UiRect(0.0, y * 3.0, 7.0, 3.0), clip, y == 1, y != 2, false)
+            val appearance = when (y) {
+                1 -> UiAppearance(bold = true, inverse = true)
+                2 -> UiAppearance(dim = true)
+                else -> UiAppearance.Empty
+            }
+            backend.drawButton(
+                "Add",
+                UiRect(0.0, y.toDouble(), 7.0, 1.0),
+                clip,
+                y == 1,
+                y != 2,
+                false,
+                appearance
+            )
         }
         backend.end()
-        assertEquals(9, spans.size)
-        assertEquals(
-            List(3) { listOf("╭─────╮", "│ Add │", "╰─────╯") }.flatten(),
-            spans.map { it.text.replace(Regex("\u001b\\[[0-9;]*m"), "") }
-        )
-        assertTrue(spans[1].text != spans[4].text && spans[4].text != spans[7].text)
+
+        // Assert
+        assertEquals(List(3) { "[ Add ]" }, spans.map { it.text.replace(Regex("\u001b\\[[0-9;]*m"), "") })
+        assertTrue(spans[0].text != spans[1].text && spans[1].text != spans[2].text)
     }
 
     @Test
-    fun `Mordant button panels wrap wide labels and clip borders to ancestor bounds`() {
+    fun `one line buttons truncate whole graphemes and retain closing decoration`() {
+        // Arrange
         var spans = emptyList<TerminalUiSpan>()
         val backend = TerminalUiBackend(terminal) { spans = it }
-        assertEquals(UiSize(6.0, 4.0), backend.measureButton("界界", 6.0, true))
-        val bounds = UiRect(0.0, 0.0, 6.0, 4.0)
-        val clip = UiRect(1.0, 1.0, 4.0, 2.0)
-        backend.begin(UiSize(6.0, 4.0))
-        backend.drawButton("界界", bounds, clip, false, true, true)
-        backend.end()
-        assertEquals(listOf(1, 2), spans.map { it.y })
-        assertTrue(spans.all { it.x == 1 })
-        assertEquals(listOf(" 界 ", " 界 "), spans.map { it.text.replace(Regex("\u001b\\[[0-9;]*m"), "") })
+        assertEquals(UiSize(6.0, 1.0), backend.measureButton("界界", 6.0, true))
+        val bounds = UiRect(0.0, 0.0, 6.0, 1.0)
+
+        // Act
         backend.begin(UiSize(6.0, 4.0))
         backend.drawButton("界界", bounds, bounds, false, true, true)
         backend.end()
-        assertEquals(
-            listOf("╭────╮", "│ 界 │", "│ 界 │", "╰────╯"),
-            spans.map { it.text.replace(Regex("\u001b\\[[0-9;]*m"), "") }
-        )
+
+        // Assert
+        assertEquals(listOf("[ 界 ]"), spans.map { it.text.replace(Regex("\u001b\\[[0-9;]*m"), "") })
+        assertTrue(spans.all { it.y == 0 })
+        assertEquals(UiSize(9.0, 1.0), backend.measureButton("A\nB\tC", 20.0, true))
     }
 
     @Test

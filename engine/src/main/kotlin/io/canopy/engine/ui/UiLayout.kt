@@ -2,6 +2,7 @@ package io.canopy.engine.ui
 
 import kotlin.math.max
 import kotlin.math.min
+import io.canopy.engine.graphics.GridContent
 
 /** Logical dimensions: cells for a terminal backend, pixels for a graphical backend. */
 data class UiSize(val width: Double, val height: Double) {
@@ -79,6 +80,25 @@ data class UiStyle(
 
 /** Platform implements metrics and primitives; containers and sizing remain shared engine behavior. */
 interface UiBackend {
+    /** Natural grid dimensions using this backend's character metrics; grids clip rather than wrap. */
+    fun measureGrid(columns: Int, rows: Int, columnGap: Int): UiSize {
+        val cell = measureText("M", Double.MAX_VALUE, false)
+        return UiSize((columns.toDouble() * (columnGap.toDouble() + 1) - columnGap) * cell.width, rows * cell.height)
+    }
+
+    /** Paints grid content synchronously into the pending frame; retaining the live content is unsupported. */
+    fun drawGrid(grid: GridContent, bounds: UiRect, clip: UiRect, appearance: UiAppearance) {
+        error("This UI backend does not support grid drawing")
+    }
+
+    /** Natural horizontal divider size in this backend's logical units. */
+    fun measureDivider(width: Double): UiSize = UiSize(width, measureText("M", Double.MAX_VALUE, false).height)
+
+    /** Paints a horizontal divider into the pending frame. */
+    fun drawDivider(bounds: UiRect, clip: UiRect, appearance: UiAppearance) {
+        error("This UI backend does not support divider drawing")
+    }
+
     /** Maps host geometry to the backend drawable area, such as reserving a terminal wrap column. */
     fun viewport(size: UiSize): UiSize = size
 

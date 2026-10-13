@@ -186,6 +186,7 @@ class UiRoot(name: String = "UiRoot", block: UiScope.() -> Unit) :
         snapshot.add(element.style.layoutKey)
         snapshot.add(element.resolvedBorder)
         snapshot.add(element.contentText)
+        snapshot.add(element.contentMeasureKey)
         element.content?.forEachElement { layoutSnapshot(it, snapshot) }
     }
 
@@ -382,6 +383,7 @@ class UiManager(var backend: UiBackend? = null) : Manager {
         snapshot.add(element.theme)
         snapshot.add(element.contentText)
         snapshot.add(element.actionEnabled)
+        snapshot.add(element.presentationKey)
         element.content?.forEachElement { snapshot(it, snapshot) }
     }
     override fun onExit() {

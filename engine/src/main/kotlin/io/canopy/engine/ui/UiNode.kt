@@ -32,6 +32,10 @@ abstract class UiNode<N : UiNode<N>> protected constructor(
     internal open val kind: UiKind get() = UiKind.Box
     internal open val contentText: String get() = ""
     internal open val actionEnabled: Boolean get() = true
+    internal open val contentMeasureKey: Any? get() = null
+    internal open val presentationKey: Any? get() = null
+    internal open fun measureContent(backend: UiBackend, available: UiSize): UiSize? = null
+    internal open fun paintContent(backend: UiBackend, clip: UiRect, appearance: UiAppearance) = Unit
     internal val root: UiRoot
         get() {
             var node: Node<*>? = this

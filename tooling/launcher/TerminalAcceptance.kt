@@ -3,7 +3,7 @@ import io.canopy.engine.commands.PauseCommand
 import io.canopy.engine.commands.ResumeCommand
 import io.canopy.engine.core.flows.events.signal
 import io.canopy.engine.core.nodes.types.empty.EmptyNode
-import io.canopy.engine.graphics.DrawContext
+import io.canopy.engine.graphics.GridSymbol
 import io.canopy.engine.input.events.InputEvent
 import io.canopy.engine.input.events.MouseScrollEvent
 import io.canopy.engine.ui.UiAppearance
@@ -15,6 +15,8 @@ import io.canopy.engine.ui.UiMouseFilter
 import io.canopy.engine.ui.UiRoot
 import io.canopy.engine.ui.UiStyle
 import io.canopy.engine.ui.UiTheme
+import io.canopy.engine.ui.components.Divider
+import io.canopy.engine.ui.components.GridNode
 import io.canopy.platforms.terminal.app.terminalApp
 
 /** External-consumer fixture for real terminal input, geometry and lifecycle acceptance. */
@@ -31,6 +33,7 @@ fun main() {
                     )
                     val map = AcceptanceMap()
                     Text("Ticks: ${map.ticks()}")
+                    Divider()
                     Text("Population: ${population()}")
                     ScrollProbe()
                     Button("Add rabbit") { population.update { it + 1 } }
@@ -83,25 +86,26 @@ private class AcceptanceMap : UiNode<AcceptanceMap>(
 ) {
     val ticks = signal(0)
     private var elapsed = 0f
+    private var map: GridNode? = null
+
+    override fun nodeInit() {
+        super.nodeInit()
+        ui {
+            map = GridNode(columns = 12, rows = 2) {
+                style = UiStyle(appearance = UiAppearance(bold = true))
+                set(0, 0, 'r', UiColor.Rgb(120, 240, 120))
+                set(0, 1, 'f', UiColor.Rgb(255, 140, 70))
+            }
+        }
+    }
 
     override fun onUpdate(delta: Float) {
         elapsed += delta
         ticks.update { it + 1 }
-    }
-
-    override fun onDraw(context: DrawContext) {
-        val columns = context.size.width.toInt()
-        if (columns < 1) return
-        val column = (elapsed * 3).toInt().mod(columns).toDouble()
-        context.text(
-            "r", column, 0.0, 1.0, 1.0,
-            appearance = UiAppearance(foreground = UiColor.Rgb(120, 240, 120), bold = true)
-        )
-        if (context.size.height > 1) {
-            context.text(
-                "f", column, 1.0, 1.0, 1.0,
-                appearance = UiAppearance(foreground = UiColor.Rgb(255, 140, 70), bold = true)
-            )
-        }
+        val grid = map ?: return
+        val column = (elapsed * 3).toInt().mod(grid.columns)
+        grid.clear()
+        grid[column, 0] = GridSymbol('r', UiColor.Rgb(120, 240, 120))
+        grid[column, 1] = GridSymbol('f', UiColor.Rgb(255, 140, 70))
     }
 }
