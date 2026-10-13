@@ -37,6 +37,29 @@ jobs:
       - name: Build with Gradle Wrapper
         run: ./gradlew test ktlintCheck build coverageReport --no-daemon --stacktrace
 
+  windows-logging:
+    name: Windows logging
+    runs-on: windows-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-java@v6
+        id: jdk17
+        with:
+          distribution: temurin
+          java-version: "17"
+      - uses: actions/setup-java@v6
+        id: jdk25
+        with:
+          distribution: temurin
+          java-version: "25"
+      - uses: gradle/actions/setup-gradle@v6.3.0
+      - name: Verify native filesystem paths and log ownership
+        shell: pwsh
+        run: >-
+          .\gradlew.bat :adapters:logback:test :adapters:logback:ktlintCheck --max-workers=2
+          "-Dorg.gradle.java.installations.paths=${{ steps.jdk17.outputs.path }},${{ steps.jdk25.outputs.path }}"
+
   dependency-submission:
     name: Dependency submission
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
