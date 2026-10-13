@@ -56,7 +56,7 @@ enum class UiBorder { None, Rounded, Square, Double }
 
 /**
  * Component defaults inherited from the nearest node with a theme. Explicit appearances override
- * component defaults; focused/disabled button appearances apply last. A theme replaces the inherited
+ * component defaults; hovered/focused/disabled button appearances apply last. A theme replaces the inherited
  * theme as a whole. Copy an existing theme to change just one default.
  */
 data class UiTheme(
@@ -65,6 +65,7 @@ data class UiTheme(
     val focusedButton: UiAppearance = UiAppearance(bold = true, inverse = true),
     val disabledButton: UiAppearance = UiAppearance(foreground = UiColor.Default, dim = true),
     val buttonBorder: UiBorder = UiBorder.Rounded,
+    val hoveredButton: UiAppearance = UiAppearance(underline = true),
 ) {
     companion object {
         /** Default terminal presentation: cyan actions, focused emphasis and dim disabled actions. */

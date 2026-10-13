@@ -10,6 +10,7 @@ import io.canopy.engine.input.binds.InputBind
 import io.canopy.engine.input.events.InputEvent
 import io.canopy.engine.input.events.InputState
 import io.canopy.engine.input.events.MouseButtonEvent
+import io.canopy.engine.input.events.MouseMoveEvent
 import io.canopy.engine.input.events.MouseScrollEvent
 import io.canopy.engine.math.Vector2
 import io.canopy.engine.ui.components.Button
@@ -58,6 +59,155 @@ class UiMouseTests {
 
     private fun click(x: Float = 1f, y: Float = 1f, action: String = InputBind.LEFT_MOUSE.name): Boolean =
         manager<InputFocus>().route(MouseButtonEvent(Vector2(x, y), action, InputState.JustPressed))
+
+    private fun move(x: Float = 1f, y: Float = 0f) =
+        manager<InputFocus>().route(MouseMoveEvent(Vector2(x, y), "MOUSE_MOVE"))
+
+    @Test
+    fun `hover enters once leaves once and never changes keyboard focus or activates buttons`() {
+        // Arrange
+        lateinit var button: Button
+        var actions = 0
+        var entries = 0
+        var exits = 0
+        val root = UiRoot {
+            button = Button("action") { actions++ }
+        }
+        scenes.currScene = root
+        val enter = button.mouseEntered.connect { entries++ }
+        val exit = button.mouseExited.connect { exits++ }
+        ui.updateFrame()
+
+        // Act
+        move()
+        move(2f)
+        ui.updateFrame()
+
+        // Assert
+        assertTrue(button.isHovered)
+        assertEquals(1, entries)
+        assertEquals(0, exits)
+        assertEquals(true, button.appearance().underline)
+        assertNull(root.focusedElement)
+        assertEquals(0, actions)
+        move(70f, 20f)
+        assertFalse(button.isHovered)
+        assertEquals(1, exits)
+        enter.disconnect()
+        exit.disconnect()
+    }
+
+    @Test
+    fun `hover respects pass stop ignore and changes beneath a stationary pointer`() {
+        // Arrange
+        lateinit var back: Probe
+        lateinit var front: Probe
+        scenes.currScene = UiRoot {
+            back = probe("back", UiMouseFilter.Stop)
+            front = probe("front", UiMouseFilter.Pass)
+        }
+        ui.updateFrame()
+
+        // Act and Assert
+        move()
+        assertTrue(front.isHovered)
+        assertTrue(back.isHovered)
+        front.mouseFilter = UiMouseFilter.Stop
+        ui.updateFrame()
+        assertTrue(front.isHovered)
+        assertFalse(back.isHovered)
+        front.mouseFilter = UiMouseFilter.Ignore
+        ui.updateFrame()
+        assertFalse(front.isHovered)
+        assertTrue(back.isHovered)
+        back.isVisible = false
+        ui.updateFrame()
+        assertFalse(back.isHovered)
+        assertFalse(ui.needsMouseMovement)
+        back.isVisible = true
+        ui.updateFrame()
+        assertTrue(back.isHovered)
+        ui.onResize(0, 0)
+        ui.updateFrame()
+        assertFalse(back.isHovered)
+    }
+
+    @Test
+    fun `exclusive editor clears hover and closing it requires fresh pointer input`() {
+        // Arrange
+        lateinit var button: Button
+        val root = UiRoot { button = Button("action") {} }
+        scenes.currScene = root
+        ui.updateFrame()
+        move()
+        root.focus(button)
+        assertTrue(ui.needsMouseMovement, "Keyboard focus must not disable hover")
+        val editor = manager<InputFocus>().register(priority = Int.MAX_VALUE, capturesGameplay = { true }) { true }
+
+        // Act and Assert
+        ui.updateFrame()
+        assertFalse(button.isHovered)
+        assertFalse(ui.needsMouseMovement)
+        move()
+        editor.close()
+        manager<InputFocus>().beginInputFrame()
+        ui.updateFrame()
+        assertTrue(ui.needsMouseMovement)
+        assertFalse(button.isHovered)
+        move()
+        assertTrue(button.isHovered)
+        scenes.currScene = null
+        ui.updateFrame()
+        assertFalse(button.isHovered)
+    }
+
+    @Test
+    fun `hover callbacks may destroy their root without retaining or painting destroyed nodes`() {
+        // Arrange
+        lateinit var button: Button
+        val root = UiRoot { button = Button("action") {} }
+        scenes.currScene = root
+        val listener = button.mouseEntered.connect {
+            root.queueFree()
+            scenes.onUpdate(0f)
+        }
+        ui.updateFrame()
+
+        // Act
+        move()
+        ui.updateFrame()
+
+        // Assert
+        assertFalse(root.isValid)
+        assertFalse(ui.needsMouseMovement)
+        listener.disconnect()
+    }
+
+    @Test
+    fun `hover follows root layers clipping and disabled button style`() {
+        // Arrange
+        lateinit var back: Button
+        lateinit var front: Button
+        val world = EmptyNode("world")
+        val lower = UiRoot("lower") { back = Button("back") {} }
+        val upper = UiRoot("upper") { front = Button("front") {} }.also { it.layer = UiLayer.Overlay }
+        world.addChild(lower)
+        world.addChild(upper)
+        scenes.currScene = world
+        ui.updateFrame()
+        front.enabled = false
+
+        // Act and Assert
+        move()
+        assertTrue(front.isHovered)
+        assertFalse(back.isHovered)
+        assertEquals(true, front.appearance().dim)
+        assertNull(front.appearance().underline)
+        upper.style = upper.style.copy(width = UiLength.Fixed(0.0))
+        ui.updateFrame()
+        assertFalse(front.isHovered)
+        assertTrue(back.isHovered)
+    }
 
     @Test
     fun `ordinary elements ignore pointers and buttons accept only primary presses`() {

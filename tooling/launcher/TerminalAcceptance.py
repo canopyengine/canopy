@@ -128,6 +128,19 @@ class Session:
             mode << 5 in self.screen.mode for mode in [9, 1002, 1003, 1015]
         )
 
+    def motion_reporting(self):
+        return 1003 << 5 in self.screen.mode and not any(
+            mode << 5 in self.screen.mode for mode in [9, 1000, 1002, 1015]
+        )
+
+    def hovered(self, label):
+        x, y = self.pointer_position(label)
+        return self.screen.buffer[y - 1][x - 1].underscore
+
+    def move(self, label):
+        x, y = self.pointer_position(label)
+        self.send(f"\x1b[<35;{x};{y}M")
+
     def pointer_position(self, label):
         for y, row in enumerate(self.screen.display):
             x = row.find(label)
@@ -190,7 +203,13 @@ def exercise(session):
         lambda: "Canopy terminal acceptance" in session.text() and session.colors(), timeout=150,
     )
     first = session.ticks()
-    session.wait("startup enables clicks without inherited motion modes", session.click_reporting)
+    session.wait("startup enables movement for participating UI", session.motion_reporting)
+    session.move("Add rabbit")
+    session.wait("movement underlines button without focusing or activating", lambda:
+                 session.hovered("Add rabbit") and not session.focused("Add rabbit") and
+                 "Population: 3" in session.text())
+    session.move("Canopy terminal acceptance")
+    session.wait("moving away clears hover", lambda: not session.hovered("Add rabbit"))
     session.wait("normal node updates animate map", lambda: session.ticks() > first + 2)
     session.save("initial")
     session.send(b"\x1b[B")
@@ -210,6 +229,8 @@ def exercise(session):
     # The prompt owns Escape and retains the underlying button selection.
     session.send(b"\x1b")
     session.wait("Escape opens command editor", lambda: session.screen.display[-1].startswith("> "))
+    session.wait("command editor disables movement reporting", session.click_reporting)
+    session.move("Add rabbit")
     session.click("Add rabbit")
     session.scroll("Scroll: 1")
     session.wait("commands block mouse actions without editing the draft", lambda:

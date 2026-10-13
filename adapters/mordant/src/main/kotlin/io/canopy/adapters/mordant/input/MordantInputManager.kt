@@ -10,6 +10,7 @@ import io.canopy.engine.input.events.InputEvent
 import io.canopy.engine.input.events.InputState
 import io.canopy.engine.input.events.KeyInputEvent
 import io.canopy.engine.input.events.MouseButtonEvent
+import io.canopy.engine.input.events.MouseMoveEvent
 import io.canopy.engine.input.events.MouseScrollEvent
 import io.canopy.engine.input.events.TextInputEvent
 import io.canopy.engine.math.Vector2
@@ -35,6 +36,7 @@ class MordantInputManager : InputManager() {
     private val heldMouse = mutableSetOf<InputBind>()
     private val mouseLock = Any()
     private var mouseButtons = 0
+    private var mousePosition: Vector2? = null
 
     /**
      * Called by InputManager.processEvents() for each queued event.
@@ -68,11 +70,13 @@ class MordantInputManager : InputManager() {
     /**
      * Publishes button transitions and wheel steps in zero-based terminal cells, never as keyboard text.
      * Calls are serialized with the backend button snapshot; repeated held snapshots do not repeat clicks.
-     * Mordant's normal tracking supplies clicks/wheels, not hover or drag motion.
+     * [trackMovement] also publishes changed positions as typed movement events; it defaults to clicks only.
      */
-    fun enqueueMordantMouseEvent(event: MouseEvent) {
+    fun enqueueMordantMouseEvent(event: MouseEvent, trackMovement: Boolean = false) {
         synchronized(mouseLock) {
             val position = Vector2(event.x.toFloat(), event.y.toFloat())
+            if (trackMovement && position != mousePosition) enqueue(MouseMoveEvent(position, "MOUSE_MOVE"))
+            mousePosition = if (trackMovement) position else null
             val horizontal = event.wheelRight.toInt() - event.wheelLeft.toInt()
             val vertical = event.wheelDown.toInt() - event.wheelUp.toInt()
             if (horizontal != 0 || vertical != 0) {
@@ -113,7 +117,10 @@ class MordantInputManager : InputManager() {
     private fun Boolean.toInt(): Int = if (this) 1 else 0
 
     override fun onExit() {
-        synchronized(mouseLock) { mouseButtons = 0 }
+        synchronized(mouseLock) {
+            mouseButtons = 0
+            mousePosition = null
+        }
         heldMouse.clear()
         pressedThisFrame.clear()
         super.onExit()

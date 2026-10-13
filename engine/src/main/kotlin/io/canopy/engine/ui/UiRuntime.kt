@@ -17,6 +17,7 @@ import io.canopy.engine.input.events.KeyInputEvent
 import io.canopy.engine.input.events.MouseButtonEvent
 import io.canopy.engine.input.events.MouseMoveEvent
 import io.canopy.engine.input.events.MouseScrollEvent
+import io.canopy.engine.math.Vector2
 import io.canopy.engine.ui.components.Button
 
 /** Marks a declarative builder receiver for the Canopy compiler's selective expression lowering. */
@@ -157,6 +158,23 @@ class UiRoot(name: String = "UiRoot", block: UiScope.() -> Unit) :
         }
         return false
     }
+    internal fun pointerTargets(position: Vector2): List<UiNode<*>> = if (!isVisibleInTree) {
+        emptyList()
+    } else {
+        (listOf(this) + content?.elements().orEmpty().flatMap(::descendants)).asReversed().filter {
+            it.isValid &&
+                it.isInsideTree &&
+                it.isVisibleInTree &&
+                it.mouseFilter != UiMouseFilter.Ignore &&
+                hit(it, position.x.toDouble(), position.y.toDouble())
+        }
+    }
+
+    internal fun hasPointerTargets(): Boolean = isVisibleInTree &&
+        (listOf(this) + content?.elements().orEmpty().flatMap(::descendants)).any {
+            it.isValid && it.isInsideTree && it.isVisibleInTree && it.mouseFilter != UiMouseFilter.Ignore
+        }
+
     private fun hit(element: UiNode<*>, x: Double, y: Double): Boolean {
         var clip = element.bounds.intersect(viewportBounds)
         var ancestor = if (element === this) null else element.parent
@@ -190,8 +208,7 @@ class UiRoot(name: String = "UiRoot", block: UiScope.() -> Unit) :
         element.content?.forEachElement { layoutSnapshot(it, snapshot) }
     }
 
-    /** Layouts and paints using backend metrics, independently of gameplay pause eligibility. */
-    fun render(backend: UiBackend, viewport: UiSize) {
+    internal fun prepareLayout(backend: UiBackend, viewport: UiSize) {
         validateFocus()
         if (!isVisibleInTree) return
         viewportBounds = UiRect(0.0, 0.0, viewport.width, viewport.height)
@@ -209,6 +226,16 @@ class UiRoot(name: String = "UiRoot", block: UiScope.() -> Unit) :
             UiLayoutEngine.layout(this, backend, viewport)
             lastLayout = layoutKey
         }
+    }
+
+    /** Layouts and paints using backend metrics, independently of gameplay pause eligibility. */
+    fun render(backend: UiBackend, viewport: UiSize) {
+        prepareLayout(backend, viewport)
+        paint(backend)
+    }
+
+    internal fun paint(backend: UiBackend) {
+        if (!isVisibleInTree) return
         val rootClip = if (style.clip) viewportBounds.intersect(bounds) else viewportBounds
         val appearance = appearance()
         backend.drawBox(bounds, rootClip, appearance, resolvedBorder)
@@ -244,6 +271,32 @@ class UiManager(var backend: UiBackend? = null) : Manager {
     private var hasFrame = false
     private var updating = false
     private var mouseLease: AutoCloseable? = null
+    private var pointer: Vector2? = null
+    private var hovered = linkedSetOf<UiNode<*>>()
+
+    /** Whether the host should report pointer movement for visible participating UI elements. */
+    val needsMouseMovement: Boolean
+        get() = !manager<InputFocus>().capturesAbove(Int.MAX_VALUE - 1) && activeRoots().any { it.hasPointerTargets() }
+
+    private fun updateHover(active: List<UiRoot>) {
+        if (manager<InputFocus>().capturesAbove(Int.MAX_VALUE - 1)) pointer = null
+        val next = linkedSetOf<UiNode<*>>()
+        pointer?.let { position ->
+            for (root in active.asReversed()) {
+                for (node in root.pointerTargets(position)) {
+                    next += node
+                    if (node.mouseFilter == UiMouseFilter.Stop) break
+                }
+                if (next.lastOrNull()?.mouseFilter == UiMouseFilter.Stop) break
+            }
+        }
+        val previous = hovered
+        hovered = next
+        previous.filter { it !in next }.forEach { it.hover(false) }
+        next.filter { it !in previous }.forEach {
+            if (it.isValid && it.isInsideTree && it.isVisibleInTree) it.hover(true)
+        }
+    }
 
     private fun ensureMouseRoute() {
         if (mouseLease != null) return
@@ -251,8 +304,17 @@ class UiManager(var backend: UiBackend? = null) : Manager {
             if (event !is MouseButtonEvent && event !is MouseMoveEvent && event !is MouseScrollEvent) {
                 false
             } else {
-                activeRoots()
-                    .asReversed().any { it.isValid && it.isInsideTree && it.mouseInput(event) }
+                pointer = when (event) {
+                    is MouseButtonEvent -> event.screenPos
+                    is MouseMoveEvent -> event.screenPos
+                    is MouseScrollEvent -> event.screenPos
+                    else -> null
+                }
+                val active = activeRoots()
+                backend?.let { renderer -> active.forEach { it.prepareLayout(renderer, renderer.viewport(viewport)) } }
+                val handled = active.asReversed().any { it.isValid && it.isInsideTree && it.mouseInput(event) }
+                updateHover(activeRoots())
+                handled
             }
         }
     }
@@ -327,8 +389,13 @@ class UiManager(var backend: UiBackend? = null) : Manager {
         backend?.let { renderer ->
             val scene = manager<SceneManager>()
             val logicalViewport = renderer.viewport(viewport)
-            val activeRoots = activeRoots()
-            activeRoots.forEach { it.validateFocus() }
+            var activeRoots = activeRoots()
+            activeRoots.forEach {
+                it.validateFocus()
+                if (pointer != null) it.prepareLayout(renderer, logicalViewport)
+            }
+            updateHover(activeRoots)
+            activeRoots = activeRoots()
             val draws = scene.hasDrawables
             try {
                 nextFrame.add(renderer)
@@ -345,7 +412,12 @@ class UiManager(var backend: UiBackend? = null) : Manager {
                     } finally {
                         context.close()
                     }
-                    activeRoots.forEach { it.render(renderer, logicalViewport) }
+                    activeRoots.forEach {
+                        if (it.isValid && it.isInsideTree) {
+                            it.prepareLayout(renderer, logicalViewport)
+                            it.paint(renderer)
+                        }
+                    }
                     renderer.end()
                 } catch (failure: Throwable) {
                     try {
@@ -374,6 +446,7 @@ class UiManager(var backend: UiBackend? = null) : Manager {
         snapshot.add(root.focusedElement)
         snapshot.add(root.layer)
         snapshot.add(root.zIndex)
+        snapshot.add(root.isHovered)
         root.content?.forEachElement { snapshot(it, snapshot) }
     }
     private fun snapshot(element: UiNode<*>, snapshot: MutableList<Any?>) {
@@ -384,11 +457,15 @@ class UiManager(var backend: UiBackend? = null) : Manager {
         snapshot.add(element.contentText)
         snapshot.add(element.actionEnabled)
         snapshot.add(element.presentationKey)
+        snapshot.add(element.isHovered)
         element.content?.forEachElement { snapshot(it, snapshot) }
     }
     override fun onExit() {
         mouseLease?.close()
         mouseLease = null
+        pointer = null
+        hovered.toList().forEach { it.hover(false) }
+        hovered.clear()
         hasFrame = false
         lastFrame.clear()
         lastFrame.trimToSize()

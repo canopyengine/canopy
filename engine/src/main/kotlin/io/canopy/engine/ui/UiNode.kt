@@ -1,6 +1,7 @@
 package io.canopy.engine.ui
 
 import kotlin.math.max
+import io.canopy.engine.core.flows.events.NoArgEvent
 import io.canopy.engine.core.flows.events.untrack
 import io.canopy.engine.core.nodes.Node
 import io.canopy.engine.core.nodes.NodeLifetime
@@ -64,8 +65,31 @@ abstract class UiNode<N : UiNode<N>> protected constructor(
     /** Accessible content label, empty for containers. */
     open val accessibleLabel: String get() = contentText
 
-    /** Pointer participation, ignoring events by default. Buttons opt in with [UiMouseFilter.Stop]. */
+    /** Pointer and hover participation, ignoring both by default. Buttons use [UiMouseFilter.Stop]. */
     var mouseFilter by nodeProperty(UiMouseFilter.Ignore)
+
+    /** Whether the last known pointer hits this participating element, independent of keyboard focus. */
+    var isHovered by nodeProperty(false)
+        private set
+    private val enteredEvent = lazy { event() }
+    private val exitedEvent = lazy { event() }
+
+    /** Emits once on pointer entry, on the lifecycle thread. Owned by this node. */
+    val mouseEntered: NoArgEvent get() = enteredEvent.value
+
+    /** Emits on pointer exit, hiding, removal, filtering or exclusive input capture. */
+    val mouseExited: NoArgEvent get() = exitedEvent.value
+
+    internal fun hover(value: Boolean) {
+        if (!isValid || isHovered == value) return
+        isHovered = value
+        untrack {
+            NodeLifetime.withOwner(this) {
+                val notification = if (value) enteredEvent else exitedEvent
+                if (notification.isInitialized()) notification.value.emit()
+            }
+        }
+    }
 
     /**
      * Handles hit-tested mouse button, movement or wheel events on the lifecycle thread, including paused frames.
@@ -122,6 +146,7 @@ abstract class UiNode<N : UiNode<N>> protected constructor(
         return when {
             kind == UiKind.Button && !actionEnabled -> result.merge(theme.disabledButton)
             kind == UiKind.Button && focused -> result.merge(theme.focusedButton)
+            kind == UiKind.Button && isHovered -> result.merge(theme.hoveredButton)
             else -> result
         }
     }

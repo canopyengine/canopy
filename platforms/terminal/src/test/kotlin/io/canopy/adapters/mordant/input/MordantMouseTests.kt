@@ -7,6 +7,7 @@ import io.canopy.engine.input.InputFocus
 import io.canopy.engine.input.binds.InputBind
 import io.canopy.engine.input.events.InputState
 import io.canopy.engine.input.events.MouseButtonEvent
+import io.canopy.engine.input.events.MouseMoveEvent
 import io.canopy.engine.input.events.MouseScrollEvent
 import io.canopy.engine.input.events.TextInputEvent
 import io.canopy.engine.math.Vector2
@@ -15,6 +16,28 @@ import org.junit.jupiter.api.AfterEach
 class MordantMouseTests {
     @AfterEach
     fun cleanup() = ManagersRegistry.exit()
+
+    @Test
+    fun `opted in movement is typed deduplicated and does not release held buttons`() {
+        // Arrange
+        val input = MordantInputManager()
+        input.enqueueMordantMouseEvent(MouseEvent(1, 2, left = true), trackMovement = true)
+        input.processEvents()
+        assertEquals(Vector2(1f, 2f), input.eventsThisFrame.filterIsInstance<MouseMoveEvent>().single().screenPos)
+
+        // Act
+        input.enqueueMordantMouseEvent(MouseEvent(1, 2, left = true), trackMovement = true)
+        input.enqueueMordantMouseEvent(MouseEvent(3, 4, left = true), trackMovement = true)
+        input.processEvents()
+
+        // Assert
+        assertEquals(Vector2(3f, 4f), input.eventsThisFrame.filterIsInstance<MouseMoveEvent>().single().screenPos)
+        assertTrue(input.eventsThisFrame.none { it is TextInputEvent || it is MouseButtonEvent })
+        assertTrue(input.isPressed(InputBind.LEFT_MOUSE))
+        input.enqueueMordantMouseEvent(MouseEvent(5, 6, left = true))
+        input.processEvents()
+        assertTrue(input.eventsThisFrame.isEmpty())
+    }
 
     @Test
     fun `mouse snapshots produce one press and release with coordinates and modifiers but no text`() {

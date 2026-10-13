@@ -14,10 +14,19 @@ import io.canopy.engine.input.events.KeyInputEvent
 class InputFocus : Manager {
     private val routes = mutableListOf<Route>()
     private var capturedThisFrame = false
+    private var capturedPriority: Int? = null
 
     /** Whether an active route captures gameplay now or captured it earlier in the current input frame. */
     val blocksGameplay: Boolean
         get() = capturedThisFrame || routes.toList().any { it.active() && it.capturesGameplay?.invoke() == true }
+
+    internal fun capturesAbove(priority: Int): Boolean = capturedPriority?.let { it > priority } == true ||
+        routes.toList().any { it.priority > priority && it.active() && it.capturesGameplay?.invoke() == true }
+
+    private fun capture(route: Route) {
+        capturedThisFrame = true
+        capturedPriority = maxOf(capturedPriority ?: Int.MIN_VALUE, route.priority)
+    }
 
     /**
      * Registers a route until its idempotent lease closes. An [owner] releases it on tree exit; hidden or
@@ -43,7 +52,9 @@ class InputFocus : Manager {
 
     internal fun beginInputFrame() {
         routes.toList().forEach { if (it in routes) it.beginFrame?.invoke() }
-        capturedThisFrame = routes.toList().any { it.active() && it.capturesGameplay?.invoke() == true }
+        capturedThisFrame = false
+        capturedPriority = null
+        routes.toList().filter { it.active() && it.capturesGameplay?.invoke() == true }.forEach(::capture)
     }
 
     internal fun route(event: InputEvent): Boolean {
@@ -51,9 +62,9 @@ class InputFocus : Manager {
         if (event is KeyInputEvent && event.isCtrlC()) return false
         for (route in routes.toList()) {
             if (route !in routes || !route.active()) continue
-            if (route.capturesGameplay?.invoke() == true) capturedThisFrame = true
+            if (route.capturesGameplay?.invoke() == true) capture(route)
             val consumed = route.handler?.invoke(event) == true || event.isHandled
-            if (route in routes && route.active() && route.capturesGameplay?.invoke() == true) capturedThisFrame = true
+            if (route in routes && route.active() && route.capturesGameplay?.invoke() == true) capture(route)
             if (consumed) {
                 event.consume()
                 return true
@@ -70,6 +81,7 @@ class InputFocus : Manager {
         routes.toList().forEach { it.close() }
         routes.clear()
         capturedThisFrame = false
+        capturedPriority = null
     }
 
     private class Route(

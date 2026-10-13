@@ -73,6 +73,7 @@ class TerminalApp internal constructor(
 
     @Volatile
     private var lineInputMode = false
+    private val trackMouseMovement = AtomicBoolean(false)
 
     private val lineInput = TerminalLineInputBridge(inputManager)
     private val surface = TerminalSurface(
@@ -138,6 +139,7 @@ class TerminalApp internal constructor(
                 if (failure !== frameFailure) frameFailure.addSuppressed(failure)
             }
         }
+        trackMouseMovement.set(manager<UiManager>().needsMouseMovement)
         processedLine?.complete(Unit)
     }
 
@@ -183,14 +185,25 @@ class TerminalApp internal constructor(
 
         surface.openSession()
         engineLoop.enter()
+        trackMouseMovement.set(manager<UiManager>().needsMouseMovement)
         withLoggingContext { log.info { "Starting terminal runtime" } }
 
         // Native reads run on IO and periodically return so cancellation can close raw mode.
         val inputJob = appScope.launch {
             try {
                 withContext(Dispatchers.IO) {
-                    terminal.enterRawMode(MouseTracking.Normal).use { input ->
+                    terminal.enterRawMode(MouseTracking.Any).use { input ->
+                        var reportingMovement: Boolean? = null
                         while (isActive && running.get()) {
+                            val movement = trackMouseMovement.get()
+                            if (reportingMovement != movement) {
+                                // Keep the raw input lease; only change terminal reporting, not native input settings.
+                                terminal.rawPrint(
+                                    "\u001b[?1000;1002;1003l" +
+                                        if (movement) "\u001b[?1003h" else "\u001b[?1000h"
+                                )
+                                reportingMovement = movement
+                            }
                             val event = input.readEventOrNull(100.milliseconds) ?: continue
                             ensureActive()
                             if (event is KeyboardEvent) {
@@ -198,7 +211,7 @@ class TerminalApp internal constructor(
                                 withLoggingContext { log.trace("key" to event.key) { "Key: ${event.key}" } }
                                 inputManager.enqueueMordantKeyEvent(event)
                             } else if (event is MouseEvent) {
-                                inputManager.enqueueMordantMouseEvent(event)
+                                inputManager.enqueueMordantMouseEvent(event, trackMovement = movement)
                             }
                         }
                     }
