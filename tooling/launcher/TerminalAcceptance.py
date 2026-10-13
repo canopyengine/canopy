@@ -86,11 +86,12 @@ class Session:
         deadline = time.monotonic() + timeout
         while time.monotonic() < deadline:
             self.pump()
+            exited = self.child.poll() is not None
             if predicate():
                 self.checks.append(label)
                 print(f"PASS: {label}", flush=True)
                 return
-            if self.child.poll() is not None:
+            if exited:
                 break
         self.save("failure")
         raise AssertionError(

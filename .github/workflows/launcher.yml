@@ -58,6 +58,8 @@ jobs:
         run: >-
           ./gradlew stageCentralPublication --max-workers=2
           "-Dorg.gradle.java.installations.paths=${{ steps.jdk17.outputs.path }},${{ steps.jdk25.outputs.path }}"
+      - name: Verify terminal acceptance harness
+        run: python -m unittest discover -s tooling/launcher -p 'test_*.py'
       - name: Test native terminal input and restoration through the launcher
         if: runner.os != 'Windows'
         run: |
