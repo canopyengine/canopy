@@ -185,3 +185,17 @@ project, observes configuration load, sends Ctrl+C and verifies exit zero,
 alternate-screen restoration and all four native terminal flag words. The copied
 launcher is byte-identical to the engine launcher. This prepares development;
 it does not add the missing simulation, commands, calendar or narrated UI.
+
+At demo commit `ac592e7`, the
+[demo build workflow](https://github.com/canopyengine/canopy-demos/actions/runs/38366791244)
+also passes: it publishes pinned engine `5b50eff` to Maven Local, then builds and
+checks formatting in the demo. Dependency submission is intentionally skipped
+for this manually dispatched side-branch run. No main branch was changed.
+
+The live 0.1.0 terminal milestone still has 45 closed issues and one open issue,
+[#219](https://github.com/canopyengine/canopy/issues/219), at this check. The work
+serves its lifecycle/UI/distribution/demo release gates; it adds no desktop,
+physics, audio, durable-save or standalone CLI release commitment. Whole-tree
+in-memory painting remains documented; terminal output is diffed and batched.
+Windows native acceptance, full ecosystem workflows and independent onboarding
+remain the outstanding acceptance work before main/release.
