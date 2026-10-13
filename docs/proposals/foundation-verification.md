@@ -199,3 +199,20 @@ physics, audio, durable-save or standalone CLI release commitment. Whole-tree
 in-memory painting remains documented; terminal output is diffed and batched.
 Windows native acceptance, full ecosystem workflows and independent onboarding
 remain the outstanding acceptance work before main/release.
+
+## Windows logging path assertions (`767ee22`)
+
+Live Windows testing exposed five assertion failures where JUnit's temporary
+base used an 8.3 short user-profile name but `ManagedLogFiles` returned the
+canonical long name. The logger deliberately resolves user-selected ancestors
+once; it does not follow managed child symlinks. The production behavior is
+unchanged. Expected paths now canonicalize only the base before appending the
+managed child name, preserving exact child-path and symlink-safety assertions.
+
+A new ancestor-alias case checks current and overlapping isolated runs against
+the canonical base on any supported filesystem. All 28 logback tests pass
+locally, and the complete test/lint/build/coverage gate passes 563 tests with no
+failures/errors/skips and 6,434 / 7,136 covered lines (90.2%). The Build workflow
+now includes native Windows logging tests and lint with both configured JDKs.
+The Windows logging job and full Linux build gate both pass in
+[workflow run 38377876069](https://github.com/canopyengine/canopy/actions/runs/38377876069).
