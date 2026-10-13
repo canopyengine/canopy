@@ -335,9 +335,12 @@ def main():
                                              ("java.exe" if os.name == "nt" else "java"))
                         if "JAVA_HOME" in os.environ else "java")
     parser.add_argument("--offline", action="store_true")
+    parser.add_argument("--repeat", type=int, default=1, help="Repeat both native launches to expose startup failures")
     parser.add_argument("--prepare", type=Path, help="Create a persistent fixture on any OS; no pyte needed")
     parser.add_argument("--build", action="store_true", help="Also build --prepare's distribution and verify JAR hashes")
     args = parser.parse_args()
+    if args.repeat < 1:
+        parser.error("--repeat must be positive")
     if args.build and not args.prepare:
         parser.error("--build requires --prepare")
     if not args.prepare and os.name != "posix":
@@ -366,23 +369,25 @@ def main():
     with tempfile.TemporaryDirectory(prefix="canopy terminal acceptance ") as scratch:
         project = Path(scratch)
         create_project(repo, project, version, kotlin_version)
-        session = Session("input", repo, project, output, args.java, args.offline)
-        try:
-            exercise(session)
-        finally:
-            session.close()
-        # Verify the installed distribution actually used these staged artifacts.
-        verify_artifacts(repository, project, version, output)
-        session = Session("ctrl-c", repo, project, output, args.java, args.offline)
-        try:
-            session.wait(
-                "second fresh terminal launch renders",
-                lambda: "Canopy terminal acceptance" in session.text() and session.colors(), timeout=150,
-            )
-            session.send(b"\x03")
-            session.stopped()
-        finally:
-            session.close()
+        for iteration in range(args.repeat):
+            suffix = "" if iteration == 0 else f"-{iteration + 1}"
+            session = Session(f"input{suffix}", repo, project, output, args.java, args.offline)
+            try:
+                exercise(session)
+            finally:
+                session.close()
+            # Verify the installed distribution actually used these staged artifacts.
+            verify_artifacts(repository, project, version, output)
+            session = Session(f"ctrl-c{suffix}", repo, project, output, args.java, args.offline)
+            try:
+                session.wait(
+                    "second fresh terminal launch renders",
+                    lambda: "Canopy terminal acceptance" in session.text() and session.colors(), timeout=150,
+                )
+                session.send(b"\x03")
+                session.stopped()
+            finally:
+                session.close()
     print(f"All terminal acceptance checks passed. Evidence: {output}", flush=True)
 
 

@@ -33,7 +33,7 @@ import kotlinx.coroutines.*
  * Select `logging(LoggingPolicy.Host)` before launch to retain host-owned logging instead.
  */
 class TerminalApp internal constructor(
-    private val terminal: Terminal = Terminal(interactive = true),
+    private val terminal: Terminal = runtimeTerminal(),
     private val output: (String) -> Unit = { terminal.rawPrint(it) },
     private val viewport: () -> Size = { terminal.updateSize() },
 ) : App<AppConfig>() {

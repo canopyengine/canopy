@@ -70,6 +70,11 @@ open, injected mouse clicks and wheels must leave both the draft and underlying
 UI unchanged. Shutdown disables reporting again. Physical Windows pointer input
 is part of the manual checklist.
 
+macOS uses Mordant JNA for input/settings to avoid the undersized native
+`termios` buffer in Mordant 3.1.0's FFM backend. Geometry still uses the safe FFM
+query, avoiding a `stty` subprocess per frame. macOS CI repeats the full native
+fixture five times (ten fresh launches); use `--repeat 5` to reproduce that check.
+
 Use the configured JDKs and Python 3.10+ on Linux or macOS:
 
 ```sh

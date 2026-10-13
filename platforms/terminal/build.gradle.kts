@@ -15,6 +15,7 @@ dependencies {
 
     // Terminal adapter ONLY (no headless, no libgdx)
     implementation(projects.adapters.mordant)
+    implementation(libs.mordant.jna)
 
     // Devtools for testing (AppTestDriver, testHeadlessApp, etc.)
     testImplementation(projects.tooling.devtools)
