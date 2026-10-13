@@ -3,7 +3,7 @@
 Use the same command on Linux, Windows and macOS. Requires a JDK 17+ to run the
 launcher and the project's Gradle wrapper JAR/properties. Gradle and the game may
 require a newer JDK; the project's configured Java toolchain determines the game
-runtime. No Rust, shell script or PowerShell script is required.
+runtime. Copying the Java file is sufficient; no Rust or project-specific scripts are required.
 
 Copy `CanopyLaunch.java` into your project, or run it from a Canopy checkout:
 
@@ -24,9 +24,44 @@ The launcher invokes `gradle/wrapper/gradle-wrapper.jar` with its own Java runti
 so the project's pinned Gradle distribution is used without going through a shell
 or batch file. It creates a temporary Kotlin init script, builds `installDist`,
 and reads the game's Java executable, libraries, main class/module, JVM options
-and working directory. After Gradle exits, Java starts directly with inherited
-stdin/stdout/stderr. Temporary build files are removed before the game starts;
+and working directory. After Gradle exits, Java starts directly with the chosen
+terminal's stdin/stdout/stderr. Temporary build files are removed before the game starts;
 the game exit code is returned to the caller.
+
+## Separate terminal window
+
+Distributions containing Canopy's terminal runtime open a **new window on every
+launch**, including launches from an existing terminal. The game gets that
+window's real stdin/stdout/stderr, and its exit closes the owned window. The
+original terminal and its other windows stay open. Arguments, the selected
+game JDK, JVM options, working directory and exit status are preserved.
+
+```sh
+java CanopyLaunch.java -p /path/to/terminal-game
+```
+
+The window uses Windows' native console (opened through system PowerShell),
+macOS Terminal, or an installed Linux terminal (`kitty`, `alacritty`, then
+`xterm`, in that order). Linux needs a desktop display and one of those emulators.
+macOS may ask permission to control Terminal on the first launch; allow it in
+System Settings → Privacy & Security → Automation. Only the created window is
+closed; the launcher does not change global terminal preferences.
+
+Mordant renders colors according to the selected terminal's capabilities.
+Color depth can differ between emulators; a separate window does not upgrade
+an emulator's color support.
+
+Use `--current-terminal` for CI, SSH/headless sessions, piped input, or a project
+that includes the terminal dependency but is running its headless backend:
+
+```sh
+java CanopyLaunch.java -p /path/to/game --current-terminal
+```
+
+Projects without Canopy's terminal runtime keep using the caller's terminal.
+`--window` explicitly opens a window for other Gradle applications. Choose one
+terminal mode per invocation. Build errors remain visible in the launching
+console; window startup errors return a nonzero status.
 
 Both classpath and JPMS applications are supported. JVM options come from
 `application.applicationDefaultJvmArgs` and the Gradle `run` task's `jvmArgs`.
@@ -46,7 +81,12 @@ java tooling/launcher/LauncherTests.java .
 The suite creates a real Gradle application and checks root/submodule selection,
 custom distribution paths, spaces and shell characters in paths/arguments, empty
 and Unicode arguments, Java selection, JVM flags, JPMS, stdin delivery, exit
-status, build failures and temporary-file cleanup. It requires this repository's
+status, build failures and temporary-file cleanup. With `-Dcanopy.tests.window=true`,
+it also verifies a real new console, argument preservation, window/app exit and
+cleanup (requires a desktop terminal). Linux CI uses xterm under Xvfb; Windows
+CI exercises native console creation. macOS CI compiles the owned-window
+AppleScript; actual macOS GUI opening/closing requires a live desktop test.
+It requires this repository's
 wrapper files and a JDK supported by the pinned Gradle distribution.
 
 The Launcher GitHub Actions workflow runs that command on Linux, Windows and

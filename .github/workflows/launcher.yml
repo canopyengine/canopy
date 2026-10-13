@@ -26,8 +26,21 @@ jobs:
           distribution: temurin
           java-version: '25'
       - uses: gradle/actions/setup-gradle@v6.3.0
+      - name: Install graphical terminal fixture
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y xterm xvfb xauth
       - name: Test the real Gradle-to-Java launcher
-        run: java tooling/launcher/LauncherTests.java .
+        shell: bash
+        run: |
+          if [ "$RUNNER_OS" = "Linux" ]; then
+            xvfb-run -a java -Dcanopy.tests.window=true tooling/launcher/LauncherTests.java .
+          elif [ "$RUNNER_OS" = "Windows" ]; then
+            java -Dcanopy.tests.window=true tooling/launcher/LauncherTests.java .
+          else
+            java tooling/launcher/LauncherTests.java .
+          fi
 
   terminal:
     name: Terminal consumer (${{ matrix.os }})

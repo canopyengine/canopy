@@ -7,12 +7,14 @@ import java.util.Base64;
 import java.util.Comparator;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.CompletableFuture;
 
 /** Same dependency-free integration suite on Linux, Windows and macOS; requires JDK 17+. */
 public class LauncherTests {
     private static Path launcher;
     private static Path project;
     private static Path scratch;
+    private static volatile Process activeLaunch;
     private static final String APPLICATION = """
         plugins { application }
         java { toolchain { languageVersion.set(JavaLanguageVersion.of(%d)) } }
@@ -30,6 +32,24 @@ public class LauncherTests {
         import java.nio.charset.StandardCharsets;
         public class Game {
             public static void main(String[] args) throws Exception {
+                if (args.length > 1 && args[0].equals("--window-fixture")) {
+                    var record = new StringBuilder("CONSOLE=" + (System.console() != null) + "\\n");
+                    record.append("FLAG=").append(System.getProperty("launcher.flag")).append("\\n");
+                    record.append("DIR=").append(System.getProperty("user.dir")).append("\\n");
+                    record.append("PID=").append(ProcessHandle.current().pid()).append("\\n");
+                    for (String arg : args) record.append("ARG=").append(Base64.getEncoder()
+                        .encodeToString(arg.getBytes(StandardCharsets.UTF_8))).append("\\n");
+                    record.append("READY\\n");
+                    var marker = java.nio.file.Path.of(args[1]);
+                    java.nio.file.Files.writeString(marker, record);
+                    System.out.print("\\u001b[38;2;120;240;120mCanopy window fixture\\u001b[0m\\n");
+                    long deadline = System.nanoTime() + java.util.concurrent.TimeUnit.SECONDS.toNanos(30);
+                    while (!java.nio.file.Files.exists(marker.resolveSibling("window-close"))) {
+                        if (System.nanoTime() >= deadline) throw new AssertionError("Window close signal missing");
+                        Thread.sleep(20);
+                    }
+                    System.exit(7);
+                }
                 System.out.println("FLAG=" + System.getProperty("launcher.flag"));
                 System.out.println("RUN=" + System.getProperty("launcher.run"));
                 System.out.println("JAVA=" + System.getProperty("java.home"));
@@ -47,7 +67,7 @@ public class LauncherTests {
     public static void main(String[] args) throws Exception {
         Path repo = Path.of(args.length == 0 ? "." : args[0]).toRealPath();
         launcher = repo.resolve("tooling/launcher/CanopyLaunch.java");
-        scratch = Files.createTempDirectory("canopy launcher tests ");
+        scratch = Files.createTempDirectory("canopy launcher tests ' ");
         project = scratch.resolve("game project & spaces");
         try {
             Files.createDirectories(project.resolve("gradle/wrapper"));
@@ -65,6 +85,8 @@ public class LauncherTests {
             require(invalid.code == 2, "Invalid module must fail before Gradle", invalid);
             Result missing = launch("", "--module");
             require(missing.code == 2, "Missing option value", missing);
+            Result modes = launch("", "--window", "--current-terminal");
+            require(modes.code == 2, "Conflicting terminal modes must fail before Gradle", modes);
             System.out.println("PASS: option and module validation");
 
             List<String> literal = List.of("two words", "& literal", "--project", "", "héllo", "$(echo nope)");
@@ -89,6 +111,12 @@ public class LauncherTests {
             verifyGame(root, List.of("root argument"), project);
             System.out.println("PASS: root application");
 
+            if (Boolean.getBoolean("canopy.tests.window")) {
+                verifyWindow(literal, false);
+                verifyWindow(literal, true);
+            }
+            if (System.getProperty("os.name").equals("Mac OS X")) verifyMacScript();
+
             Files.writeString(project.resolve("build.gradle.kts"), "error(\"deliberate build failure\")\n");
             Result failed = launch("keyboard\n");
             require(failed.code != 0 && !failed.output.contains("INPUT="), "Failed build must not launch game", failed);
@@ -102,6 +130,80 @@ public class LauncherTests {
                 for (Path path : paths.sorted(Comparator.reverseOrder()).toList()) Files.deleteIfExists(path);
             }
         }
+    }
+
+    private static void verifyWindow(List<String> literal, boolean cancel) throws Exception {
+        Path marker = scratch.resolve("window ready & ' héllo.txt");
+        Path close = marker.resolveSibling("window-close");
+        Files.deleteIfExists(marker);
+        Files.deleteIfExists(close);
+        List<String> windowArgs = new ArrayList<>(List.of("--window-fixture", marker.toString()));
+        windowArgs.addAll(literal);
+        List<String> options = new ArrayList<>(List.of("--window", "--"));
+        options.addAll(windowArgs);
+        CompletableFuture<Result> pending = CompletableFuture.supplyAsync(() -> {
+            try { return launch("", options.toArray(String[]::new)); }
+            catch (Exception e) { throw new java.util.concurrent.CompletionException(e); }
+        });
+        Result result;
+        long gamePid = -1;
+        try {
+            long deadline = System.nanoTime() + TimeUnit.MINUTES.toNanos(2);
+            while (!Files.exists(marker) || !Files.readString(marker).endsWith("READY\n")) {
+                if (pending.isDone()) throw new AssertionError("Window exited before readiness: " + pending.get());
+                if (System.nanoTime() >= deadline) throw new AssertionError("Window never became ready");
+                Thread.sleep(20);
+            }
+            String record = Files.readString(marker);
+            require(record.contains("CONSOLE=true"), "Game needs a real console in its window", new Result(0, record));
+            require(record.contains("FLAG=two words"), "Window must preserve JVM flags", new Result(0, record));
+            String cwd = record.lines().filter(l -> l.startsWith("DIR=")).findFirst().orElseThrow().substring(4);
+            require(Files.isSameFile(Path.of(cwd), project), "Window working directory changed", new Result(0, record));
+            for (String arg : windowArgs) {
+                String encoded = Base64.getEncoder().encodeToString(arg.getBytes(StandardCharsets.UTF_8));
+                require(record.lines().anyMatch(l -> l.equals("ARG=" + encoded)), "Window argument changed", new Result(0, record));
+            }
+            gamePid = Long.parseLong(record.lines().filter(l -> l.startsWith("PID=")).findFirst().orElseThrow().substring(4));
+            if (cancel) {
+                // Windows Process.destroy forcibly kills a JVM without its shutdown hooks.
+                // Exercise game termination there; POSIX also verifies graceful launcher cancellation.
+                if (System.getProperty("os.name").startsWith("Windows")) {
+                    ProcessHandle.of(gamePid).orElseThrow().destroy();
+                } else activeLaunch.destroy();
+            }
+        } finally {
+            Files.writeString(close, "close");
+            result = pending.get(30, TimeUnit.SECONDS);
+        }
+        require(cancel ? result.code != 0 : result.code == 7, "Window exit status must propagate", result);
+        require(ProcessHandle.of(gamePid).map(ProcessHandle::isAlive).orElse(false) == false, "Game process leaked", result);
+        try (var files = Files.list(scratch.resolve("manifests"))) {
+            require(files.findAny().isEmpty(), "Window launcher files must be removed", result);
+        }
+        System.out.println(cancel ? "PASS: terminated process leaves no game or window launcher files"
+            : "PASS: new console window, JVM flags, literal arguments, exit status and cleanup");
+    }
+
+    private static void verifyMacScript() throws Exception {
+        Path classes = Files.createDirectory(scratch.resolve("launcher-classes"));
+        int compiled = javax.tools.ToolProvider.getSystemJavaCompiler().run(null, null, null,
+            "-d", classes.toString(), launcher.toString());
+        if (compiled != 0) throw new AssertionError("Launcher compilation failed");
+        try (var loader = new java.net.URLClassLoader(new java.net.URL[] {classes.toUri().toURL()})) {
+            var method = loader.loadClass("CanopyLaunch").getDeclaredMethod("windowCommand", List.class,
+                Path.class, Path.class, Path.class);
+            method.setAccessible(true);
+            @SuppressWarnings("unchecked")
+            var command = (List<String>) method.invoke(null, List.of("/path with ' quote/java", "/runner.java", "/request"),
+                scratch.resolve("result"), scratch.resolve("pid"), scratch.resolve("owned window ' id"));
+            Process check = new ProcessBuilder("osacompile", "-o", scratch.resolve("window.scpt").toString(),
+                "-e", command.get(command.size() - 1)).inheritIO().start();
+            if (!check.waitFor(30, TimeUnit.SECONDS) || check.exitValue() != 0) {
+                check.destroyForcibly();
+                throw new AssertionError("macOS terminal script does not compile");
+            }
+        }
+        System.out.println("PASS: macOS owned-window script compiles with quoted paths");
     }
 
     private static void verifyGame(Result result, List<String> arguments, Path cwd) throws IOException {
@@ -129,6 +231,7 @@ public class LauncherTests {
         command.addAll(List.of(options));
         Path log = scratch.resolve("process.log");
         Process child = new ProcessBuilder(command).redirectErrorStream(true).redirectOutput(log.toFile()).start();
+        activeLaunch = child;
         try {
             child.getOutputStream().write(input.getBytes(StandardCharsets.UTF_8));
             child.getOutputStream().close();
@@ -137,6 +240,7 @@ public class LauncherTests {
             }
             return new Result(child.exitValue(), Files.readString(log));
         } finally {
+            activeLaunch = null;
             if (child.isAlive()) {
                 child.descendants().forEach(ProcessHandle::destroyForcibly);
                 child.destroyForcibly();

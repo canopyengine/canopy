@@ -53,6 +53,7 @@ or run it through Gradle's `run` task. While the game runs, perform these checks
 | Action | Expected result |
 | --- | --- |
 | Observe the first frame | Green `r` and orange `f` move; ticks increase; population is 3. |
+| Launch normally | A separate game window opens; the launching console stays open. |
 | Down, Enter | Add rabbit is visibly selected; population becomes 4. |
 | Click Add rabbit | Population becomes 5; the action runs once. |
 | Scroll down over `Scroll: 0` | The opted-in custom component shows `Scroll: 1`. |

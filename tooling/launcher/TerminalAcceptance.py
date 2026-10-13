@@ -48,6 +48,7 @@ class Session:
 
         command = [
             java, str(repo / "tooling/launcher/CanopyLaunch.java"), "-p", str(project),
+            "--current-terminal",
             "--gradle-arg", "--max-workers=2",
         ]
         if offline:
