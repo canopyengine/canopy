@@ -31,10 +31,12 @@ internal class TerminalSurface(
     private var sessionOpen = false
     private var sessionManaged = false
     private var shutdownHook: Thread? = null
+    private var outputMode: AutoCloseable? = null
 
     @Synchronized
     fun openSession() {
         if (sessionOpen) return
+        outputMode = enableWindowsConsoleOutput()
         val hook = Thread({
             try {
                 closeSession()
@@ -54,8 +56,13 @@ internal class TerminalSurface(
     @Synchronized
     fun closeSession() {
         if (!sessionOpen) return
-        output("${MOUSE_REPORTING_OFF}\u001b[0m\u001b[?25h\u001b[?1049l")
-        sessionOpen = false
+        try {
+            output("${MOUSE_REPORTING_OFF}\u001b[0m\u001b[?25h\u001b[?1049l")
+        } finally {
+            sessionOpen = false
+            outputMode?.close()
+            outputMode = null
+        }
         shutdownHook?.let { hook ->
             try {
                 Runtime.getRuntime().removeShutdownHook(hook)

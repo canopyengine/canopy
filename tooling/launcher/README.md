@@ -48,6 +48,9 @@ System Settings → Privacy & Security → Automation. Only the created window i
 closed; the launcher does not change global terminal preferences.
 
 Mordant renders colors according to the selected terminal's capabilities.
+On Windows, Canopy enables ANSI processing on console output before drawing
+and restores the original output modes on exit. This includes newly opened
+Windows 10+ console windows; installing another terminal is not required.
 Color depth can differ between emulators; a separate window does not upgrade
 an emulator's color support.
 
