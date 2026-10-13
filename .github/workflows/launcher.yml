@@ -30,11 +30,11 @@ jobs:
         run: java tooling/launcher/LauncherTests.java .
 
   terminal:
-    name: Terminal PTY (${{ matrix.os }})
+    name: Terminal consumer (${{ matrix.os }})
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-latest]
+        os: [ubuntu-latest, macos-latest, windows-latest]
     runs-on: ${{ matrix.os }}
     timeout-minutes: 25
     steps:
@@ -59,9 +59,13 @@ jobs:
           ./gradlew stageCentralPublication --max-workers=2
           "-Dorg.gradle.java.installations.paths=${{ steps.jdk17.outputs.path }},${{ steps.jdk25.outputs.path }}"
       - name: Test native terminal input and restoration through the launcher
+        if: runner.os != 'Windows'
         run: |
           python -m pip install pyte==0.8.2
           python tooling/launcher/TerminalAcceptance.py
+      - name: Build the external terminal fixture and verify staged artifacts
+        if: runner.os == 'Windows'
+        run: python tooling/launcher/TerminalAcceptance.py --prepare "build/terminal manual" --build
       - name: Preserve terminal acceptance evidence
         if: always()
         uses: actions/upload-artifact@v4

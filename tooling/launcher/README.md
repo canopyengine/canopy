@@ -79,8 +79,20 @@ Raw terminal streams, text/style snapshots, application logs and result JSON go
 to `build/terminal-acceptance` by default. This tool's pyte dependency is only for
 test-side terminal emulation; it is not an engine or game dependency.
 
-The Launcher workflow also runs this PTY suite on Linux and macOS. Windows keeps
-the portable launcher suite; Python's Unix PTY interface cannot exercise Windows
-console input. For manual native checks, use `TerminalAcceptance.kt` as the game
-entry point in a project with matching artifacts and launch it in a real terminal.
+Prepare the same fixture on any OS without pyte or a terminal emulator:
+
+```sh
+python tooling/launcher/TerminalAcceptance.py --prepare "build/terminal manual" --build
+```
+
+This creates a persistent external game, builds its distribution and verifies
+its engine/terminal JAR hashes. It prints a launch command and saves it in the
+project's `LAUNCH.txt`. Preparation refuses an existing project directory;
+choose a new path to repeat. Omit `--build` to prepare without building. The Java
+launcher builds before running either way. `--prepare` requires no Python packages.
+
+The Launcher workflow runs the PTY suite on Linux/macOS and builds this external
+consumer on Windows. The Windows build is not native console acceptance:
+Python's Unix PTY interface cannot exercise Windows console input. Follow the
+[Windows native test](WindowsTerminalAcceptance.md) in a real Windows terminal.
 The moving markers are an acceptance fixture, not the full ecosystem simulation.

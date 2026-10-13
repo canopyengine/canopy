@@ -228,3 +228,9 @@ ecosystem workflows and independent onboarding remain separate acceptance.
 The old demo scaffold compiles unchanged against the new artifacts in a temporary
 version/repository migration and loads configuration at runtime; its actual
 checkout has not been modified.
+
+Windows acceptance now has a persistent fixture preparation command and an exact
+manual checklist with native console-mode comparison. The terminal consumer CI
+matrix includes a Windows distribution build and staged-JAR identity check;
+this is separate from native interactive acceptance. See
+[Windows test steps](../../tooling/launcher/WindowsTerminalAcceptance.md).

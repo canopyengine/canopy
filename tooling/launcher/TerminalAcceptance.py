@@ -1,7 +1,7 @@
-"""Unix PTY acceptance against a fresh consumer of the staged Maven artifacts.
+"""Create an external terminal fixture, or run Unix PTY acceptance against it.
 
-Requires Python 3.10+, pyte 0.8.2 and the project's configured JDKs. The terminal
-emulator checks visible output; native input and mode restoration use a real PTY.
+Preparation needs Python 3.10+ and the project's configured JDKs on any OS.
+Unix automation additionally uses pyte 0.8.2 to check output in a real PTY.
 """
 
 import argparse
@@ -12,24 +12,18 @@ import os
 from pathlib import Path
 import re
 import shutil
+import shlex
 import subprocess
 import tempfile
 import time
 
-if os.name != "posix":
-    raise SystemExit("This PTY check needs Unix; LauncherTests.java supports Windows too.")
-
-import fcntl
-import pty
-import select
-import signal
-import struct
-import termios
-
-try:
-    import pyte
-except ImportError:
-    raise SystemExit("Install the test dependency: python3 -m pip install pyte==0.8.2")
+if os.name == "posix":
+    import fcntl
+    import pty
+    import select
+    import signal
+    import struct
+    import termios
 
 
 class Session:
@@ -249,14 +243,64 @@ tasks.named<JavaExec>("run") {{ jvmArgs("--enable-native-access=ALL-UNNAMED") }}
     shutil.copy(repo / "tooling/launcher/TerminalAcceptance.kt", sources)
 
 
+def verify_artifacts(repository, project, version, output):
+    hashes = {}
+    for module in ["engine", "platforms-terminal"]:
+        staged = repository / module / version / f"{module}-{version}.jar"
+        installed = project / "build/install/terminal-acceptance/lib" / staged.name
+        digest = hashlib.sha256(staged.read_bytes()).hexdigest()
+        assert digest == hashlib.sha256(installed.read_bytes()).hexdigest(), f"Stale {module} artifact"
+        hashes[module] = digest
+    (output / "artifact-hashes.json").write_text(json.dumps(hashes, indent=2))
+
+
+def prepare(repo, project, version, kotlin_version, repository, output, java, offline, build):
+    # Refuse an existing directory so preparation never replaces a user's project.
+    project.mkdir(parents=True, exist_ok=False)
+    create_project(repo, project, version, kotlin_version)
+    command = [java, str(repo / "tooling/launcher/CanopyLaunch.java"), "-p", str(project),
+               "--gradle-arg", "--max-workers=2"]
+    if offline:
+        command += ["--gradle-arg", "--offline"]
+    if os.name == "nt":
+        launch = "& " + " ".join("'" + part.replace("'", "''") + "'" for part in command)
+    else:
+        launch = shlex.join(command)
+    (project / "LAUNCH.txt").write_text(launch + "\n", encoding="utf-8")
+    (output / "prepared-project.json").write_text(json.dumps(
+        dict(project=str(project), version=version, command=command, built=False), indent=2,
+    ))
+    if build:
+        wrapper = project / "gradle/wrapper/gradle-wrapper.jar"
+        build_command = [java, "-classpath", str(wrapper), "org.gradle.wrapper.GradleWrapperMain",
+                         "installDist", "--max-workers=2", "--console=plain"]
+        if offline:
+            build_command.append("--offline")
+        with (output / "prepared-build.log").open("wb") as log:
+            subprocess.run(build_command, cwd=project, stdout=log, stderr=subprocess.STDOUT, check=True)
+        verify_artifacts(repository, project, version, output)
+        (output / "prepared-project.json").write_text(json.dumps(
+            dict(project=str(project), version=version, command=command, built=True), indent=2,
+        ))
+    print(f"Prepared {project}\nLaunch in your terminal:\n{launch}\n"
+          f"Manual checks: {repo / 'tooling/launcher/WindowsTerminalAcceptance.md'}", flush=True)
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--repo", type=Path, default=Path(__file__).resolve().parents[2])
     parser.add_argument("--output", type=Path)
-    parser.add_argument("--java", default=str(Path(os.environ["JAVA_HOME"]) / "bin/java")
+    parser.add_argument("--java", default=str(Path(os.environ["JAVA_HOME"]) / "bin" /
+                                             ("java.exe" if os.name == "nt" else "java"))
                         if "JAVA_HOME" in os.environ else "java")
     parser.add_argument("--offline", action="store_true")
+    parser.add_argument("--prepare", type=Path, help="Create a persistent fixture on any OS; no pyte needed")
+    parser.add_argument("--build", action="store_true", help="Also build --prepare's distribution and verify JAR hashes")
     args = parser.parse_args()
+    if args.build and not args.prepare:
+        parser.error("--build requires --prepare")
+    if not args.prepare and os.name != "posix":
+        parser.error("Windows native checks are manual; use --prepare PATH --build")
     repo = args.repo.resolve()
     output = (args.output or repo / "build/terminal-acceptance").resolve()
     output.mkdir(parents=True, exist_ok=True)
@@ -267,6 +311,17 @@ def main():
         if not (repository / module / version / f"{module}-{version}.jar").exists():
             raise SystemExit("Stage the artifacts first: ./gradlew stageCentralPublication")
 
+    if args.prepare:
+        prepare(repo, args.prepare.resolve(), version, kotlin_version, repository, output,
+                args.java, args.offline, args.build)
+        return
+
+    global pyte
+    try:
+        import pyte
+    except ImportError:
+        raise SystemExit("Install the test dependency: python3 -m pip install pyte==0.8.2")
+
     with tempfile.TemporaryDirectory(prefix="canopy terminal acceptance ") as scratch:
         project = Path(scratch)
         create_project(repo, project, version, kotlin_version)
@@ -276,14 +331,7 @@ def main():
         finally:
             session.close()
         # Verify the installed distribution actually used these staged artifacts.
-        hashes = {}
-        for module in ["engine", "platforms-terminal"]:
-            staged = repository / module / version / f"{module}-{version}.jar"
-            installed = project / "build/install/terminal-acceptance/lib" / staged.name
-            digest = hashlib.sha256(staged.read_bytes()).hexdigest()
-            assert digest == hashlib.sha256(installed.read_bytes()).hexdigest(), f"Stale {module} artifact"
-            hashes[module] = digest
-        (output / "artifact-hashes.json").write_text(json.dumps(hashes, indent=2))
+        verify_artifacts(repository, project, version, output)
         session = Session("ctrl-c", repo, project, output, args.java, args.offline)
         try:
             session.wait(
