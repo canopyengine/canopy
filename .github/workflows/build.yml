@@ -60,6 +60,19 @@ jobs:
           .\gradlew.bat :adapters:logback:test :adapters:logback:ktlintCheck --max-workers=2
           :platforms:terminal:test :platforms:terminal:ktlintCheck
           "-Dorg.gradle.java.installations.paths=${{ steps.jdk17.outputs.path }},${{ steps.jdk25.outputs.path }}"
+      - name: Report Windows test failures
+        if: failure()
+        shell: pwsh
+        run: |
+          Get-ChildItem -Path adapters/logback/build/test-results/test, platforms/terminal/build/test-results/test -Filter 'TEST-*.xml' -ErrorAction SilentlyContinue | ForEach-Object {
+            [xml]$report = Get-Content $_.FullName
+            foreach ($test in $report.testsuite.testcase) {
+              if ($test.failure) {
+                Write-Output "$($test.classname): $($test.name)"
+                Write-Output $test.failure.InnerText
+              }
+            }
+          }
 
   dependency-submission:
     name: Dependency submission
