@@ -143,3 +143,45 @@ at runtime and Ctrl+C exits zero with native flag/screen restoration. The actual
 `canopy-demos` checkout remains unchanged. This proves scaffold compatibility;
 it does not implement the still-missing rabbit/fox simulation, calendar, weather,
 resource decisions or narration.
+
+## Windows fixture preparation (`5b50eff`)
+
+The fixture can now be prepared persistently on any OS without pyte:
+`python tooling/launcher/TerminalAcceptance.py --prepare "build/terminal manual" --build`.
+Preparation refuses an existing directory. The build installs an external game
+and compares its engine/terminal JAR SHA-256 values with the staged artifacts.
+The generated command runs the game through the direct Java launcher.
+
+The [six-job workflow](https://github.com/canopyengine/canopy/actions/runs/38360628631)
+passes at `5b50eff`: three portable launcher jobs, Linux/macOS native PTY acceptance,
+and the Windows external-consumer distribution build with artifact checks.
+Windows evidence contains `built: true`, the successful build log and both JAR
+hashes. This establishes Windows artifact/compiler/consumer compatibility;
+it does not establish native console interaction or restoration.
+The [manual Windows checklist](../../tooling/launcher/WindowsTerminalAcceptance.md)
+covers visual behavior and compares console input/output modes before and after
+typed quit and a separate Ctrl+C run. No engine/game/Python dependency was added.
+
+Local verification repeats the complete test/lint/build/coverage gate: 562 tests,
+no failures/errors/skips, 6,434 / 7,136 lines covered (90.2%). The updated Unix
+harness passes all 24 checks. Dependency-free preparation also passes under
+`python -S`, and repeat preparation leaves the existing source unchanged.
+Companion documentation content and repository-local links pass their checker.
+
+## Ecosystem development scaffold
+
+The demos side branch `codex/agent/chore/foundation-demo-integration` now selects
+`0.1.0-alpha.2`, pins engine `5b50eff` for CI and includes the same bare Java
+launcher. `-PcanopyRepository=<URI>` selects matching staged artifacts in both
+plugin and dependency resolution, or the existing Maven Local path can be used.
+No Kotlin gameplay sources changed. The Unix wrapper is executable in the clone.
+
+Against the engine's staging repository, `./gradlew ktlintCheck test build
+--offline --max-workers=2 --console=plain
+-PcanopyRepository=file:///workspace/canopy/build/central-repository` passes.
+The scaffold has no test sources; its `test` task is `NO-SOURCE`, not a simulation
+test pass. A controlling Linux PTY runs the copied launcher from the real demo
+project, observes configuration load, sends Ctrl+C and verifies exit zero,
+alternate-screen restoration and all four native terminal flag words. The copied
+launcher is byte-identical to the engine launcher. This prepares development;
+it does not add the missing simulation, commands, calendar or narrated UI.

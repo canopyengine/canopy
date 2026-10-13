@@ -234,3 +234,10 @@ manual checklist with native console-mode comparison. The terminal consumer CI
 matrix includes a Windows distribution build and staged-JAR identity check;
 this is separate from native interactive acceptance. See
 [Windows test steps](../../tooling/launcher/WindowsTerminalAcceptance.md).
+
+The six-job workflow at `5b50eff` passes, including Windows external-consumer
+compilation and JAR identity checks. The demos companion side branch
+`codex/agent/chore/foundation-demo-integration` now pins those artifacts, includes
+the Java launcher and accepts an explicit staging repository. Its scaffold
+passes build/lint and native Linux configuration-load/Ctrl+C restoration checks
+with no Kotlin gameplay-source changes. Full simulation workflows remain pending.
