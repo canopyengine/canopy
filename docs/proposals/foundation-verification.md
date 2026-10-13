@@ -395,3 +395,62 @@ All ten processes exit zero. Linux native acceptance, Windows staged-consumer
 verification, all three portable launcher jobs, and Linux/Windows build tests
 also pass. These replace the failed macOS acceptance at `8e8538e`; no Windows
 physical pointer acceptance is inferred from its consumer build.
+
+
+## Owned terminal windows (`e776bfc`, 13 October 2026)
+
+Terminal distributions now open a fresh native window on every launcher run.
+Detection reads their installed JARs for `TerminalApp.class`; projects without
+that runtime keep their existing console. `--window` forces a new window for
+other apps; `--current-terminal` explicitly retains the caller's handles for
+PTY/CI/SSH, piped input or headless runs with mixed platform dependencies.
+Direct `gradlew run` or a main-class invocation does not acquire this behavior.
+
+Windows uses system PowerShell to create a new console. macOS opens Terminal
+and records the particular tab/window it owns, closing only that window.
+Linux selects installed kitty, alacritty or xterm with a desktop display.
+Arguments stay in UTF-8 data rather than being interpolated into shell code.
+The helper has a 64 MiB heap limit; the game's selected JDK and JVM options,
+working directory, empty/Unicode/literal arguments and exit status are retained.
+Normal exit removes helper files. Color depth follows the emulator's capabilities.
+
+Verification at this change:
+
+- Full local test/lint/build/coverage gate passes: **576 tests**, no failures,
+  errors or skips; the existing coverage remains **90.6%**.
+- The committed launcher suite passes **seven groups** under Linux Xvfb/xterm,
+  including native console attachment, quoted paths/arguments, app exit status,
+  launcher cancellation, no surviving game and helper-file cleanup.
+- A real staged Canopy consumer opens its own xterm window by default. Its
+  rendered screenshot contains exact green `(120,240,120)` and orange
+  `(255,140,70)` pixels. Native keyboard input opens commands, typed `quit`
+  exits zero, and the window disappears. These are real GUI/TTY checks, not
+  a command-construction mock.
+- Current-terminal native acceptance still passes **28 PTY checks**, including
+  clicks/wheels, prompt capture, pause/resume, resizing and both restored exits.
+- JDK 17 compiles/runs the single source launcher; both Python harness tests
+  and documentation content/link checks pass.
+- The demo's copied launcher is byte-identical to the engine source. Its
+  pinned engine revision is updated; build and lint pass against the staged
+  repository. Kotlin gameplay sources are unchanged.
+
+Exact local commands (managed environment setup omitted):
+
+```sh
+java -Dcanopy.tests.offline=true -Dcanopy.tests.window=true tooling/launcher/LauncherTests.java .
+./gradlew test ktlintCheck build coverageReport --offline --max-workers=2 --console=plain
+python tooling/launcher/TerminalAcceptance.py --offline --java /path/to/jdk-25/bin/java --output /path/to/evidence
+```
+
+The [full build](https://github.com/canopyengine/canopy/actions/runs/38407034153)
+and [six-job launcher/consumer workflow](https://github.com/canopyengine/canopy/actions/runs/38407027942)
+pass at `e776bfc`. Linux runs graphical window tests in Xvfb; Windows verifies
+native console creation, normal app exit and forced game termination. On POSIX,
+launcher cancellation uses graceful SIGTERM; Windows forced process termination
+cannot run that process's Java shutdown hooks. macOS compiles the owned-window
+AppleScript with quoted paths and passes its existing ten-launch native PTY
+suite. **Actual macOS GUI opening/closing and its first-use Automation permission
+remain live desktop acceptance.** Windows native console creation is automated;
+physical pointer/color/resize interaction remains in the live checklist.
+Companion docs: `a8e422c`; demo launcher/pin: `96825e8`. Main and Rust CLI remain
+unchanged. No release or Central publication is performed by these checks.
