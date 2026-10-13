@@ -3,6 +3,20 @@ package io.canopy.engine.ui
 import kotlin.math.max
 import io.canopy.engine.core.flows.events.untrack
 import io.canopy.engine.core.nodes.Node
+import io.canopy.engine.core.nodes.NodeLifetime
+import io.canopy.engine.input.events.InputEvent
+
+/** Participation in front-to-back, clipped UI pointer routing. Keyboard focus is independent. */
+enum class UiMouseFilter {
+    /** Skip this element, allowing eligible children and elements behind it to receive the event. */
+    Ignore,
+
+    /** Receive the event, then continue unless the handler consumes it. */
+    Pass,
+
+    /** Receive and consume the event, even when the handler does nothing. */
+    Stop,
+}
 
 /**
  * Base for built-in and custom UI components. Shares ordinary node identity, state and lifecycle.
@@ -45,6 +59,20 @@ abstract class UiNode<N : UiNode<N>> protected constructor(
 
     /** Accessible content label, empty for containers. */
     open val accessibleLabel: String get() = contentText
+
+    /** Pointer participation, ignoring events by default. Buttons opt in with [UiMouseFilter.Stop]. */
+    var mouseFilter by nodeProperty(UiMouseFilter.Ignore)
+
+    /**
+     * Handles hit-tested mouse button, movement or wheel events on the lifecycle thread, including paused frames.
+     * Positions are in viewport units, like [bounds]. Opt in with [mouseFilter]; consume an event to stop propagation.
+     * Hidden/detached nodes never receive this callback. The open command prompt captures events before UI routing.
+     */
+    protected open fun onMouseInput(event: InputEvent) {}
+
+    internal fun dispatchMouseInput(event: InputEvent) {
+        untrack { NodeLifetime.withOwner(this) { onMouseInput(event) } }
+    }
 
     /** Most recent layout rectangle in viewport coordinates. */
     var bounds by nodeProperty(UiRect(0.0, 0.0, 0.0, 0.0))

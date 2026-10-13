@@ -66,10 +66,27 @@ enum class InputState { Pressed, Released, JustPressed, JustReleased, Other }
 class ButtonInputEvent(action: String, state: InputState) : InputEvent(action, state)
 
 /** Mouse button action with its backend-provided screen position. */
-class MouseButtonEvent(val screenPos: Vector2, action: String, state: InputState) : InputEvent(action, state)
+class MouseButtonEvent(
+    val screenPos: Vector2,
+    action: String,
+    state: InputState,
+    val ctrl: Boolean = false,
+    val alt: Boolean = false,
+    val shift: Boolean = false,
+) : InputEvent(action, state)
 
 /** Pointer movement with a backend-provided screen position and Other state. */
 class MouseMoveEvent(val screenPos: Vector2, action: String) : InputEvent(action, InputState.Other)
+
+/** Wheel steps in viewport coordinates: positive horizontal moves right, positive vertical moves down. */
+class MouseScrollEvent(
+    val screenPos: Vector2,
+    val horizontal: Int = 0,
+    val vertical: Int = 0,
+    val ctrl: Boolean = false,
+    val alt: Boolean = false,
+    val shift: Boolean = false,
+) : InputEvent("mouse_scroll", InputState.Other)
 
 /** Text submitted by a backend, dispatched as the text_input action with JustPressed state. */
 data class TextInputEvent(val text: String) : InputEvent("text_input", InputState.JustPressed)

@@ -15,6 +15,8 @@ import io.canopy.engine.input.events.InputEvent
 import io.canopy.engine.input.events.InputState
 import io.canopy.engine.input.events.KeyInputEvent
 import io.canopy.engine.input.events.MouseButtonEvent
+import io.canopy.engine.input.events.MouseMoveEvent
+import io.canopy.engine.input.events.MouseScrollEvent
 import io.canopy.engine.ui.components.Button
 
 /** Marks a declarative builder receiver for the Canopy compiler's selective expression lowering. */
@@ -98,18 +100,6 @@ class UiRoot(name: String = "UiRoot", block: UiScope.() -> Unit) :
     private fun input(event: InputEvent): Boolean {
         validateFocus()
         if (!isVisibleInTree || event.state != InputState.JustPressed) return false
-        if (event is MouseButtonEvent) {
-            val hit = content?.elements()?.flatMap { descendants(it) }?.lastOrNull {
-                it.kind == UiKind.Button &&
-                    it.actionEnabled &&
-                    it.isInsideTree &&
-                    it.isVisibleInTree &&
-                    hit(it, event.screenPos.x.toDouble(), event.screenPos.y.toDouble())
-            } ?: return false
-            focus(hit)
-            (hit as Button).activate()
-            return true
-        }
         if (event !is KeyInputEvent) return false
         val buttons = content?.elements()?.flatMap { descendants(it) }
             ?.filter { it.kind == UiKind.Button && it.actionEnabled && it.isInsideTree && it.isVisibleInTree }.orEmpty()
@@ -143,10 +133,33 @@ class UiRoot(name: String = "UiRoot", block: UiScope.() -> Unit) :
             else -> false
         }
     }
+    internal fun mouseInput(event: InputEvent): Boolean {
+        if (!isVisibleInTree) return false
+        val position = when (event) {
+            is MouseButtonEvent -> event.screenPos
+            is MouseMoveEvent -> event.screenPos
+            is MouseScrollEvent -> event.screenPos
+            else -> return false
+        }
+        // Snapshot before user callbacks, which may change or destroy the tree.
+        val candidates = listOf(this) + content?.elements().orEmpty().flatMap(::descendants)
+        for (node in candidates.asReversed()) {
+            if (!isValid || !isInsideTree) return false
+            if (!node.isValid || !node.isInsideTree || !node.isVisibleInTree) continue
+            if (node.root !== this) continue
+            val filter = node.mouseFilter
+            if (filter == UiMouseFilter.Ignore || !hit(node, position.x.toDouble(), position.y.toDouble())) continue
+            node.dispatchMouseInput(event)
+            if (event.isHandled || filter == UiMouseFilter.Stop) {
+                event.consume()
+                return true
+            }
+        }
+        return false
+    }
     private fun hit(element: UiNode<*>, x: Double, y: Double): Boolean {
         var clip = element.bounds.intersect(viewportBounds)
-        if (style.clip) clip = clip.intersect(if (resolvedBorder == UiBorder.None) bounds else contentBounds)
-        var ancestor = element.parent
+        var ancestor = if (element === this) null else element.parent
         while (ancestor != null) {
             if (ancestor is UiNode<*> && ancestor.style.clip) {
                 clip =
@@ -160,6 +173,7 @@ class UiRoot(name: String = "UiRoot", block: UiScope.() -> Unit) :
                         }
                     )
             }
+            if (ancestor === this) break
             ancestor = ancestor.parent
         }
         return x >= clip.x && x < clip.x + clip.width && y >= clip.y && y < clip.y + clip.height
@@ -228,6 +242,22 @@ class UiManager(var backend: UiBackend? = null) : Manager {
     private var nextFrame = ArrayList<Any?>()
     private var hasFrame = false
     private var updating = false
+    private var mouseLease: AutoCloseable? = null
+
+    private fun ensureMouseRoute() {
+        if (mouseLease != null) return
+        mouseLease = manager<InputFocus>().register(priority = Int.MAX_VALUE - 1) { event ->
+            if (event !is MouseButtonEvent && event !is MouseMoveEvent && event !is MouseScrollEvent) {
+                false
+            } else {
+                activeRoots()
+                    .asReversed().any { it.isValid && it.isInsideTree && it.mouseInput(event) }
+            }
+        }
+    }
+
+    private fun activeRoots(): List<UiRoot> = roots.toList().filter { it.isValid && it.isInsideTree }
+        .sortedWith(compareBy<UiRoot> { it.layer.ordinal }.thenBy { it.zIndex })
 
     /** Defers explicit painting until all application update callbacks have completed successfully. */
     internal fun afterUpdates(block: () -> Unit) {
@@ -248,6 +278,7 @@ class UiManager(var backend: UiBackend? = null) : Manager {
         roots.filter { it !== root && it.isValid }.forEach { it.focus(null) }
     }
     internal fun mount(root: UiRoot) {
+        ensureMouseRoute()
         roots += root
     }
     internal fun unmount(root: UiRoot) {
@@ -295,9 +326,7 @@ class UiManager(var backend: UiBackend? = null) : Manager {
         backend?.let { renderer ->
             val scene = manager<SceneManager>()
             val logicalViewport = renderer.viewport(viewport)
-            val activeRoots = roots.toList().filter {
-                it.isValid && it.isInsideTree
-            }.sortedWith(compareBy<UiRoot> { it.layer.ordinal }.thenBy { it.zIndex })
+            val activeRoots = activeRoots()
             activeRoots.forEach { it.validateFocus() }
             val draws = scene.hasDrawables
             try {
@@ -356,6 +385,8 @@ class UiManager(var backend: UiBackend? = null) : Manager {
         element.content?.forEachElement { snapshot(it, snapshot) }
     }
     override fun onExit() {
+        mouseLease?.close()
+        mouseLease = null
         hasFrame = false
         lastFrame.clear()
         lastFrame.trimToSize()

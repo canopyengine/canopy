@@ -4,11 +4,14 @@ import io.canopy.engine.commands.ResumeCommand
 import io.canopy.engine.core.flows.events.signal
 import io.canopy.engine.core.nodes.types.empty.EmptyNode
 import io.canopy.engine.graphics.DrawContext
+import io.canopy.engine.input.events.InputEvent
+import io.canopy.engine.input.events.MouseScrollEvent
 import io.canopy.engine.ui.UiAppearance
 import io.canopy.engine.ui.UiBorder
 import io.canopy.engine.ui.UiColor
 import io.canopy.engine.ui.UiLength
 import io.canopy.engine.ui.UiNode
+import io.canopy.engine.ui.UiMouseFilter
 import io.canopy.engine.ui.UiRoot
 import io.canopy.engine.ui.UiStyle
 import io.canopy.engine.ui.UiTheme
@@ -29,6 +32,7 @@ fun main() {
                     val map = AcceptanceMap()
                     Text("Ticks: ${map.ticks()}")
                     Text("Population: ${population()}")
+                    ScrollProbe()
                     Button("Add rabbit") { population.update { it + 1 } }
                     Button("Toggle details") { details.update { !it } }
                     if (details()) Text("Details visible")
@@ -53,6 +57,23 @@ fun main() {
             world.asSceneRoot()
         }
     }.launch()
+}
+
+/** A custom component opts in; its Text child keeps the default Ignore filter. */
+private class ScrollProbe : UiNode<ScrollProbe>("Scroll") {
+    private val steps = signal(0)
+
+    init {
+        mouseFilter = UiMouseFilter.Stop
+    }
+
+    override fun nodeInit() {
+        ui { Text("Scroll: ${steps()}") }
+    }
+
+    override fun onMouseInput(event: InputEvent) {
+        if (event is MouseScrollEvent) steps.update { it + event.vertical }
+    }
 }
 
 /** Two independently colored markers, driven by normal Node updates and scoped drawing. */

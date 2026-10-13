@@ -122,6 +122,30 @@ class Session:
     def mouse_reporting(self):
         return any(mode << 5 in self.screen.mode for mode in [9, 1000, 1002, 1003, 1005, 1006, 1015])
 
+    def click_reporting(self):
+        return 1000 << 5 in self.screen.mode and not any(
+            mode << 5 in self.screen.mode for mode in [9, 1002, 1003, 1015]
+        )
+
+    def pointer_position(self, label):
+        for y, row in enumerate(self.screen.display):
+            x = row.find(label)
+            if x >= 0:
+                return x + 1, y + 1  # SGR reports are one-based; the backend normalizes to viewport cells.
+        raise AssertionError(f"Pointer target missing: {label}")
+
+    def click(self, label):
+        x, y = self.pointer_position(label)
+        self.send(f"\x1b[<0;{x};{y}M")
+        self.pump()
+        self.send(f"\x1b[<0;{x};{y}m")
+        self.pump()
+
+    def scroll(self, label):
+        x, y = self.pointer_position(label)
+        self.send(f"\x1b[<65;{x};{y}M")
+        self.pump()
+
     def resize(self, columns, rows):
         self.screen.resize(lines=rows, columns=columns)
         fcntl.ioctl(self.master, termios.TIOCSWINSZ, struct.pack("HHHH", rows, columns, 0, 0))
@@ -142,6 +166,7 @@ class Session:
         assert self.child.returncode == 0, f"Game exit code: {self.child.returncode}"
         assert b"\x1b[?1049l" in self.raw, "Alternate screen not restored"
         assert termios.tcgetattr(self.master)[:4] == self.original[:4], "Terminal flags not restored"
+        assert not self.mouse_reporting(), "Mouse modes not restored"
         self.checks.append("alternate screen and native terminal flags restored")
         result = dict(exit=self.child.returncode, checks=self.checks, bytes=len(self.raw))
         (self.output / f"{self.name}-result.json").write_text(json.dumps(result, indent=2))
@@ -164,13 +189,17 @@ def exercise(session):
         lambda: "Canopy terminal acceptance" in session.text() and session.colors(), timeout=150,
     )
     first = session.ticks()
-    session.wait("startup disables inherited mouse reporting", lambda: not session.mouse_reporting())
+    session.wait("startup enables clicks without inherited motion modes", session.click_reporting)
     session.wait("normal node updates animate map", lambda: session.ticks() > first + 2)
     session.save("initial")
     session.send(b"\x1b[B")
     session.wait("Down focuses Add rabbit", lambda: session.focused("Add rabbit"))
     session.send("\r")
     session.wait("Enter activates Add rabbit", lambda: "Population: 4" in session.text())
+    session.click("Add rabbit")
+    session.wait("mouse click activates the button once", lambda: "Population: 5" in session.text())
+    session.scroll("Scroll: 0")
+    session.wait("wheel reaches an opted-in custom component", lambda: "Scroll: 1" in session.text())
     session.send(b"\x1b[B")
     session.wait("Down focuses Toggle details", lambda: session.focused("Toggle details"))
     session.send("\r")
@@ -180,7 +209,11 @@ def exercise(session):
     # The prompt owns Escape and retains the underlying button selection.
     session.send(b"\x1b")
     session.wait("Escape opens command editor", lambda: session.screen.display[-1].startswith("> "))
-    session.wait("opening commands keeps mouse reporting disabled", lambda: not session.mouse_reporting())
+    session.click("Add rabbit")
+    session.scroll("Scroll: 1")
+    session.wait("commands block mouse actions without editing the draft", lambda:
+                 session.screen.display[-1].rstrip() == ">" and
+                 "Population: 5" in session.text() and "Scroll: 1" in session.text())
     before = session.ticks()
     session.wait("opening commands preserves simulation updates", lambda: session.ticks() > before + 2)
     session.send("pause\r")
@@ -200,7 +233,7 @@ def exercise(session):
     session.send(b"\x1b[B")
     session.wait("focus remains responsive while paused", lambda: session.focused("Add rabbit"))
     session.send("\r")
-    session.wait("button action remains responsive while paused", lambda: "Population: 5" in session.text())
+    session.wait("button action remains responsive while paused", lambda: "Population: 6" in session.text())
 
     session.send(b"\x1b")
     session.wait("reopen paused command editor", lambda: session.screen.display[-1].startswith("> "))

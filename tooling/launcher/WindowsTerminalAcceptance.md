@@ -54,12 +54,14 @@ or run it through Gradle's `run` task. While the game runs, perform these checks
 | --- | --- |
 | Observe the first frame | Green `r` and orange `f` move; ticks increase; population is 3. |
 | Down, Enter | Add rabbit is visibly selected; population becomes 4. |
+| Click Add rabbit | Population becomes 5; the action runs once. |
+| Scroll down over `Scroll: 0` | The opted-in custom component shows `Scroll: 1`. |
 | Down, Enter | Toggle details is selected; the details line disappears cleanly. |
 | Escape | The command editor opens; ticks keep increasing. |
-| Move, click and drag the mouse with the editor open | The draft stays unchanged; no mouse-report characters appear. |
+| Move, click Add rabbit, scroll over the counter and drag with the editor open | Draft, population and counter stay unchanged; no mouse-report characters appear. |
 | Type `pause`, Enter | Pause is reported and ticks stop. |
 | Escape | The editor closes; the simulation stays paused. |
-| Down, Enter | Add rabbit is selected and population becomes 5 while ticks stay frozen. |
+| Down, Enter | Add rabbit is selected and population becomes 6 while ticks stay frozen. |
 | Escape, type `res` | The editor retains the partial draft. |
 | Resize to roughly 32×10, then 100×30 | Draft, marker colors and pause survive; borders/text clear and repaint without leftovers. |
 | Type `ume`, Enter | `resume` is accepted; ticks and movement continue. |

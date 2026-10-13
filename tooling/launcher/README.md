@@ -58,15 +58,17 @@ Enter, Escape, command input, resizing and shutdown.
 
 `TerminalAcceptance.py` creates a fresh external game with the matching staged
 engine/compiler artifacts and runs it through this launcher in a controlling PTY.
-It checks RGB markers, movement, arrow focus, button activation, conditional
+It checks RGB markers, movement, arrow focus, keyboard/mouse button activation, custom wheel input, conditional
 clearing, command capture, explicit pause, controls while paused, draft retention
 at 80×24 → 32×10 → 100×30, resume, typed quit and Ctrl+C. Both exits must restore
 the alternate screen and native terminal flags. Installed JAR hashes must match
 the staged artifacts. No composite build or Rust CLI is involved.
 
 The emulator starts with mouse reporting enabled to verify that startup clears
-inherited modes and opening commands keeps them disabled. Physical Windows
-pointer movement is part of the manual checklist.
+inherited motion modes before enabling click/wheel reports. While commands are
+open, injected mouse clicks and wheels must leave both the draft and underlying
+UI unchanged. Shutdown disables reporting again. Physical Windows pointer input
+is part of the manual checklist.
 
 Use the configured JDKs and Python 3.10+ on Linux or macOS:
 

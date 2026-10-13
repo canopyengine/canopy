@@ -80,7 +80,7 @@ class TerminalInputShutdownTests {
             withTimeout(5.seconds) {
                 handle.awaitStarted()
                 assertTrue(input.reading.await(2, TimeUnit.SECONDS), "Native read never started")
-                assertEquals(MouseTracking.Off, input.tracking.get(), "Keyboard host enabled mouse reporting")
+                assertEquals(MouseTracking.Normal, input.tracking.get(), "Host must decode clicks and wheel reports")
 
                 // Act
                 if (interrupt) thread.get().interrupt() else handle.requestExit()

@@ -2,6 +2,7 @@ package io.canopy.platforms.terminal.app
 
 import kotlin.test.*
 import com.github.ajalt.mordant.input.KeyboardEvent
+import com.github.ajalt.mordant.input.MouseEvent
 import com.github.ajalt.mordant.rendering.AnsiLevel
 import com.github.ajalt.mordant.rendering.Size
 import com.github.ajalt.mordant.terminal.Terminal
@@ -10,16 +11,61 @@ import io.canopy.engine.commands.CommandPrompt
 import io.canopy.engine.commands.CommandPromptHost
 import io.canopy.engine.core.managers.ManagersRegistry
 import io.canopy.engine.core.managers.SceneManager
+import io.canopy.engine.core.nodes.types.empty.EmptyNode
 import io.canopy.engine.input.InputFocus
 import io.canopy.engine.input.binds.Key
 import io.canopy.engine.input.events.TextInputEvent
 import io.canopy.engine.ui.UiManager
+import io.canopy.engine.ui.UiRoot
+import io.canopy.engine.ui.components.Button
 import org.junit.jupiter.api.AfterEach
 
 class TerminalCommandPromptTests {
     @AfterEach
     fun cleanup() {
         ManagersRegistry.exit()
+    }
+
+    @Test
+    fun `prompt consumes mouse clicks and wheels without draft text or click through on close`() {
+        val input = MordantInputManager()
+        val scenes = SceneManager()
+        val terminal = Terminal(ansiLevel = AnsiLevel.TRUECOLOR, interactive = false)
+        val ui = UiManager(TerminalUiBackend(terminal) {})
+        val host = CommandPromptHost(terminalApp(), presentation({ false }) {})
+        ManagersRegistry.withScope {
+            register(InputFocus())
+            register(input)
+            register(host)
+            register(scenes)
+            register(ui)
+        }
+        var actions = 0
+        val world = EmptyNode("world")
+        val root = UiRoot { Button("action") { actions++ } }
+        val prompt = CommandPrompt("console")
+        world.addChild(root)
+        world.addChild(prompt)
+        scenes.currScene = world
+        ui.onResize(80, 24)
+        ui.updateFrame()
+        prompt.open()
+        input.enqueueMordantMouseEvent(MouseEvent(1, 1, left = true))
+        input.enqueueMordantMouseEvent(MouseEvent(1, 1, wheelDown = true))
+        input.enqueueMordantMouseEvent(MouseEvent(1, 1))
+        input.processEvents()
+        assertEquals(0, actions)
+        assertEquals("", prompt.draft)
+        input.enqueueMordantKeyEvent(KeyboardEvent("Escape"))
+        input.enqueueMordantMouseEvent(MouseEvent(1, 1, left = true))
+        input.enqueueMordantMouseEvent(MouseEvent(1, 1))
+        input.processEvents()
+        assertFalse(prompt.isOpen)
+        assertEquals(0, actions)
+        input.enqueueMordantMouseEvent(MouseEvent(1, 1, left = true))
+        input.enqueueMordantMouseEvent(MouseEvent(1, 1))
+        input.processEvents()
+        assertEquals(1, actions)
     }
 
     @Test

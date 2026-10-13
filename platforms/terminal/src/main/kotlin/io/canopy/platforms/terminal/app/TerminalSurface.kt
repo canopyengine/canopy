@@ -46,7 +46,7 @@ internal class TerminalSurface(
         shutdownHook = hook
         sessionManaged = true
         sessionOpen = true
-        // Raw input is keyboard-only; clear reporting left enabled by an earlier terminal session too.
+        // Clear inherited modes before the native input scope enables only its supported click/wheel reporting.
         output("${MOUSE_REPORTING_OFF}\u001b[?1049h\u001b[?25l")
         screen.clear()
     }
