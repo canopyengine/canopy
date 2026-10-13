@@ -8,7 +8,6 @@ import java.lang.foreign.SymbolLookup
 import java.lang.foreign.ValueLayout.ADDRESS
 import java.lang.foreign.ValueLayout.JAVA_INT
 import java.lang.foreign.ValueLayout.JAVA_SHORT
-import java.net.URLClassLoader
 import java.nio.charset.StandardCharsets.UTF_16LE
 import java.nio.file.Path
 import java.util.Base64
@@ -26,19 +25,20 @@ class WindowsConsoleOutputTests {
         // Arrange: Gradle's test worker has piped output, so create a real console for this regression.
         val marker = directory.resolve("console-result.txt")
         val java = Path.of(System.getProperty("java.home"), "bin", "java.exe")
-        val classpath = generateSequence(javaClass.classLoader) { it.parent }.filterIsInstance<URLClassLoader>()
-            .flatMap { it.urLs.asSequence() }.map { Path.of(it.toURI()).toString() }.distinct()
-            .joinToString(";")
-        val arguments = listOf(
-            "--enable-native-access=ALL-UNNAMED",
-            "-cp",
-            classpath,
-            WindowsConsoleOutputProbe::class.java.name,
-            marker.toString()
-        ).joinToString(" ") { "\"$it\"" }
+        val classpath = checkNotNull(System.getProperty("canopy.test.runtimeClasspath"))
+        val arguments = directory.resolve("java-arguments.txt")
+        arguments.toFile().writeText(
+            listOf(
+                "--enable-native-access=ALL-UNNAMED",
+                "-cp",
+                classpath,
+                WindowsConsoleOutputProbe::class.java.name,
+                marker.toString()
+            ).joinToString("\n") { "\"${it.replace("\\", "\\\\").replace("\"", "\\\"")}\"" }
+        )
         fun quote(value: String) = "'${value.replace("'", "''")}'"
-        val script = "\$p=Start-Process -FilePath ${quote(java.toString())} " +
-            "-ArgumentList ${quote(arguments)} -PassThru; " +
+        val script = "\$ErrorActionPreference='Stop'; \$p=Start-Process -FilePath ${quote(java.toString())} " +
+            "-ArgumentList ${quote("\"@$arguments\"")} -PassThru; " +
             "if (-not \$p.WaitForExit(45000)) { \$p.Kill(); exit 124 }; exit \$p.ExitCode"
 
         // Act
@@ -53,8 +53,13 @@ class WindowsConsoleOutputTests {
             assertTrue(process.waitFor(60, TimeUnit.SECONDS), "Console probe timed out")
 
             // Assert
+            val diagnostics = if (marker.toFile().exists()) {
+                marker.toFile().readText()
+            } else {
+                process.inputStream.bufferedReader().readText()
+            }
+            assertEquals(0, process.exitValue(), diagnostics)
             assertEquals("OK", marker.toFile().readText())
-            assertEquals(0, process.exitValue(), process.inputStream.bufferedReader().readText())
         } finally {
             process.destroyForcibly()
         }

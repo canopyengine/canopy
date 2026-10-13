@@ -27,6 +27,12 @@ dependencies {
     testImplementation(libs.junit.jupiter)
 }
 
+tasks.test {
+    doFirst {
+        systemProperty("canopy.test.runtimeClasspath", sourceSets.test.get().runtimeClasspath.asPath)
+    }
+}
+
 tasks.register<JavaExec>("commandPromptSmoke") {
     group = "verification"
     description = "Launch the manual command prompt terminal smoke example"
