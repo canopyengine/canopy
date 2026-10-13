@@ -24,6 +24,7 @@ import kotlinx.coroutines.*
 
 /**
  * Application hosted by the terminal runtime, with queued keyboard input and a synchronous frame loop.
+ * Mouse reporting is disabled; pointer movement and clicks do not become command text.
  * Native reads use 100 ms cancellation deadlines on an IO worker. Host shutdown closes their
  * raw-mode scope before application shutdown callbacks and lifecycle completion.
  * Engine and game diagnostics go to `.canopy/logs` by default, leaving terminal output for the game.
@@ -186,7 +187,7 @@ class TerminalApp internal constructor(
         val inputJob = appScope.launch {
             try {
                 withContext(Dispatchers.IO) {
-                    terminal.enterRawMode(MouseTracking.Normal).use { input ->
+                    terminal.enterRawMode(MouseTracking.Off).use { input ->
                         while (isActive && running.get()) {
                             val event = input.readEventOrNull(100.milliseconds) ?: continue
                             ensureActive()

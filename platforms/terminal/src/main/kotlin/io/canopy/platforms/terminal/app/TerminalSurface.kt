@@ -46,14 +46,15 @@ internal class TerminalSurface(
         shutdownHook = hook
         sessionManaged = true
         sessionOpen = true
-        output("\u001b[?1049h\u001b[?25l")
+        // Raw input is keyboard-only; clear reporting left enabled by an earlier terminal session too.
+        output("${MOUSE_REPORTING_OFF}\u001b[?1049h\u001b[?25l")
         screen.clear()
     }
 
     @Synchronized
     fun closeSession() {
         if (!sessionOpen) return
-        output("\u001b[0m\u001b[?25h\u001b[?1049l")
+        output("${MOUSE_REPORTING_OFF}\u001b[0m\u001b[?25h\u001b[?1049l")
         sessionOpen = false
         shutdownHook?.let { hook ->
             try {
@@ -199,6 +200,8 @@ internal fun safeTerminalText(text: String): String = buildString {
         offset++
     }
 }
+
+private const val MOUSE_REPORTING_OFF = "\u001b[?9;1000;1002;1003;1005;1006;1015l"
 
 private val SGR = Regex("\u001b\\[[0-9;:]*m")
 

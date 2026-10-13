@@ -32,6 +32,8 @@ class Session:
         self.output = output
         self.project = project
         self.screen = pyte.Screen(80, 24)
+        # Model reporting inherited from an earlier application, not just default-off terminals.
+        self.screen.set_mode(9, 1000, 1002, 1003, 1005, 1006, 1015, private=True)
         self.stream = pyte.Stream(self.screen)
         self.decoder = codecs.getincrementaldecoder("utf-8")("replace")
         self.raw = bytearray()
@@ -116,6 +118,9 @@ class Session:
         fox = any(cell.data == "f" and cell.fg == "ff8c46" for cell in chars)
         return rabbit and fox
 
+    def mouse_reporting(self):
+        return any(mode << 5 in self.screen.mode for mode in [9, 1000, 1002, 1003, 1005, 1006, 1015])
+
     def resize(self, columns, rows):
         self.screen.resize(lines=rows, columns=columns)
         fcntl.ioctl(self.master, termios.TIOCSWINSZ, struct.pack("HHHH", rows, columns, 0, 0))
@@ -158,6 +163,7 @@ def exercise(session):
         lambda: "Canopy terminal acceptance" in session.text() and session.colors(), timeout=150,
     )
     first = session.ticks()
+    session.wait("startup disables inherited mouse reporting", lambda: not session.mouse_reporting())
     session.wait("normal node updates animate map", lambda: session.ticks() > first + 2)
     session.save("initial")
     session.send(b"\x1b[B")
@@ -173,6 +179,7 @@ def exercise(session):
     # The prompt owns Escape and retains the underlying button selection.
     session.send(b"\x1b")
     session.wait("Escape opens command editor", lambda: session.screen.display[-1].startswith("> "))
+    session.wait("opening commands keeps mouse reporting disabled", lambda: not session.mouse_reporting())
     before = session.ticks()
     session.wait("opening commands preserves simulation updates", lambda: session.ticks() > before + 2)
     session.send("pause\r")

@@ -133,11 +133,15 @@ class TerminalCellScreenTests {
     }
 
     @Test
-    fun `alternate screen and cursor are restored on exit and line fallback`() {
+    fun `session disables inherited mouse reporting and restores screen and cursor on exit and fallback`() {
         surface.openSession()
         surface.closeSession()
         surface.renderWorld(listOf("must not overwrite the restored console"))
         surface.onExit()
-        assertEquals(listOf("\u001b[?1049h\u001b[?25l", "\u001b[0m\u001b[?25h\u001b[?1049l"), writes)
+        val mouseOff = "\u001b[?9;1000;1002;1003;1005;1006;1015l"
+        assertEquals(
+            listOf("${mouseOff}\u001b[?1049h\u001b[?25l", "${mouseOff}\u001b[0m\u001b[?25h\u001b[?1049l"),
+            writes
+        )
     }
 }

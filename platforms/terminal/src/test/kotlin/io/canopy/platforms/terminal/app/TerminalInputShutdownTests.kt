@@ -28,10 +28,14 @@ class TerminalInputShutdownTests {
         val wake = CountDownLatch(1)
         val closed = CountDownLatch(1)
         val closes = AtomicInteger()
+        val tracking = AtomicReference<MouseTracking>()
 
-        override fun enterRawMode(mouseTracking: MouseTracking): AutoCloseable = AutoCloseable {
-            closes.incrementAndGet()
-            closed.countDown()
+        override fun enterRawMode(mouseTracking: MouseTracking): AutoCloseable {
+            tracking.set(mouseTracking)
+            return AutoCloseable {
+                closes.incrementAndGet()
+                closed.countDown()
+            }
         }
 
         override fun readInputEvent(timeout: TimeMark, mouseTracking: MouseTracking): InputEvent? {
@@ -76,6 +80,7 @@ class TerminalInputShutdownTests {
             withTimeout(5.seconds) {
                 handle.awaitStarted()
                 assertTrue(input.reading.await(2, TimeUnit.SECONDS), "Native read never started")
+                assertEquals(MouseTracking.Off, input.tracking.get(), "Keyboard host enabled mouse reporting")
 
                 // Act
                 if (interrupt) thread.get().interrupt() else handle.requestExit()

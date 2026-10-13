@@ -56,6 +56,7 @@ or run it through Gradle's `run` task. While the game runs, perform these checks
 | Down, Enter | Add rabbit is visibly selected; population becomes 4. |
 | Down, Enter | Toggle details is selected; the details line disappears cleanly. |
 | Escape | The command editor opens; ticks keep increasing. |
+| Move, click and drag the mouse with the editor open | The draft stays unchanged; no mouse-report characters appear. |
 | Type `pause`, Enter | Pause is reported and ticks stop. |
 | Escape | The editor closes; the simulation stays paused. |
 | Down, Enter | Add rabbit is selected and population becomes 5 while ticks stay frozen. |

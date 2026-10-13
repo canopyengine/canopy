@@ -64,6 +64,10 @@ at 80×24 → 32×10 → 100×30, resume, typed quit and Ctrl+C. Both exits must
 the alternate screen and native terminal flags. Installed JAR hashes must match
 the staged artifacts. No composite build or Rust CLI is involved.
 
+The emulator starts with mouse reporting enabled to verify that startup clears
+inherited modes and opening commands keeps them disabled. Physical Windows
+pointer movement is part of the manual checklist.
+
 Use the configured JDKs and Python 3.10+ on Linux or macOS:
 
 ```sh
