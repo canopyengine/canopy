@@ -532,3 +532,42 @@ The backend contract adds grid/divider measurement and drawing. Default drawing
 reports unsupported components explicitly; custom renderers supporting them must
 provide the methods. Desktop rendering and platformConfig are still deferred.
 No main merge, version bump, Rust CLI change or Central publication is included.
+
+## UI hover — 13 October 2026
+
+Implementation: `f89204d`. Existing `mouseFilter` values also govern clipped,
+front-to-back hover participation. UiNodes expose read-only `isHovered` and
+node-owned `mouseEntered`/`mouseExited` events, allocated only when accessed.
+Hover remains separate from keyboard focus/actions. Buttons underline by default;
+`UiTheme.hoveredButton` customizes it, with focused/disabled styling taking
+precedence. Frame reconciliation clears or transfers hover after layout,
+visibility, tree or filter changes beneath a stationary pointer.
+
+The terminal reader retains one native raw-input lease capable of motion,
+while terminal reporting switches between motion and clicks only. The lifecycle
+thread publishes the desired policy to the IO worker through an AtomicBoolean;
+the worker never reads node state. Exclusive command capture clears hover and
+suppresses motion reporting. Closing the editor requires fresh pointer input.
+Pointer packets remain typed mouse events, never keyboard text. Terminal-window
+exit has no portable event; the last cell remains known until another input or
+layout/capture change.
+
+Verification:
+
+- `./gradlew test ktlintCheck build coverageReport stageCentralPublication
+  --offline --max-workers=2 --console=plain` passes: 592 tests, zero
+  failures/errors/skips; 6,789 / 7,502 covered lines (90.5%). Six added regressions
+  cover transitions, filters, clipping/layers, disabled styling, command capture,
+  destruction callbacks and typed/deduplicated motion with held buttons.
+- All 31 native PTY acceptance checks pass through the Java launcher, including
+  hover without focus/activation, leaving an element, clicks/wheels, prompt
+  reporting changes, preserved drafts, pause/resize and quit/Ctrl+C restoration.
+  The two deterministic Python harness checks also pass.
+- Companion documentation: canopy-docs `abd409f`. Demo pin: `4a24fa4`.
+  Demo `test ktlintCheck build` succeeds against the staged repository; its
+  packaged terminal JAR hash matches the staged implementation. Gameplay and
+  the launcher source are unchanged.
+- Cross-platform [build](https://github.com/canopyengine/canopy/actions/runs/38465175765)
+  and [launcher/consumer](https://github.com/canopyengine/canopy/actions/runs/38465181147)
+  CI were dispatched at the implementation commit and were running when this
+  evidence was recorded. Their live results supplement the local checks above.
