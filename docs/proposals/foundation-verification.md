@@ -271,3 +271,72 @@ The final [six-job native workflow](https://github.com/canopyengine/canopy/actio
 passes at `ff9ec40`: Linux/macOS PTY acceptance, the Windows external-consumer
 build, all three portable launcher jobs and both harness tests on each consumer
 platform. No Windows physical mouse-motion acceptance is claimed by these jobs.
+
+
+## Opt-in terminal UI mouse input (`8e8538e`, 13 October 2026)
+
+This requested feature supersedes the keyboard-only host above. Native input now
+requests Mordant `MouseTracking.Normal` and forwards decoded mouse events to the
+adapter. Startup still clears inherited reporting modes; normal tracking enables
+clicks/wheels without hover/drag motion, and shutdown clears reporting again.
+Mouse packets never enter the keyboard text queue.
+
+`UiNode.mouseFilter` defaults to `Ignore`; `Button` opts in with `Stop` and
+activates once on a primary press. Custom components override `onMouseInput` and
+choose `Pass` or `Stop`. One lease in the existing `InputFocus` service routes
+pointers through roots in reverse painter order, below command capture. Hit
+bounds respect visibility, tree membership, viewport and ancestor clips. A
+consumed UI press stays out of raw gameplay input and mapped actions through
+release, even after its widget exits. Command capture also blocks mouse events
+in the frame where the editor closes. There is no additional input manager or
+public rendering API.
+
+The full local gate passes **575 tests**, zero failures/errors/skips, with
+**6,572 / 7,253 covered lines (90.6%)**. The eleven added tests cover default
+filters, primary-only actions, Pass/Stop consumption, live painter order,
+clipping, ordinary grouping nodes, callbacks that remove their root, terminal
+button/wheel decoding, owned gestures and command capture. Exact command:
+
+```sh
+./gradlew :engine:ktlintFormat :adapters:mordant:ktlintFormat :platforms:terminal:ktlintFormat test ktlintCheck build coverageReport stageCentralPublication --offline --max-workers=2 --console=plain
+```
+
+The fresh external-consumer fixture passes **28 native Linux PTY checks**,
+including a real decoded click, wheel handling by a custom component, command
+capture without draft edits or underlying actions, existing keyboard controls,
+pause/resume, resizing, quit and Ctrl+C restoration. Both launches exit zero
+and restore native flags, alternate screen and mouse modes. Exact command:
+
+```sh
+python tooling/launcher/TerminalAcceptance.py --offline --java /path/to/jdk-25/bin/java --output /path/to/evidence
+```
+
+Companion documentation at `canopy-docs` commit `71b9a85` includes the filter
+contract and a custom scroll component. `node scripts/check-docs.mjs` and
+`git diff --check` pass. Hover styling, drag-and-drop and GUI pointer capture
+remain outside this slice. The updated Windows checklist requires physical
+clicks/wheels and prompt capture; Windows consumer compilation and unit tests
+alone do not prove interactive console acceptance.
+
+The [full build run](https://github.com/canopyengine/canopy/actions/runs/38393883783)
+passes at `8e8538e`, including Linux test/lint/build/coverage and Windows
+filesystem/terminal test and lint jobs.
+
+The first [native workflow](https://github.com/canopyengine/canopy/actions/runs/38393897507)
+passes Linux PTY acceptance, Windows consumer compilation/JAR identity checks,
+and all three launcher jobs. The macOS consumer builds, then its JVM aborts
+before the first rendered frame (`exit=134`, `SIGSEGV` in
+`SymbolTable::do_lookup` during class loading on the input worker). The retained
+`input-hs_err_pid5812.log` establishes a native JVM crash, not a failed pointer
+assertion. Its cause has not been established; no production workaround or
+retry-on-crash behavior was added. The failed job was rerun unchanged.
+
+The unchanged rerun (attempt 2) passes all **25** main macOS PTY checks,
+including native click/wheel decoding, command capture, pause/resume, resizing,
+typed quit and full terminal restoration. Its second fresh launch aborts in the
+same JVM frame before Ctrl+C acceptance (`exit=134`, `hs_err_pid6325.log`).
+Consequently the native workflow remains **failed**, despite all mouse feature
+assertions passing. This is a recurring, intermittent startup failure requiring
+separate runtime investigation; successful pointer checks do not establish
+reliable macOS launch behavior. Linux passes both launches and all 28 checks;
+Windows consumer and all three portable launcher jobs pass.
