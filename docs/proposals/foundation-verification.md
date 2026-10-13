@@ -25,7 +25,7 @@ using configured JDK 25 resolved that environment failure.
 Exact commands from the engine checkout (environment-specific paths omitted):
 
 ```sh
-java -Dcanopy.tests.offline=true tooling/launcher/LauncherTests.java .
+java -Dcanopy.tests.offline=true tooling/launcher/tests/LauncherTests.java .
 ./gradlew stageCentralPublication --offline --max-workers=2 --console=plain
 java tooling/launcher/CanopyLaunch.java -p /path/to/consumer --gradle-arg --offline --gradle-arg --max-workers=2
 java tooling/launcher/CanopyLaunch.java -p /path/to/consumer --gradle-arg --offline -- --terminal
@@ -120,7 +120,7 @@ cancellation; UI conditions remain subscription-driven.
 The final local test/lint/build/coverage gate passes 562 tests, no failures/errors/
 skips, with 6,434 / 7,136 covered lines (90.2%). Local Maven staging also passes.
 The standalone fixture/source and exact reproduction steps are in
-[launcher verification](../../tooling/launcher/README.md#native-terminal-acceptance).
+[launcher verification](../../tooling/launcher/tests/README.md#native-terminal-acceptance).
 Its emulator dependency is test-only and adds no game/engine dependency.
 
 The [three-platform launcher run](https://github.com/canopyengine/canopy/actions/runs/38313249086)
@@ -147,7 +147,7 @@ resource decisions or narration.
 ## Windows fixture preparation (`5b50eff`)
 
 The fixture can now be prepared persistently on any OS without pyte:
-`python tooling/launcher/TerminalAcceptance.py --prepare "build/terminal manual" --build`.
+`python tooling/launcher/tests/TerminalAcceptance.py --prepare "build/terminal manual" --build`.
 Preparation refuses an existing directory. The build installs an external game
 and compares its engine/terminal JAR SHA-256 values with the staged artifacts.
 The generated command runs the game through the direct Java launcher.
@@ -158,7 +158,7 @@ and the Windows external-consumer distribution build with artifact checks.
 Windows evidence contains `built: true`, the successful build log and both JAR
 hashes. This establishes Windows artifact/compiler/consumer compatibility;
 it does not establish native console interaction or restoration.
-The [manual Windows checklist](../../tooling/launcher/WindowsTerminalAcceptance.md)
+The [manual Windows checklist](../../tooling/launcher/tests/WindowsTerminalAcceptance.md)
 covers visual behavior and compares console input/output modes before and after
 typed quit and a separate Ctrl+C run. No engine/game/Python dependency was added.
 
@@ -308,7 +308,7 @@ pause/resume, resizing, quit and Ctrl+C restoration. Both launches exit zero
 and restore native flags, alternate screen and mouse modes. Exact command:
 
 ```sh
-python tooling/launcher/TerminalAcceptance.py --offline --java /path/to/jdk-25/bin/java --output /path/to/evidence
+python tooling/launcher/tests/TerminalAcceptance.py --offline --java /path/to/jdk-25/bin/java --output /path/to/evidence
 ```
 
 Companion documentation at `canopy-docs` commit `71b9a85` includes the filter
@@ -375,8 +375,8 @@ failures/errors/skips, and **6,578 / 7,261 covered lines (90.6%)**:
 
 ```sh
 ./gradlew :platforms:terminal:ktlintFormat test ktlintCheck build coverageReport stageCentralPublication --offline --max-workers=2 --console=plain
-python -m unittest discover -s tooling/launcher -p 'test_*.py'
-python tooling/launcher/TerminalAcceptance.py --offline --repeat 2 --java /path/to/jdk-25/bin/java --output /path/to/evidence
+python -m unittest discover -s tooling/launcher/tests -p 'test_*.py'
+python tooling/launcher/tests/TerminalAcceptance.py --offline --repeat 2 --java /path/to/jdk-25/bin/java --output /path/to/evidence
 ```
 
 Both Python harness tests pass. The repeated Linux PTY fixture passes **56
@@ -437,9 +437,9 @@ Verification at this change:
 Exact local commands (managed environment setup omitted):
 
 ```sh
-java -Dcanopy.tests.offline=true -Dcanopy.tests.window=true tooling/launcher/LauncherTests.java .
+java -Dcanopy.tests.offline=true -Dcanopy.tests.window=true tooling/launcher/tests/LauncherTests.java .
 ./gradlew test ktlintCheck build coverageReport --offline --max-workers=2 --console=plain
-python tooling/launcher/TerminalAcceptance.py --offline --java /path/to/jdk-25/bin/java --output /path/to/evidence
+python tooling/launcher/tests/TerminalAcceptance.py --offline --java /path/to/jdk-25/bin/java --output /path/to/evidence
 ```
 
 The [full build](https://github.com/canopyengine/canopy/actions/runs/38407034153)
@@ -571,3 +571,25 @@ Verification:
   and [launcher/consumer](https://github.com/canopyengine/canopy/actions/runs/38465181147)
   CI were dispatched at the implementation commit and were running when this
   evidence was recorded. Their live results supplement the local checks above.
+
+## Standalone tooling test layout — 13 October 2026
+
+Audited all 66 tracked tooling files. Seven misplaced test/checklist/fixture files
+now live under `tooling/launcher/tests/` (five) and `tooling/central/tests/` (two).
+The terminal game source belongs in `launcher/tests/fixtures/`; launcher testing
+instructions have their own README. Production launcher/publication entry points
+keep their original paths. Gradle module tests were already in `src/test/`.
+Benchmarks stay in their dedicated directory, and published devtools testing APIs
+stay in `src/main/` so user projects can still depend on them.
+
+CI discovery/commands, Python imports, fixture/repository resolution and manual
+links use the new paths. `tooling/README.md` documents the distinction; generated
+Python caches are ignored. Companion docs: canopy-docs `45d09c3`.
+
+Verification: all 11 standalone Python tests, five Java launcher integration
+groups and 31 native terminal checks pass from the new locations. Full
+`./gradlew test ktlintCheck build coverageReport --offline --max-workers=2
+--console=plain` passes with unchanged engine APIs and runtime. Local tooling and
+proposal Markdown links resolve, and no callers retain the former test paths.
+The manual `--prepare --build` path also succeeds when invoked from outside the
+repository, confirming default repository and relocated fixture resolution.

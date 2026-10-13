@@ -303,7 +303,7 @@ tasks.named<JavaExec>("run") {{ jvmArgs("--enable-native-access=ALL-UNNAMED") }}
 ''')
     sources = project / "src/main/kotlin"
     sources.mkdir(parents=True)
-    shutil.copy(repo / "tooling/launcher/TerminalAcceptance.kt", sources)
+    shutil.copy(repo / "tooling/launcher/tests/fixtures/TerminalAcceptance.kt", sources)
 
 
 def verify_artifacts(repository, project, version, output):
@@ -346,12 +346,12 @@ def prepare(repo, project, version, kotlin_version, repository, output, java, of
             dict(project=str(project), version=version, command=command, built=True), indent=2,
         ))
     print(f"Prepared {project}\nLaunch in your terminal:\n{launch}\n"
-          f"Manual checks: {repo / 'tooling/launcher/WindowsTerminalAcceptance.md'}", flush=True)
+          f"Manual checks: {repo / 'tooling/launcher/tests/WindowsTerminalAcceptance.md'}", flush=True)
 
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--repo", type=Path, default=Path(__file__).resolve().parents[2])
+    parser.add_argument("--repo", type=Path, default=Path(__file__).resolve().parents[3])
     parser.add_argument("--output", type=Path)
     parser.add_argument("--java", default=str(Path(os.environ["JAVA_HOME"]) / "bin" /
                                              ("java.exe" if os.name == "nt" else "java"))

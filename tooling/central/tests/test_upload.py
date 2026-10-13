@@ -9,7 +9,7 @@ import unittest
 from unittest.mock import patch
 import urllib.error
 
-import upload
+from tooling.central import upload
 
 
 class UploadTests(unittest.TestCase):
@@ -23,7 +23,7 @@ class UploadTests(unittest.TestCase):
             output = io.StringIO()
             with patch.dict(os.environ, {'CENTRAL_USERNAME': 'test-user', 'CENTRAL_PASSWORD': 'test-password'}), \
                  patch('sys.argv', ['upload.py', str(bundle), '--result', str(result)]), \
-                 patch('upload.urllib.request.urlopen', return_value=response) as send, \
+                 patch('tooling.central.upload.urllib.request.urlopen', return_value=response) as send, \
                  contextlib.redirect_stdout(output):
                 upload.main()
             request = send.call_args.args[0]
@@ -43,7 +43,7 @@ class UploadTests(unittest.TestCase):
             error = urllib.error.HTTPError(upload.ENDPOINT, 401, 'Unauthorized', {}, io.BytesIO(b'sensitive-response'))
             with patch.dict(os.environ, {'CENTRAL_USERNAME': 'test-user', 'CENTRAL_PASSWORD': 'test-password'}), \
                  patch('sys.argv', ['upload.py', str(bundle), '--result', str(Path(tmp) / 'result.json')]), \
-                 patch('upload.urllib.request.urlopen', side_effect=error), \
+                 patch('tooling.central.upload.urllib.request.urlopen', side_effect=error), \
                  self.assertRaises(SystemExit) as caught:
                 upload.main()
             self.assertIn('401', str(caught.exception))
@@ -56,7 +56,7 @@ class UploadTests(unittest.TestCase):
             bundle.write_bytes(b'test')
             with patch.dict(os.environ, {}, clear=True), \
                  patch('sys.argv', ['upload.py', str(bundle), '--result', str(Path(tmp) / 'result.json')]), \
-                 patch('upload.urllib.request.urlopen') as send, \
+                 patch('tooling.central.upload.urllib.request.urlopen') as send, \
                  contextlib.redirect_stderr(io.StringIO()), self.assertRaises(SystemExit):
                 upload.main()
             send.assert_not_called()

@@ -10,7 +10,7 @@ From the Canopy repository, stage matching artifacts and prepare the fixture:
 
 ```powershell
 .\gradlew.bat stageCentralPublication
-python tooling/launcher/TerminalAcceptance.py --prepare 'build/terminal manual' --build
+python tooling/launcher/tests/TerminalAcceptance.py --prepare 'build/terminal manual' --build
 ```
 
 No Python packages or source copying are needed. Preparation refuses an existing

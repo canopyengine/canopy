@@ -82,3 +82,15 @@ issue #213 open until distribution and this consumer check are complete.
 The upload helper's network path is not exercised with real publishing credentials
 in local preparation. Local test keys validate signing only; never use them for
 an actual release. Windows consumer execution is a separate platform check.
+
+## Offline tests
+
+Regression tests live in `tests/`; `bundle.py` and `upload.py` remain the actual
+publication tools. Run from the repository root:
+
+```sh
+python3 -m unittest discover -s tooling/central/tests -p 'test_*.py'
+```
+
+These tests use temporary artifact fixtures and mocked upload responses. They
+do not contact Central or require publishing credentials.

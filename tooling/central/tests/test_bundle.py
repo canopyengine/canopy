@@ -5,7 +5,7 @@ import tempfile
 import unittest
 import zipfile
 
-import bundle
+from tooling.central import bundle
 
 ARTIFACTS = ('engine', 'platforms-headless', 'platforms-terminal', 'adapters-libgdx',
              'adapters-logback', 'adapters-mordant', 'tooling-devtools', 'tooling-utils',
