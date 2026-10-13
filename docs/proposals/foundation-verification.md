@@ -216,3 +216,23 @@ failures/errors/skips and 6,434 / 7,136 covered lines (90.2%). The Build workflo
 now includes native Windows logging tests and lint with both configured JDKs.
 The Windows logging job and full Linux build gate both pass in
 [workflow run 38377876069](https://github.com/canopyengine/canopy/actions/runs/38377876069).
+
+## Classpath JAR handle cleanup (`1acbaa1`)
+
+Windows live testing found JUnit unable to delete `resources.jar` after the
+classpath resource test. Closing the entry's input stream did not close Java's
+cached JAR handle. A new regression reads an archive, deletes/recreates it at
+the same path, then reads the replacement and deletes it again. Before the fix
+Linux returns the old content (`original` instead of `replacement`); Windows
+also exposes the retained file lock. Each terminal classpath read now disables
+caching on its own URL connection before opening its stream. Global cache
+settings and other class loaders' handles are unchanged.
+
+Terminal tests/lint and the full local test/lint/build/coverage/staging gate pass:
+564 tests, no failures/errors/skips, 6,437 / 7,139 covered lines (90.2%). The Windows
+filesystem CI job now runs both logback and terminal module tests/lint. Companion
+asset documentation explains the resource lifetime and passes content/link checks.
+The Windows filesystem and full Linux build jobs pass in
+[workflow run 38379590711](https://github.com/canopyengine/canopy/actions/runs/38379590711),
+including the original file/JAR classloader test and the archive-replacement
+regression. This verifies archive release without skipping JUnit cleanup.
