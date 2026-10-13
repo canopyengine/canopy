@@ -236,3 +236,38 @@ The Windows filesystem and full Linux build jobs pass in
 [workflow run 38379590711](https://github.com/canopyengine/canopy/actions/runs/38379590711),
 including the original file/JAR classloader test and the archive-replacement
 regression. This verifies archive release without skipping JUnit cleanup.
+
+## Keyboard-only terminal input (`47420f3`)
+
+Windows live testing exposed legacy mouse-report bytes in the command draft.
+The terminal host requested Mordant `MouseTracking.Normal` even though it
+forwarded only keyboard events. Native input now requests `MouseTracking.Off`.
+Session start/end also disable standard mouse-reporting modes, including modes
+left enabled by an earlier application. The command editor and ordinary text
+input are unchanged; no text-pattern filtering or new input subsystem was added.
+
+Three native-input/session contract checks fail before the fix and pass after
+it. The full local test/lint/build/coverage/staging gate passes 564 tests, no
+failures/errors/skips, with 6,436 / 7,139 covered lines (90.2%). The external
+consumer PTY fixture passes 26 checks: its emulator starts with mouse-reporting
+modes enabled and verifies startup clears them and command capture keeps them
+disabled. Existing animation, keyboard focus/actions, pause/resume, resize,
+draft retention and quit/Ctrl+C restoration also pass. The Windows manual
+checklist now explicitly checks movement, clicks and dragging with the editor
+open; physical Windows pointer interaction remains a live check.
+
+The [full Linux/Windows build run](https://github.com/canopyengine/canopy/actions/runs/38383583936)
+passes. The first native run `38383588168` passes macOS PTY acceptance, Windows
+consumer compilation and all three launcher jobs. Its Linux job passes both new
+mouse-mode checks and all gameplay checks, but its Ctrl+C wait falsely fails with
+`game exit=0`: the child exits between the predicate's status poll and a second
+status poll. This is a test-harness race, not an observed game shutdown failure.
+At `ff9ec40`, process status is captured before evaluating the success predicate.
+The deterministic race test fails before and passes after; a separate negative
+test confirms unmet output expectations still fail. Both helper tests and a
+repeat of all 26 local PTY checks pass. Production code is unchanged in this
+follow-up; the helper tests now run on all three consumer CI platforms.
+The final [six-job native workflow](https://github.com/canopyengine/canopy/actions/runs/38384891319)
+passes at `ff9ec40`: Linux/macOS PTY acceptance, the Windows external-consumer
+build, all three portable launcher jobs and both harness tests on each consumer
+platform. No Windows physical mouse-motion acceptance is claimed by these jobs.
