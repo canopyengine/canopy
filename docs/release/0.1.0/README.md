@@ -61,7 +61,7 @@ Release acceptance tracker: [engine #225](https://github.com/canopyengine/canopy
 
 ## Human tasks
 
-- [ ] Personally edit the milestone description from the prepared draft.
+- [x] Personally edit the milestone description (maintainer update verified).
 - [ ] Study the supported engine systems; trace a frame, an action and cleanup.
 - [ ] Review code and all release-facing writing at recorded revisions.
 - [ ] Observe the newcomer tutorial attempt and assess game/demo behavior.
