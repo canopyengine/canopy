@@ -15,6 +15,8 @@ merge/publication decisions.
   checks a recorded revision; generated inventory is not sign-off.
 - [Implementation and validation evidence](../../proposals/foundation-verification.md)
 - [One-App ownership audit and 0.2.0 boundary](app-ownership-audit.md)
+- [Provisional 0.2.0 discussion draft](../0.2.0/README.md): future scope, separate
+  from this release’s acceptance gates.
 
 ## Draft review targets
 
