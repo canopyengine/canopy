@@ -23,7 +23,7 @@ platform between terminal and desktop. Keep the real terminal backend supported.
 | Minimal desktop backend | A graphical option with text, basic drawing/grid, existing UI, input, resize and clean shutdown | Proposed headline; audit and prototype required before commitment |
 | Basic development mode | Save code, compile automatically and restart after a successful build | Proposed bounded tooling feature; not yet issued |
 | Package extension contracts | Add custom DSL blocks and components through ordinary Kotlin dependencies/imports | Proposed foundation; audit existing extension points first |
-| Terminal-style theme and recipes | Start a distinctive game without building its whole presentation from scratch | Proposed first-party example package; depends on usable rendering contracts |
+| Terminal-style theme and kits | Start a distinctive game without building its whole presentation from scratch | Proposed first-party example package; depends on usable rendering contracts |
 | Supported resource reload | Refresh selected assets/configuration without restarting | Candidate only; define ownership and supported resource types first |
 
 ## Boundaries that keep the design coherent
@@ -69,13 +69,16 @@ existing terminal restoration and log ownership. No general live-state
 preservation is promised. A future CLI may wrap this tooling; this draft does not
 require changing or shipping the Rust CLI.
 
-## Packages and recipes
+## Packages and kits
 
-Use ordinary Kotlin/Gradle dependencies and explicit imports. A package supplies
-maintained components or behavior; a recipe supplies readable starting code that
-users copy and customize. Prefer composition of existing nodes before adding core
-APIs. One first-party terminal-style package can demonstrate a theme and a useful
-custom block without making every preset an engine feature.
+Use ordinary Kotlin/Gradle dependencies and explicit imports. A package is a
+distribution unit. A kit is a cohesive set of reusable components, settings/assets
+and readable examples that users can customize, delivered through one or more
+packages. A starter supplies a runnable project scaffold. Prefer composition of
+existing nodes before adding core APIs. One first-party terminal-style kit can demonstrate a theme and a useful
+custom block without making every preset an engine feature. A presentation kit
+should offer optional, independently tunable effects without requiring a TV
+frame, aquarium layout, palette or font. Games retain their own visual identity.
 
 Possible blocks include `presentation { }` in a host configuration and a
 package-provided `diagnosticPanel { }` inside a layout. These are discussion
@@ -96,7 +99,7 @@ later; a dedicated registry and installation CLI are not prerequisites.
 4. Implement the bounded desktop backend and demonstrate the same aquarium
    simulation through terminal and desktop presentation.
 5. Document extension contracts and supply one reusable theme/component package
-   plus editable recipe examples.
+   plus editable kit examples.
 6. Add the development supervisor and, only where demonstrated safe, selected
    resource reloads. Verify the full user workflow and update learning material.
 
