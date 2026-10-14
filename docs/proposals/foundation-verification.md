@@ -649,7 +649,7 @@ Validation:
 - `stageCentralPublication` and terminal `benchmarkClasspath` pass; both UI and
   cell Java benchmark sources compile against the reorganized runtime. No new
   performance measurement is claimed.
-- 31 native PTY acceptance checks pass using staged artifacts with verified
+- 27 printed native PTY acceptance checks pass using staged artifacts with verified
   engine/terminal JAR hashes, including a second fresh launch.
 - Companion docs `83c42be`: source checks and Node 22 site build pass, with
   62 generated pages and validated links/assets/anchors.
