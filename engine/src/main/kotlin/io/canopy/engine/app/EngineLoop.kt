@@ -4,7 +4,8 @@ package io.canopy.engine.app
  * Coordinates the platform-independent application lifecycle.
  *
  * Platform drivers should forward lifecycle events to this class. Frame updates
- * run fixed-step physics updates first, followed by one variable-step update.
+ * prepare the host frame, run fixed-step physics and one variable-step update, then present output.
+ * Preparation, update or presentation failure aborts the frame, preserving the original failure.
  * Nested entry, frame, resize and exit calls during entry or frame dispatch are rejected.
  * Calls from different threads are serialized; callbacks must still run on the host thread.
  * Repeated exit during teardown is harmless. The first uncaught callback failure is retained
@@ -19,6 +20,9 @@ class EngineLoop(
     private val isPaused: () -> Boolean = { false },
     physicsStep: Float = DEFAULT_PHYSICS_STEP,
     private val maxPhysicsStepsPerFrame: Int = DEFAULT_MAX_PHYSICS_STEPS_PER_FRAME,
+    private val onBeginFrame: () -> Unit = {},
+    private val onPresentFrame: () -> Unit = {},
+    private val onAbortFrame: () -> Unit = {},
 ) {
     private var entering = false
     private var dispatching = false
@@ -69,23 +73,34 @@ class EngineLoop(
         checkActive()
         require(delta.isFinite() && delta >= 0f) { "delta must be finite and non-negative" }
         dispatch {
-            val paused = isPaused()
-            if (paused) pausedPhysicsAccumulator += delta else runningPhysicsAccumulator += delta
-            var accumulated = if (paused) pausedPhysicsAccumulator else runningPhysicsAccumulator
-            var steps = 0
-            while (
-                accumulated + PHYSICS_STEP_EPSILON >= physicsStep &&
-                steps < maxPhysicsStepsPerFrame &&
-                isPaused() == paused
-            ) {
-                accumulated = (accumulated - physicsStep).coerceAtLeast(0f)
-                // Commit before dispatch so a failed callback cannot replay an already-started tick.
-                if (paused) pausedPhysicsAccumulator = accumulated else runningPhysicsAccumulator = accumulated
-                onPhysicsUpdate(physicsStep)
-                steps++
-            }
+            try {
+                onBeginFrame()
+                val paused = isPaused()
+                if (paused) pausedPhysicsAccumulator += delta else runningPhysicsAccumulator += delta
+                var accumulated = if (paused) pausedPhysicsAccumulator else runningPhysicsAccumulator
+                var steps = 0
+                while (
+                    accumulated + PHYSICS_STEP_EPSILON >= physicsStep &&
+                    steps < maxPhysicsStepsPerFrame &&
+                    isPaused() == paused
+                ) {
+                    accumulated = (accumulated - physicsStep).coerceAtLeast(0f)
+                    // Commit before dispatch so a failed callback cannot replay an already-started tick.
+                    if (paused) pausedPhysicsAccumulator = accumulated else runningPhysicsAccumulator = accumulated
+                    onPhysicsUpdate(physicsStep)
+                    steps++
+                }
 
-            onUpdate(delta)
+                onUpdate(delta)
+                onPresentFrame()
+            } catch (error: Throwable) {
+                try {
+                    onAbortFrame()
+                } catch (cleanup: Throwable) {
+                    if (cleanup !== error) error.addSuppressed(cleanup)
+                }
+                throw error
+            }
         }
     }
 

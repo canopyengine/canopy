@@ -15,7 +15,8 @@ engine. This organization adds packages, not new Gradle modules or public APIs.
 | `runtime` | Native terminal creation, macOS safe-input selection and Windows console output modes |
 | `data.assets` | Terminal file/classpath assets and their manager |
 
-The host coordinates input, lifecycle updates and output. The UI backend draws
+The host supplies native ticks and operations; App/EngineLoop own preparation,
+geometry notification, physics/update processing, presentation and abort. The UI backend draws
 shared elements into spans; the graphics surface combines UI, world output and
 command rows into one terminal frame. Native setup belongs to runtime support.
 These implementation types remain internal. The public builder stays at

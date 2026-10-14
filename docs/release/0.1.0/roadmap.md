@@ -6,6 +6,12 @@ Planning snapshot: current foundation integration `f80d2d6`, docs `45d09c3`, run
 
 Deliver a terminal/headless engine with a validated core, small shared UI, reliable native launcher/input/output, matching immutable compiler/runtime distribution, a playable ecosystem reference demo, and a beginner-friendly aquarium tutorial on the documentation site.
 
+The engine-owned frame boundary is approved for 0.1.0: shared preparation,
+changed-geometry notification, physics/update dispatch, presentation and failure
+abort. Platforms retain native scheduling and implement narrow frame operations.
+Validate terminal batching/input acknowledgement, failure recovery and direct
+lifecycle drivers. The broader implicit services/capabilities design remains #224.
+
 The runtime contract is one running App per JVM process. Keep startup ownership,
 failed-start rollback and successive-run cleanup. Service ownership/access redesign
 belongs to 0.2.0 issue #224; concurrent Apps are outside that plan. See the

@@ -43,7 +43,7 @@ class TerminalUiTests {
         val app = TerminalApp(terminal, output::add, { Size(21, 5) }).also { this.app = it }
         val failure = IllegalStateException("update")
         app.engineLoop.enter()
-        app.updateTerminalFrame(0f)
+        app.update(0f)
         app.renderFrame(listOf("committed"))
         output.clear()
         app.onUpdate {
@@ -53,7 +53,7 @@ class TerminalUiTests {
 
         // Act / Assert
         try {
-            assertSame(failure, assertFailsWith<IllegalStateException> { app.updateTerminalFrame(0f) })
+            assertSame(failure, assertFailsWith<IllegalStateException> { app.update(0f) })
             assertTrue(output.isEmpty())
         } finally {
             assertSame(failure, assertFailsWith<IllegalStateException> { app.engineLoop.exit() })
@@ -87,7 +87,7 @@ class TerminalUiTests {
         app.engineLoop.enter()
         app.onResize { _, _ -> app.renderFrame(listOf("resize intermediate")) }
         app.onUpdate { app.renderFrame(listOf("final update")) }
-        app.updateTerminalFrame(0f)
+        app.update(0f)
         assertEquals(1, output.size)
         assertEquals("final update", terminalTestRows(terminal, output)[0])
         assertFalse(output.single().contains("resize intermediate"))
@@ -111,12 +111,12 @@ class TerminalUiTests {
             bindText("count") { "Count: ${count()}" }
         }
 
-        app.updateTerminalFrame(0f)
+        app.update(0f)
 
         assertEquals(1, output.size)
         assertEquals("Count: 1", terminalTestRows(terminal, output)[0])
         app.pause()
-        app.updateTerminalFrame(0f)
+        app.update(0f)
         assertEquals("Count: 2", terminalTestRows(terminal, output)[0])
         count.dispose()
     }
@@ -145,12 +145,12 @@ class TerminalUiTests {
                     }
             }
         ManagersRegistry.getManager(SceneManager::class).currScene = ui
-        app.updateTerminalFrame(0f)
+        app.update(0f)
         assertEquals(UiRect(0.0, 0.0, 40.0, 12.0), column.bounds)
         assertEquals(UiRect(0.0, 0.0, 20.0, 6.0), first.bounds)
         assertEquals(20.0, second.bounds.x)
         viewport = Size(21, 6)
-        app.updateTerminalFrame(0f)
+        app.update(0f)
         assertEquals(UiRect(0.0, 0.0, 20.0, 6.0), column.bounds)
         assertEquals(3.0, row.bounds.height)
         assertEquals(10.0, first.bounds.width)
@@ -167,20 +167,20 @@ class TerminalUiTests {
         val ui = UiRoot { Text("overlay") }
         val scenes = ManagersRegistry.getManager(SceneManager::class)
         scenes.currScene = ui
-        app.updateTerminalFrame(0f)
+        app.update(0f)
         assertContains(output.last(), "overlay")
         val previous = output.size
-        app.updateTerminalFrame(0f)
+        app.update(0f)
         assertEquals(previous, output.size)
         ui.hide()
-        app.updateTerminalFrame(0f)
+        app.update(0f)
         assertContains(output.last(), "world")
         assertFalse(output.last().contains("overlay"))
         ui.show()
-        app.updateTerminalFrame(0f)
+        app.update(0f)
         assertContains(output.last(), "overlay")
         scenes.currScene = null
-        app.updateTerminalFrame(0f)
+        app.update(0f)
         assertFalse(output.last().contains("overlay"))
     }
 
@@ -200,17 +200,17 @@ class TerminalUiTests {
         val input = ManagersRegistry.getManager(MordantInputManager::class)
         input.enqueueMordantKeyEvent(KeyboardEvent("a"))
         input.processEvents()
-        app.updateTerminalFrame(0f)
+        app.update(0f)
         assertEquals("a", prompt.draft)
         assertEquals("> a", terminalTestRows(terminal, output)[4])
         assertFalse(output.last().contains("late4"))
         prompt.hide()
-        app.updateTerminalFrame(0f)
+        app.update(0f)
         assertTrue(prompt.isOpen)
         assertEquals("a", prompt.draft)
         assertContains(output.last(), "late4")
         prompt.show()
-        app.updateTerminalFrame(0f)
+        app.update(0f)
         assertEquals("> a", terminalTestRows(terminal, output)[4])
         assertFalse(app.isPaused)
     }
@@ -233,7 +233,7 @@ class TerminalUiTests {
         scene.addChild(root)
         scene.addChild(prompt)
         ManagersRegistry.getManager(SceneManager::class).currScene = scene
-        app.updateTerminalFrame(0f)
+        app.update(0f)
         root.focus(button)
         prompt.open()
         app.pause()
@@ -242,7 +242,7 @@ class TerminalUiTests {
             input.enqueueMordantKeyEvent(KeyboardEvent(key))
         }
         input.processEvents()
-        app.updateTerminalFrame(0f)
+        app.update(0f)
         assertEquals(1, executions)
         assertEquals(0, clicks)
         assertEquals("", prompt.draft)

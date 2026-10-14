@@ -13,6 +13,7 @@ import io.canopy.adapters.logback.LogbackLogging
 import io.canopy.adapters.mordant.input.MordantInputManager
 import io.canopy.engine.app.App
 import io.canopy.engine.app.AppConfig
+import io.canopy.engine.app.FrameSize
 import io.canopy.engine.commands.CommandPromptHost
 import io.canopy.engine.core.managers.SceneManager
 import io.canopy.engine.core.managers.manager
@@ -45,7 +46,6 @@ class TerminalApp internal constructor(
 ) : App<AppConfig>() {
 
     private val log = EngineLogs.app
-    private var notifiedViewport: Pair<Int, Int>? = null
 
     /**
      * Maximum bottom-panel height in terminal rows, including its editor row; defaults to 8.
@@ -114,39 +114,33 @@ class TerminalApp internal constructor(
 
     override fun defaultLoggingPolicy() = LogbackLogging()
 
-    /** Native host boundary: forward geometry before entering frame dispatch, never from a manager callback. */
-    internal fun updateTerminalFrame(delta: Float) {
-        val size = if (lineInputMode) {
+    private var processedLine: CompletableDeferred<Unit>? = null
+
+    override fun beginFrame(): FrameSize? {
+        surface.beginFrame()
+        return if (lineInputMode) {
             null
         } else {
             viewport().let {
-                Size(it.width.coerceAtLeast(0), it.height.coerceAtLeast(0))
+                FrameSize(it.width.coerceAtLeast(0), it.height.coerceAtLeast(0))
             }
         }
-        surface.beginFrame()
-        var frameFailure: Throwable? = null
-        val processedLine = try {
-            if (size != null && (size.width to size.height) != notifiedViewport) {
-                engineLoop.resize(size.width, size.height)
-                // Retry unchanged geometry if a resize listener failed.
-                notifiedViewport = size.width to size.height
-            }
-            val line = lineInput.processEvents()
-            engineLoop.update(delta)
-            line
-        } catch (failure: Throwable) {
-            frameFailure = failure
-            throw failure
-        } finally {
-            try {
-                if (frameFailure == null) surface.endFrame() else surface.abortFrame()
-            } catch (failure: Throwable) {
-                if (frameFailure == null) throw failure
-                if (failure !== frameFailure) frameFailure.addSuppressed(failure)
-            }
-        }
+    }
+
+    override fun processFrameInput() {
+        processedLine = lineInput.processEvents()
+    }
+
+    override fun presentFrame() {
+        surface.endFrame()
         trackMouseMovement.set(manager<UiManager>().needsMouseMovement)
         processedLine?.complete(Unit)
+        processedLine = null
+    }
+
+    override fun abortFrame() {
+        surface.abortFrame()
+        processedLine = null
     }
 
     internal fun prepareLineInputPresentation() = lineInput.preparePresentation {
@@ -259,7 +253,7 @@ class TerminalApp internal constructor(
                 val delta = deltaNanos / 1_000_000_000f
 
                 // Notify geometry, then drain input and process the frame before acknowledging a submitted line.
-                updateTerminalFrame(delta)
+                engineLoop.update(delta)
 
                 // Frame limiting
                 val elapsed = System.nanoTime() - now

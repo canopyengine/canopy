@@ -63,6 +63,7 @@ abstract class App<C : AppConfig> protected constructor() {
      * ============================================================ */
 
     private var updateSequence: Long = 0
+    private var notifiedFrameSize: FrameSize? = null
     private val gameplayFrames = AtomicLong(0)
 
     @Volatile
@@ -114,7 +115,10 @@ abstract class App<C : AppConfig> protected constructor() {
         onPhysicsUpdate = ::performPhysicsUpdate,
         onResize = ::performResize,
         onExit = ::performExit,
-        isPaused = { isPaused }
+        isPaused = { isPaused },
+        onBeginFrame = ::prepareFrame,
+        onPresentFrame = ::presentFrame,
+        onAbortFrame = ::abortFrame
     ).also { it.validateExit = ManagersRegistry::checkCanExit }
 
     /* ============================================================
@@ -192,6 +196,19 @@ abstract class App<C : AppConfig> protected constructor() {
     protected open fun defaultLoggingPolicy(): LoggingPolicy = LoggingPolicy.Host
 
     protected open fun afterEnter() = Unit
+
+    /** Opens native frame output and returns current dimensions in host units, or null when unavailable. */
+    protected open fun beginFrame(): FrameSize? = null
+
+    /** Publishes or processes host input after geometry notification and before physics; called on the lifecycle thread. */
+    protected open fun processFrameInput() = Unit
+
+    /** Presents output after successful physics, application, manager and UI processing. */
+    protected open fun presentFrame() = Unit
+
+    /** Discards partial output when frame preparation, processing or presentation fails. Must tolerate partial preparation. */
+    protected open fun abortFrame() = Unit
+
     protected open fun beforeUpdate(delta: Float) = Unit
     protected open fun afterResize(width: Int, height: Int) = Unit
     protected open fun beforeExit() = Unit
@@ -214,6 +231,7 @@ abstract class App<C : AppConfig> protected constructor() {
     /** Compatibility wrapper; drivers should forward lifecycle events through [engineLoop]. */
     fun enter() = engineLoop.enter()
 
+    /** Processes one complete engine-owned frame, including host preparation and presentation; delta is in seconds. */
     fun update(delta: Float) = engineLoop.update(delta)
 
     fun physicsUpdate(delta: Float) = engineLoop.physicsUpdate(delta)
@@ -265,6 +283,15 @@ abstract class App<C : AppConfig> protected constructor() {
             onStarted.safeFail(t)
             teardown(t, ownsManagerScope)
         }
+    }
+
+    private fun prepareFrame() {
+        val size = beginFrame()
+        if (size != null && size != notifiedFrameSize) {
+            performResize(size.width, size.height)
+            notifiedFrameSize = size
+        }
+        processFrameInput()
     }
 
     private fun performUpdate(delta: Float) = withLoggingContext {

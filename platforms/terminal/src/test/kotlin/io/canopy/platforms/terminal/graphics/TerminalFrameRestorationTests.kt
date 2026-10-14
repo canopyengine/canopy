@@ -339,15 +339,15 @@ class TerminalFrameRestorationTests {
         })
         val scenes = ManagersRegistry.getManager(SceneManager::class)
         val resizeConnection = scenes.onResize.connect { _, _ -> sceneSizes.add(scenes.sceneSize()) }
-        app.updateTerminalFrame(0f)
+        app.update(0f)
         assertEquals("x".repeat(10), rows()[0])
-        app.updateTerminalFrame(0f)
+        app.update(0f)
         viewport = Size(8, 3)
-        app.updateTerminalFrame(0f)
+        app.update(0f)
         assertEquals(mapOf(0 to "xxxx", 1 to "xxxx", 2 to "xxxx"), rows())
         viewport = Size(12, 9)
         app.pause()
-        app.updateTerminalFrame(0f)
+        app.update(0f)
         assertEquals(9, rows().size)
         assertEquals("xxxxxx", rows()[8])
         assertEquals(listOf(20 to 6, 8 to 3, 12 to 9), geometries.map { it.width to it.height })
@@ -361,14 +361,14 @@ class TerminalFrameRestorationTests {
     fun `closed static world refreshes geometry even when clipped text is unchanged and paused`() {
         val (app, _, _) = start()
         app.renderFrame(listOf("static"))
-        app.updateTerminalFrame(0f)
+        app.update(0f)
         val count = output.size
         app.pause()
         viewport = Size(30, 12)
-        app.updateTerminalFrame(0f)
+        app.update(0f)
         assertEquals(count + 1, output.size)
         assertEquals(mapOf(0 to "static"), rows())
-        app.updateTerminalFrame(0f)
+        app.update(0f)
         assertEquals(count + 1, output.size)
         assertTrue(app.isPaused)
     }
@@ -384,30 +384,30 @@ class TerminalFrameRestorationTests {
         val input = ManagersRegistry.getManager(MordantInputManager::class)
         input.enqueueMordantKeyEvent(KeyboardEvent("界"))
         input.processEvents()
-        app.updateTerminalFrame(0f)
+        app.update(0f)
         assertEquals("eight", rows()[4])
         assertEquals("> 界", rows()[5])
         viewport = Size(30, 12)
-        app.updateTerminalFrame(0f)
+        app.update(0f)
         assertEquals("six", rows()[8])
         assertEquals("eight", rows()[10])
         viewport = Size(40, 30)
         app.pause()
-        app.updateTerminalFrame(0f)
+        app.update(0f)
         assertEquals("two", rows()[22])
         assertEquals("> 界", rows()[29])
         viewport = Size(3, 1)
-        app.updateTerminalFrame(0f)
+        app.update(0f)
         assertEquals("界", rows()[0])
         assertEquals("界", prompt.draft)
         assertTrue(prompt.isOpen)
         assertTrue(app.isPaused)
         viewport = Size(20, 6)
-        app.updateTerminalFrame(0f)
+        app.update(0f)
         assertEquals("> 界", rows()[5])
         val count = output.size
         host.onUpdate(0f)
-        app.updateTerminalFrame(0f)
+        app.update(0f)
         assertEquals(count, output.size)
     }
 
@@ -421,7 +421,7 @@ class TerminalFrameRestorationTests {
         app.commandPanelRows = 100
         app.renderFrame(List(6) { "world" })
         prompt.open()
-        app.updateTerminalFrame(0f)
+        app.update(0f)
         assertEquals(mapOf(0 to "world", 5 to "> "), rows())
     }
 
@@ -433,13 +433,13 @@ class TerminalFrameRestorationTests {
             output.add(text)
         }
         app.renderFrame(listOf("same"))
-        app.updateTerminalFrame(0f)
+        app.update(0f)
         viewport = Size(30, 12)
         fail = true
-        val failure = assertFailsWith<IllegalStateException> { app.updateTerminalFrame(0f) }
+        val failure = assertFailsWith<IllegalStateException> { app.update(0f) }
         fail = false
         val count = output.size
-        app.updateTerminalFrame(0f)
+        app.update(0f)
         assertEquals(count + 1, output.size)
         assertEquals(mapOf(0 to "same"), rows())
         assertSame(failure, assertFailsWith<IllegalStateException> { app.fail(failure) })
@@ -457,11 +457,11 @@ class TerminalFrameRestorationTests {
             }
             onUpdate { updates++ }
         })
-        val failure = assertFailsWith<IllegalStateException> { app.updateTerminalFrame(0f) }
+        val failure = assertFailsWith<IllegalStateException> { app.update(0f) }
         assertEquals(0, updates)
         fail = false
-        app.updateTerminalFrame(0f)
-        app.updateTerminalFrame(0f)
+        app.update(0f)
+        app.update(0f)
         assertEquals(2, resizes)
         assertEquals(2, updates)
         assertSame(failure, assertFailsWith<IllegalStateException> { app.fail(failure) })
@@ -472,12 +472,12 @@ class TerminalFrameRestorationTests {
         var resizes = 0
         val (app, _, prompt) = start(configure = { onResize { _, _ -> resizes++ } })
         app.renderFrame(listOf("world"))
-        app.updateTerminalFrame(0f)
+        app.update(0f)
         app.prepareLineInputPresentation()
         output.clear()
         prompt.open()
         viewport = Size(4, 2)
-        app.updateTerminalFrame(0f)
+        app.update(0f)
         assertEquals(listOf("> "), output)
         assertEquals(1, resizes)
         assertTrue(output.none { '\u001b' in it })

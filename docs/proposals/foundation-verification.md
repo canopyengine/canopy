@@ -658,3 +658,42 @@ Validation:
 
 Package overview: [platform modules](../../platforms/README.md). Pending human
 review stays in draft engine #226 and docs #56; main is unchanged.
+
+
+## Engine-owned frame pipeline for 0.1.0 (2026-10-14)
+
+The maintainer approved this narrow frame foundation for 0.1.0. EngineLoop now
+owns prepare, fixed physics, variable update, presentation and failure abort
+within a single guarded frame dispatch. App notifies changed host FrameSize
+before input preparation, retrying a failed resize notification. Host operations
+are protected beginFrame/processFrameInput/presentFrame/abortFrame hooks; normal
+game code uses the existing App/Node/UI API. Native scheduling stays in the
+terminal loop or LibGDX callbacks.
+
+Terminal forwards ticks to engineLoop.update; its redundant updateTerminalFrame
+wrapper is removed. Its frame hooks retain batching, cell output, queued-input
+routing and line acknowledgement after successful presentation. Existing terminal
+frame/resize/UI tests now use ordinary App.update. Direct physics and resize
+calls remain individual lifecycle events without complete frame presentation.
+Original errors are retained, with an abort error suppressed rather than replacing
+them. Existing one-App ownership and independent pause clocks remain intact.
+
+Validation:
+
+- Full test/lint/build/coverage/staging gate passes: 605 tests, zero
+  failures/errors/skips; 6,820/7,532 covered lines (90.5%).
+- Five new EngineFrameTests cover order, invalid delta, failures in each stage,
+  abort-error suppression, nested-dispatch rejection and changed-geometry ordering
+  through direct App frames. Existing terminal recovery/pause/resize tests pass.
+- 27 printed native PTY checks pass against staged artifacts; engine and terminal
+  JAR hashes match the fresh external consumer. Includes input, controls, pause,
+  resize, draft restoration, clean exit and a second fresh launch.
+- Companion docs a943839 passes source checks and the Node 22 site build:
+  62 pages, with validated generated links/assets/anchors.
+- Evidence: frame-pipeline-final.log, frame-pipeline-native.log,
+  frame-pipeline-docs.log and frame-pipeline-pty under the session audit directory.
+
+Release acceptance #225 includes this frame boundary in 0.1.0. Issue #224 retains
+broader service ownership/access, capabilities and implicit presentation policy
+in 0.2.0. This implementation does not add a parallel host-service framework or
+concurrent App support. Main remains unchanged; human review remains pending.
