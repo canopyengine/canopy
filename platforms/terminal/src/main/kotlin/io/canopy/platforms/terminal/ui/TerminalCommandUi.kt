@@ -44,7 +44,6 @@ internal class TerminalCommandUi(
         editor = null
         if (prompt == null) return
         val manager = manager<UiManager>()
-        if (manager.backend == null) manager.backend = TerminalUiBackend(terminal, surface::renderUi)
         val size = viewport()
         manager.onResize(size.width.coerceAtLeast(0), size.height.coerceAtLeast(0))
         val created = UiRoot {

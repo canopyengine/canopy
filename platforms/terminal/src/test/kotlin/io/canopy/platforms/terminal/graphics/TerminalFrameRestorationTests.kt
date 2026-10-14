@@ -22,6 +22,7 @@ import io.canopy.platforms.terminal.app.TerminalApp
 import io.canopy.platforms.terminal.app.terminalApp
 import io.canopy.platforms.terminal.ui.TerminalCommandPresentation
 import io.canopy.platforms.terminal.ui.TerminalCommandUi
+import io.canopy.platforms.terminal.ui.TerminalUiBackend
 import org.junit.jupiter.api.AfterEach
 
 class TerminalFrameRestorationTests {
@@ -295,7 +296,7 @@ class TerminalFrameRestorationTests {
             register(InputFocus())
             register(host)
             register(scenes)
-            register(UiManager())
+            register(UiManager(TerminalUiBackend(terminal, surface::renderUi)))
         }
         val prompt = CommandPrompt("Console")
         scenes.currScene = prompt

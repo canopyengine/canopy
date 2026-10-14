@@ -25,6 +25,8 @@ import io.canopy.platforms.terminal.input.TerminalLineInputBridge
 import org.junit.jupiter.api.AfterEach
 
 class TerminalCommandPromptTests {
+    private lateinit var presentationBackend: TerminalUiBackend
+
     @AfterEach
     fun cleanup() {
         ManagersRegistry.exit()
@@ -112,7 +114,7 @@ class TerminalCommandPromptTests {
             register(input)
             register(host)
             register(scenes)
-            register(UiManager())
+            register(UiManager(presentationBackend))
         }
         val prompt = CommandPrompt("Console") { toggleKey = Key.Q_KEY }
         scenes.currScene = prompt
@@ -154,7 +156,7 @@ class TerminalCommandPromptTests {
             register(input)
             register(host)
             register(scenes)
-            register(UiManager())
+            register(UiManager(presentationBackend))
         }
         val prompt = CommandPrompt("Console") { toggleKey = Key.NUM_1 }
         scenes.currScene = prompt
@@ -206,7 +208,7 @@ class TerminalCommandPromptTests {
             register(InputFocus())
             register(host)
             register(scenes)
-            register(UiManager())
+            register(UiManager(presentationBackend))
         }
         val prompt = CommandPrompt("Console") {
             command("say") { execute { reply("first\nsecond\u001b[31m") } }
@@ -240,7 +242,7 @@ class TerminalCommandPromptTests {
             register(InputFocus())
             register(host)
             register(scenes)
-            register(UiManager())
+            register(UiManager(presentationBackend))
         }
         val prompt = CommandPrompt("Console") {
             transcriptLimit = 2
@@ -278,7 +280,7 @@ class TerminalCommandPromptTests {
             register(InputFocus())
             register(host)
             register(scenes)
-            register(UiManager())
+            register(UiManager(presentationBackend))
         }
         val prompt = CommandPrompt("Console") { command("say") { execute { reply("reply") } } }
         scenes.currScene = prompt
@@ -296,6 +298,7 @@ class TerminalCommandPromptTests {
         val terminal = Terminal(ansiLevel = AnsiLevel.TRUECOLOR, interactive = true)
         val surface = TerminalSurface(terminal, { Size(40, 5) }, output, line)
         surface.renderWorld(listOf("world"))
+        presentationBackend = TerminalUiBackend(terminal, surface::renderUi)
         return TerminalCommandPresentation(
             line,
             output,

@@ -260,7 +260,11 @@ class UiRoot(name: String = "UiRoot", block: UiScope.() -> Unit) :
     }
 }
 
-/** UI work committed after app and manager updates, including paused frames, on the engine thread. */
+/**
+ * UI work committed after app and manager updates, including paused frames, on the engine thread.
+ * App binds the host backend before startup callbacks; standalone drivers supply it explicitly when rendering is needed.
+ * Explicit backend replacement is supported. Native backend resources remain owned by the host.
+ */
 class UiManager(var backend: UiBackend? = null) : Manager {
     private val roots = linkedSetOf<UiRoot>()
     private val pending = linkedSetOf<UiObserver>()

@@ -697,3 +697,45 @@ Release acceptance #225 includes this frame boundary in 0.1.0. Issue #224 retain
 broader service ownership/access, capabilities and implicit presentation policy
 in 0.2.0. This implementation does not add a parallel host-service framework or
 concurrent App support. Main remains unchanged; human review remains pending.
+
+
+## Host-service startup and reuse cleanup (2026-10-14)
+
+The focused 0.1.0 cleanup follows the audit at cda3bfb. App now initializes the
+common UiManager with its host-provided backend before manager, screen and app
+entry callbacks. Terminal supplies this backend through protected provideUiBackend;
+command-prompt code no longer installs a fallback renderer. Explicit configuration
+or entry-time backend replacement is preserved. Null remains valid for headless
+hosts, and native resource cleanup remains host-owned. Binding failure rolls back
+unentered services, fails lifecycle completions and releases ownership for a fresh App.
+
+InputSystem resolves current SceneManager/InputManager once per pass rather than
+retaining lazy references across App lifetimes. A reused system now delivers text
+and current action states in a successive App. Public lazyManager semantics are
+unchanged. No new module, dependency, registry, compiler rule or game API migration
+is introduced; backend authors gain one protected startup hook.
+
+Verification:
+
+- Before implementation, two terminal startup tests and one input-system reuse
+  test failed against the audited behavior. XML evidence: host-services-ui-before.xml
+  and host-services-input-before.xml in the session audit directory.
+- Four new cases cover backend availability in screen/app entry and stable prompt
+  binding, explicit customization, text/action input across successive Apps, and
+  presentation-provider failure cleanup/completion followed by a nonpresenting App.
+- Full test/lint/build/coverage/staging gate passes: 609 tests, zero
+  failures/errors/skips; 6,823/7,530 covered lines (90.6%).
+- Standalone prompt fixtures explicitly provide their backend. Existing command,
+  UI, pause, frame-recovery, resize and shutdown tests remain green.
+- 27 printed native PTY checks pass against staged artifacts; engine/terminal JAR
+  hashes match the fresh external consumer. Includes draft/input/focus, pause,
+  resize, clean exit and a second fresh launch.
+- Companion docs 79211f4 passes source checks and the Node 22 site build:
+  62 pages with validated generated links/assets/anchors.
+- Evidence: host-services-verified.log, host-services-native.log,
+  host-services-docs.log and host-services-pty under the session audit directory.
+
+Broader capability/fallback and service-access redesign remains 0.2.0 issue #224.
+Next release workstream is the learning-site foundation with codebase study,
+followed by aquarium onboarding and the full ecosystem slices. Human review,
+physical target-terminal acceptance and final merge/publication remain pending.

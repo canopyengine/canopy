@@ -19,6 +19,7 @@ import io.canopy.engine.core.managers.SceneManager
 import io.canopy.engine.core.managers.manager
 import io.canopy.engine.input.InputSystem
 import io.canopy.engine.logging.EngineLogs
+import io.canopy.engine.ui.UiBackend
 import io.canopy.engine.ui.UiManager
 import io.canopy.platforms.terminal.data.assets.TerminalAssetsManager
 import io.canopy.platforms.terminal.graphics.TerminalSurface
@@ -164,9 +165,7 @@ class TerminalApp internal constructor(
         addSystem(InputSystem())
     }
 
-    override fun afterEnter() {
-        manager<UiManager>().backend = TerminalUiBackend(terminal, surface::renderUi)
-    }
+    override fun provideUiBackend(): UiBackend = TerminalUiBackend(terminal, surface::renderUi)
 
     override fun beforeExit() {
         appScope.cancel()

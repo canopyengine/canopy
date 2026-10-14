@@ -1,22 +1,23 @@
 package io.canopy.engine.input
 
 import io.canopy.engine.core.managers.SceneManager
-import io.canopy.engine.core.managers.lazyManager
+import io.canopy.engine.core.managers.manager
 import io.canopy.engine.core.nodes.Node
 import io.canopy.engine.core.nodes.TreeSystem
 import io.canopy.engine.input.events.ButtonInputEvent
 import io.canopy.engine.input.events.InputState
 import io.canopy.tooling.utils.UnstableApi
 
-/** Dispatches raw events once per frame before mapped action states, during the FramePre phase. */
+/**
+ * Dispatches raw events once per frame before mapped action states, during the FramePre phase.
+ * Resolves current services for each pass so removal and registration in a successive App do not retain old managers.
+ */
 @UnstableApi
 class InputSystem : TreeSystem(UpdatePhase.FramePre, 10, Node::class) {
 
-    private val input by lazyManager<InputManager>()
-    private val scenes by lazyManager<SceneManager>()
-
     override fun afterProcess(delta: Float) {
-        val sceneRoot = scenes.currScene ?: return
+        val sceneRoot = manager<SceneManager>().currScene ?: return
+        val input = manager<InputManager>()
 
         // Deliver raw events first so text typed in the same frame as Enter is available
         // to action handlers before they submit the command.

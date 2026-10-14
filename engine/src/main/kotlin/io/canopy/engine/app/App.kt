@@ -18,6 +18,7 @@ import io.canopy.engine.logging.EngineLogs
 import io.canopy.engine.logging.LogContext
 import io.canopy.engine.logging.LoggingPolicy
 import io.canopy.engine.logging.LoggingSession
+import io.canopy.engine.ui.UiBackend
 import io.canopy.engine.ui.UiManager
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
@@ -195,6 +196,12 @@ abstract class App<C : AppConfig> protected constructor() {
     /** Platform logging default; core applications use host-owned logging. */
     protected open fun defaultLoggingPolicy(): LoggingPolicy = LoggingPolicy.Host
 
+    /**
+     * Supplies the common UiManager's backend once during startup, before manager/screen/app entry callbacks.
+     * Null selects a host without presentation. Native resources remain owned by the platform's shutdown hooks.
+     */
+    protected open fun provideUiBackend(): UiBackend? = null
+
     protected open fun afterEnter() = Unit
 
     /** Opens native frame output and returns current dimensions in host units, or null when unavailable. */
@@ -263,7 +270,7 @@ abstract class App<C : AppConfig> protected constructor() {
                             it.pauseState = { isPaused }
                             it.configureSceneManager()
                         }
-                        +UiManager()
+                        +UiManager(provideUiBackend())
                         managerBuilder()
                     }
                     ManagersRegistry.enter()
