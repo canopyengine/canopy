@@ -14,6 +14,7 @@ merge/publication decisions.
   and before final content freeze. Review completion stays blank until a human
   checks a recorded revision; generated inventory is not sign-off.
 - [Implementation and validation evidence](../../proposals/foundation-verification.md)
+- [One-App ownership audit and 0.2.0 boundary](app-ownership-audit.md)
 
 ## Draft review targets
 

@@ -27,6 +27,10 @@ import kotlinx.coroutines.withTimeout
 
 /**
  * Shared application lifecycle and configuration, driven by a platform through [engineLoop].
+ * Only one App may run per JVM process. Startup reserves ownership before the host starts;
+ * shutdown retains it through callbacks and logging cleanup. Use a fresh App for each successive run.
+ * [launchAsync] moves host startup to another thread; it does not permit concurrent Apps.
+ * Manager, scene and node operations belong to the serialized host lifecycle thread.
  * Failed startup rolls back the manager scope and runs shutdown hooks. Teardown attempts all stages,
  * preserving the first runtime failure with later cleanup failures suppressed before completing [handle].
  * Hosts must call [EngineLoop.reportFailure] before exit for failures outside loop dispatch.

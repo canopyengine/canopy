@@ -8,7 +8,8 @@ import io.canopy.engine.logging.LogContext
 /**
  * Lifecycle-thread access to the running application's manager registry.
  * App owns its registrations; this facade keeps ordinary manager lookups simple.
- * Standalone scopes remain available for tests and custom lifecycle drivers.
+ * Only one App may run per JVM process; ownership remains reserved until its cleanup finishes.
+ * Standalone scopes remain available for tests and custom lifecycle drivers when no App owns the registry.
  *
  * Registration, lookup, lifecycle dispatch, and teardown are expected to run
  * serially on the game thread. The registry's maps are not thread-safe.

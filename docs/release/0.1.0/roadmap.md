@@ -6,6 +6,11 @@ Planning snapshot: current foundation integration `f80d2d6`, docs `45d09c3`, run
 
 Deliver a terminal/headless engine with a validated core, small shared UI, reliable native launcher/input/output, matching immutable compiler/runtime distribution, a playable ecosystem reference demo, and a beginner-friendly aquarium tutorial on the documentation site.
 
+The runtime contract is one running App per JVM process. Keep startup ownership,
+failed-start rollback and successive-run cleanup. Service ownership/access redesign
+belongs to 0.2.0 issue #224; concurrent Apps are outside that plan. See the
+[ownership audit](app-ownership-audit.md) for retained safeguards and evidence.
+
 Retain the existing milestone's ecosystem requirements: rabbits/foxes, hunger/thirst/energy, grass/water/cover, nine day phases, naturally evolving clear/rain, commands, inspection, pause and reliable cleanup. Implement these in stages rather than replacing the agreed final scope with the initial smaller slice.
 
 The aquarium is the short onboarding project; the ecosystem is the larger reference and integration test. Existing ASCII animation, components and themes suffice. Platform/capability configuration redesign (#224), desktop rendering, shaders, audio, physics, durable saves/replay, advanced widgets and a hosted JVM playground remain future work.
