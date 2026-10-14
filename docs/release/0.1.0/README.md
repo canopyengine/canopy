@@ -15,6 +15,16 @@ merge/publication decisions.
   checks a recorded revision; generated inventory is not sign-off.
 - [Implementation and validation evidence](../../proposals/foundation-verification.md)
 
+## Draft review targets
+
+- [Engine foundation #226](https://github.com/canopyengine/canopy/pull/226)
+- [Companion docs #56](https://github.com/canopyengine/canopy-docs/pull/56)
+- [Demo scaffold integration #10](https://github.com/canopyengine/canopy-demos/pull/10)
+
+Review engine API behavior before treating companion integration documentation
+and examples as shipped. These drafts do not replace the later release gates.
+Older overlapping PRs remain open with reconciliation notes.
+
 ## Baseline
 
 | Repository | Integration commit | Relation to main at audit | Status |
@@ -64,7 +74,8 @@ correctness of published practice explanations is part of documentation review.
 
 ## Branch and issue reconciliation
 
-The integration branches had no PRs at this baseline. Older engine #220 differs
+The integration branches had no PRs at the baseline; the drafts above now
+provide explicit review targets. Older engine #220 differs
 from the current integration by four commits unique to its branch versus 54
 unique integration commits. Docs #54 and #53 each have three unique commits
 versus 28 on the integration branch. Divergence does not prove redundancy:
