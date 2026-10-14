@@ -6,8 +6,6 @@ import com.badlogic.gdx.backends.lwjgl3.Lwjgl3Application
 import com.badlogic.gdx.backends.lwjgl3.Lwjgl3ApplicationConfiguration
 import io.canopy.adapters.libgdx.data.assets.GdxAssetsManager
 import io.canopy.engine.app.App
-import io.canopy.engine.app.desktop.DesktopCanopyAppConfig
-import io.canopy.engine.app.desktop.StartupHelper
 import io.canopy.engine.core.managers.Manager
 import io.canopy.engine.core.managers.SceneManager
 import io.canopy.platforms.desktop.graphics.managers.CameraManager

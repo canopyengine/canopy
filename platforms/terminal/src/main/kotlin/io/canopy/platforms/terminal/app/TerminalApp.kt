@@ -20,6 +20,12 @@ import io.canopy.engine.input.InputSystem
 import io.canopy.engine.logging.EngineLogs
 import io.canopy.engine.ui.UiManager
 import io.canopy.platforms.terminal.data.assets.TerminalAssetsManager
+import io.canopy.platforms.terminal.graphics.TerminalSurface
+import io.canopy.platforms.terminal.input.TerminalLineInputBridge
+import io.canopy.platforms.terminal.runtime.runtimeTerminal
+import io.canopy.platforms.terminal.ui.TerminalCommandPresentation
+import io.canopy.platforms.terminal.ui.TerminalCommandUi
+import io.canopy.platforms.terminal.ui.TerminalUiBackend
 import io.canopy.tooling.utils.UnstableApi
 import kotlinx.coroutines.*
 

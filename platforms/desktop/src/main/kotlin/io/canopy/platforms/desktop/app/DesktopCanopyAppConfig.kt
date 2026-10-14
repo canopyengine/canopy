@@ -1,4 +1,4 @@
-package io.canopy.engine.app.desktop
+package io.canopy.platforms.desktop.app
 
 import com.badlogic.gdx.backends.lwjgl3.Lwjgl3ApplicationConfiguration
 import io.canopy.engine.app.AppConfig

@@ -2,7 +2,7 @@ import com.sun.management.ThreadMXBean;
 import java.lang.management.ManagementFactory;
 import com.github.ajalt.mordant.terminal.Terminal;
 import com.github.ajalt.mordant.rendering.AnsiLevel;
-import io.canopy.platforms.terminal.app.TerminalCellScreen;
+import io.canopy.platforms.terminal.graphics.TerminalCellScreen;
 import kotlin.Unit;
 import kotlin.Pair;
 

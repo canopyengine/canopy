@@ -113,6 +113,6 @@ tasks.register<JavaExec>("terminalUiSmoke") {
     description = "Launch the responsive declarative terminal UI and command overlay smoke example"
     dependsOn(tasks.testClasses)
     classpath = sourceSets.test.get().runtimeClasspath
-    mainClass.set("io.canopy.platforms.terminal.app.TerminalUiSmokeKt")
+    mainClass.set("io.canopy.platforms.terminal.ui.TerminalUiSmokeKt")
     standardInput = System.`in`
 }

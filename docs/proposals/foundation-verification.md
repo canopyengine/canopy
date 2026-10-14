@@ -625,3 +625,36 @@ Verification:
 
 The change remains on the integration branch and draft PR #226 for human review.
 It is a stabilization fix; no main merge or release publication is included.
+
+
+## Platform package organization (2026-10-14)
+
+Terminal's `app` package now contains only its application host. Eight internal
+implementation files move to `ui`, `graphics`, `input` and `runtime`; eleven test
+files follow those responsibilities. Three desktop tests move from obsolete
+backend paths to desktop graphics/physics paths. Desktop configuration and the
+startup helper now declare their existing platform app namespace. Desktop stays
+excluded; these source-only changes do not validate or restore it.
+
+All 66 platform Kotlin source/test paths match their package declarations. The
+22 moved Kotlin files retain their declaration bodies after excluding package,
+imports and whitespace. The public enabled-platform builders/imports stay the
+same. The UI smoke main class and cell benchmark import follow the moves.
+
+Validation:
+
+- `./gradlew :platforms:terminal:ktlintFormat test ktlintCheck build coverageReport
+  --offline --max-workers=2 --console=plain`: passes, 600 tests, zero
+  failures/errors/skips, 6,801/7,513 covered lines (90.5%).
+- `stageCentralPublication` and terminal `benchmarkClasspath` pass; both UI and
+  cell Java benchmark sources compile against the reorganized runtime. No new
+  performance measurement is claimed.
+- 31 native PTY acceptance checks pass using staged artifacts with verified
+  engine/terminal JAR hashes, including a second fresh launch.
+- Companion docs `83c42be`: source checks and Node 22 site build pass, with
+  62 generated pages and validated links/assets/anchors.
+- Evidence under `/workspace/audit/codebase-2026-10-12/`: logs prefixed
+  `platform-packages-`, with native artifacts in `platform-packages-pty/`.
+
+Package overview: [platform modules](../../platforms/README.md). Pending human
+review stays in draft engine #226 and docs #56; main is unchanged.
