@@ -69,12 +69,18 @@ abstract class App<C : AppConfig> protected constructor() {
     val frameCount: Long
         get() = gameplayFrames.get()
 
-    /** Pauses gameplay updates while allowing the app loop to continue handling input and rendering. */
+    /**
+     * Pauses gameplay updates while the app loop continues input and rendering.
+     * A physics tick in progress retains its starting eligibility until it completes.
+     */
     fun pause() {
         isPaused = true
     }
 
-    /** Resumes gameplay updates. */
+    /**
+     * Resumes gameplay updates, preserving earned running physics time.
+     * A physics tick in progress retains its starting eligibility until it completes.
+     */
     fun resume() {
         isPaused = false
     }
@@ -273,8 +279,9 @@ abstract class App<C : AppConfig> protected constructor() {
     }
 
     private fun performPhysicsUpdate(delta: Float) = withLoggingContext {
-        if (!isPaused) onPhysicsUpdate(this@App, delta)
-        ManagersRegistry.physicsUpdate(delta, isPaused)
+        val paused = isPaused
+        if (!paused) onPhysicsUpdate(this@App, delta)
+        ManagersRegistry.physicsUpdate(delta, paused)
     }
 
     private fun performResize(width: Int, height: Int) = withLoggingContext {

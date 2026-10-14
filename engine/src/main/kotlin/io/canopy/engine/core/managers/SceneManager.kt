@@ -84,8 +84,13 @@ class SceneManager(val physicsStep: Float = 1f / 60f, private val block: SceneMa
     private var flushing = false
     internal var pauseState: () -> Boolean = { false }
 
-    /** Application pause state. Standalone scene managers default to running. */
-    val isPaused: Boolean get() = pauseState()
+    private var physicsPauseSnapshot: Boolean? = null
+
+    /**
+     * Application pause state, held at the tick's starting value during physics traversal.
+     * Standalone scene managers default to running.
+     */
+    val isPaused: Boolean get() = physicsPauseSnapshot ?: pauseState()
 
     private var _currScene: Node<*>? = null
 
@@ -489,18 +494,27 @@ class SceneManager(val physicsStep: Float = 1f / 60f, private val block: SceneMa
         }
     }
 
-    /** Dispatches a complete physics traversal, then drains queued destruction even if callbacks fail. */
-    override fun onPhysicsUpdate(delta: Float) = updateBoundary {
-        val root = currScene ?: return@updateBoundary
+    /**
+     * Dispatches a complete physics traversal with pause eligibility fixed at entry, then drains queued destruction.
+     * Pause changes during callbacks affect the next traversal; the current tick is never split or replayed.
+     */
+    override fun onPhysicsUpdate(delta: Float) = physicsUpdate(delta, isPaused)
 
-        LogContext.with("scene" to root.name, "delta" to delta) {
-            log.trace("event" to "tick.physics") { "Physics tick" }
-
-            runPhase(TreeSystem.UpdatePhase.PhysicsPre, delta)
-
-            NodeLifetime.withOwner(root) { root.dispatchPhysicsUpdate(delta) }
-
-            runPhase(TreeSystem.UpdatePhase.PhysicsPost, delta)
+    internal fun physicsUpdate(delta: Float, paused: Boolean) {
+        val previous = physicsPauseSnapshot
+        physicsPauseSnapshot = paused
+        try {
+            updateBoundary {
+                val root = currScene ?: return@updateBoundary
+                LogContext.with("scene" to root.name, "delta" to delta) {
+                    log.trace("event" to "tick.physics") { "Physics tick" }
+                    runPhase(TreeSystem.UpdatePhase.PhysicsPre, delta)
+                    NodeLifetime.withOwner(root) { root.dispatchPhysicsUpdate(delta) }
+                    runPhase(TreeSystem.UpdatePhase.PhysicsPost, delta)
+                }
+            }
+        } finally {
+            physicsPauseSnapshot = previous
         }
     }
 

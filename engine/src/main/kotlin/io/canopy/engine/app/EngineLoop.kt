@@ -24,8 +24,8 @@ class EngineLoop(
     private var dispatching = false
     private var entered = false
     private var exited = false
-    private var physicsAccumulator = 0f
-    private var wasPaused = false
+    private var runningPhysicsAccumulator = 0f
+    private var pausedPhysicsAccumulator = 0f
 
     internal var failure: Throwable? = null
         private set
@@ -59,8 +59,9 @@ class EngineLoop(
 
     /**
      * Runs fixed-step ticks and a frame update even while paused, with real deltas in seconds.
-     * Callers decide which work remains eligible. Pause transitions discard the fractional physics
-     * remainder so gameplay and paused processing do not share accumulated time.
+     * Callers decide which work remains eligible. Running and paused time have independent accumulators;
+     * each remainder survives transitions without advancing the other state. A pause change inside a
+     * physics callback ends the burst before the next tick, retaining its unprocessed time.
      */
     @Synchronized
     fun update(delta: Float) {
@@ -69,16 +70,17 @@ class EngineLoop(
         require(delta.isFinite() && delta >= 0f) { "delta must be finite and non-negative" }
         dispatch {
             val paused = isPaused()
-            if (paused != wasPaused) physicsAccumulator = 0f
-            wasPaused = paused
-
-            physicsAccumulator += delta
+            if (paused) pausedPhysicsAccumulator += delta else runningPhysicsAccumulator += delta
+            var accumulated = if (paused) pausedPhysicsAccumulator else runningPhysicsAccumulator
             var steps = 0
             while (
-                physicsAccumulator + PHYSICS_STEP_EPSILON >= physicsStep &&
-                steps < maxPhysicsStepsPerFrame
+                accumulated + PHYSICS_STEP_EPSILON >= physicsStep &&
+                steps < maxPhysicsStepsPerFrame &&
+                isPaused() == paused
             ) {
-                physicsAccumulator = (physicsAccumulator - physicsStep).coerceAtLeast(0f)
+                accumulated = (accumulated - physicsStep).coerceAtLeast(0f)
+                // Commit before dispatch so a failed callback cannot replay an already-started tick.
+                if (paused) pausedPhysicsAccumulator = accumulated else runningPhysicsAccumulator = accumulated
                 onPhysicsUpdate(physicsStep)
                 steps++
             }
@@ -148,7 +150,8 @@ class EngineLoop(
     internal fun configurePhysicsStep(physicsStep: Float) {
         require(physicsStep.isFinite() && physicsStep > 0f) { "physicsStep must be finite and positive" }
         this.physicsStep = physicsStep
-        physicsAccumulator = 0f
+        runningPhysicsAccumulator = 0f
+        pausedPhysicsAccumulator = 0f
     }
 
     private inline fun dispatch(block: () -> Unit) {

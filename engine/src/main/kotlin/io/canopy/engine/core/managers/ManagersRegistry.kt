@@ -180,7 +180,10 @@ object ManagersRegistry {
         }
     }
 
-    /** Dispatches physics; while [paused], only scene managers process eligible nodes. */
+    /**
+     * Dispatches physics; while [paused], only scene managers process eligible nodes.
+     * Scene eligibility uses this pause snapshot for the entire tick, including callback-driven pause changes.
+     */
     fun physicsUpdate(delta: Float, paused: Boolean = false) = dispatch {
         check(!exiting) { "Cannot update managers during teardown" }
         LogContext.with("delta" to delta, "registered" to managers.size) {
@@ -192,7 +195,11 @@ object ManagersRegistry {
             val name = manager::class.simpleName ?: "UnknownManager"
             try {
                 LogContext.with("manager" to name, "delta" to delta) {
-                    manager.onPhysicsUpdate(delta)
+                    if (manager is SceneManager) {
+                        manager.physicsUpdate(delta, paused)
+                    } else {
+                        manager.onPhysicsUpdate(delta)
+                    }
                 }
             } catch (t: Throwable) {
                 log.error(
