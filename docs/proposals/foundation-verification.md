@@ -593,3 +593,35 @@ groups and 31 native terminal checks pass from the new locations. Full
 proposal Markdown links resolve, and no callers retain the former test paths.
 The manual `--prepare --build` path also succeeds when invoked from outside the
 repository, confirming default repository and relocated fixture resolution.
+
+## Preserved physics pause timing — 14 October 2026
+
+Implementation: `dbfb8d7`. The previous single-clock reset discarded earned time
+on every pause/resume transition; six focused cases failed against that behavior.
+Running and paused accumulators now preserve their independent remainders and
+capped debt. Only the current state's clock advances, keeping paused time out
+of resumed gameplay. `Always` nodes receive ticks from both clocks; their cadence
+may shift at transitions because both fractional remainders remain independent.
+
+A tick snapshots eligibility before the app physics hook and scene traversal.
+Pause/resume inside a callback completes the started tick under its original
+eligibility, then ends the burst before another tick. Remaining time belongs to
+its original clock. Snapshot restoration uses finally, including callback errors.
+Frame processing observes the updated pause state, and step configuration resets
+both accumulators. Existing public method signatures are preserved.
+
+Verification:
+
+- `./gradlew :engine:ktlintFormat test ktlintCheck build coverageReport
+  stageCentralPublication --offline --max-workers=2 --console=plain` passes:
+  600 tests, zero failures/errors/skips; 6,800 / 7,513 covered lines (90.5%).
+- Eight new regressions cover rapid toggles through both states, retained/capped
+  debt, pause changes in loop/app/node callbacks, clock reset and exception
+  cleanup. The existing transition test now checks separate retained remainders.
+- All 31 native PTY launcher checks pass with the staged runtime, including
+  pause/resume, focused controls, command capture, resize and exit restoration.
+- Companion docs `67242b1` update runtime, application and scene-manager timing.
+  Source checks and the Node 22 site build/link/anchor checks pass.
+
+The change remains on the integration branch and draft PR #226 for human review.
+It is a stabilization fix; no main merge or release publication is included.
