@@ -63,7 +63,7 @@ abstract class Node2D<N : Node2D<N>> protected constructor(name: String, block: 
     /**
      * Local scale in 2D space.
      */
-    var scale: Vector2 by nodeProperty(Vector2(1f, 1f))
+    open var scale: Vector2 by nodeProperty(Vector2(1f, 1f))
 
     /**
      * Local rotation in radians.
