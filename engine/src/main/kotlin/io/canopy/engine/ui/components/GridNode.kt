@@ -1,6 +1,7 @@
 package io.canopy.engine.ui.components
 
 import io.canopy.engine.graphics.GridContent
+import io.canopy.engine.graphics.GridStyle
 import io.canopy.engine.graphics.GridSymbol
 import io.canopy.engine.ui.*
 
@@ -16,10 +17,34 @@ class GridNode(columns: Int, rows: Int, name: String = "Grid", block: GridNode.(
     override val rows by nodeProperty(rows)
     override val role: String get() = "grid"
     private val cells by nodeProperty(mutableMapOf<Long, GridSymbol?>())
-    private var emptySymbol by nodeProperty(GridSymbol('.', UiColor.Rgb(120, 120, 120)))
+    private var customEmptySymbol by nodeProperty<GridSymbol?>(null)
+    private val emptySymbol: GridSymbol
+        get() = customEmptySymbol ?: GridSymbol(if (gridStyle == GridStyle.Dotted) '.' else ' ', gridColor)
     private var filledSymbol by nodeProperty<GridSymbol?>(null)
     private var revision by nodeProperty(0L)
     private var storedGap by nodeProperty(1)
+    private var storedGridStyle by nodeProperty(GridStyle.Dotted)
+    private var storedGridColor by nodeProperty<UiColor?>(UiColor.Rgb(120, 120, 120))
+
+    /** Selects dots or connected cell outlines. Changing this remeasures the grid without changing cell contents. */
+    override var gridStyle: GridStyle
+        get() = storedGridStyle
+        set(value) {
+            if (value != storedGridStyle) {
+                storedGridStyle = value
+                changed()
+            }
+        }
+
+    /** Neutral decoration color by default; null inherits the component foreground. Does not recolor explicit symbols. */
+    override var gridColor: UiColor?
+        get() = storedGridColor
+        set(value) {
+            if (value != storedGridColor) {
+                storedGridColor = value
+                changed()
+            }
+        }
 
     init {
         require(columns > 0 && rows > 0) { "Grid dimensions must be positive" }
@@ -42,8 +67,8 @@ class GridNode(columns: Int, rows: Int, name: String = "Grid", block: GridNode.(
 
     /** Configures empty cells without replacing explicitly set symbols. */
     fun empty(symbol: GridSymbol) {
-        if (emptySymbol != symbol) {
-            emptySymbol = symbol
+        if (customEmptySymbol != symbol) {
+            customEmptySymbol = symbol
             changed()
         }
     }
@@ -101,10 +126,10 @@ class GridNode(columns: Int, rows: Int, name: String = "Grid", block: GridNode.(
         invalidate()
     }
 
-    internal override val contentMeasureKey: Any get() = columnGap
+    internal override val contentMeasureKey: Any get() = columnGap to gridStyle
     internal override val presentationKey: Any get() = revision
     internal override fun measureContent(backend: UiBackend, available: UiSize) =
-        backend.measureGrid(columns, rows, columnGap)
+        backend.measureGrid(columns, rows, columnGap, gridStyle)
     internal override fun paintContent(backend: UiBackend, clip: UiRect, appearance: UiAppearance) =
         backend.drawGrid(this, contentBounds, clip.intersect(contentBounds), appearance)
 }

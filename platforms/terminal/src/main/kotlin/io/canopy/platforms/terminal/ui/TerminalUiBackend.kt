@@ -10,6 +10,7 @@ import com.github.ajalt.mordant.rendering.Whitespace
 import com.github.ajalt.mordant.terminal.Terminal
 import com.github.ajalt.mordant.widgets.Text
 import io.canopy.engine.graphics.GridContent
+import io.canopy.engine.graphics.GridStyle
 import io.canopy.engine.ui.UiAppearance
 import io.canopy.engine.ui.UiBackend
 import io.canopy.engine.ui.UiBorder
@@ -40,6 +41,10 @@ internal class TerminalUiBackend(private val terminal: Terminal, private val sub
     override fun drawGrid(grid: GridContent, bounds: UiRect, clip: UiRect, appearance: UiAppearance) {
         val visible = bounds.intersect(clip).intersect(UiRect(0.0, 0.0, columns.toDouble(), rows.toDouble()))
         if (visible.width <= 0 || visible.height <= 0) return
+        if (grid.gridStyle == GridStyle.Solid) {
+            drawSolidGrid(grid, bounds, visible, appearance)
+            return
+        }
         val pitch = grid.columnGap.toDouble() + 1
         val left = floor((visible.x - bounds.x) / pitch).toInt().coerceIn(0, grid.columns)
         val right = ceil((visible.x + visible.width - bounds.x) / pitch).toInt().coerceIn(left, grid.columns)
@@ -56,6 +61,51 @@ internal class TerminalUiBackend(private val terminal: Terminal, private val sub
                     false,
                     appearance.merge(UiAppearance(foreground = symbol.color))
                 )
+            }
+        }
+    }
+
+    private fun drawSolidGrid(grid: GridContent, bounds: UiRect, visible: UiRect, appearance: UiAppearance) {
+        val pitch = grid.columnGap.toDouble() + 2
+        val width = grid.columns.toDouble() * pitch
+        val height = grid.rows.toDouble() * 2
+        val lines = appearance.merge(UiAppearance(foreground = grid.gridColor))
+        // Walk only visible terminal cells, never the full logical grid or an unbounded gap.
+        for (y in ceil(visible.y).toInt() until floor(visible.y + visible.height).toInt()) {
+            val row = (y - bounds.y).toLong()
+            if (row < 0 || row > height) continue
+            for (x in ceil(visible.x).toInt() until floor(visible.x + visible.width).toInt()) {
+                val column = (x - bounds.x).toLong()
+                if (column < 0 || column > width) continue
+                val horizontal = row % 2L == 0L
+                val vertical = column.toDouble() % pitch == 0.0
+                val glyph = when {
+                    horizontal && vertical -> {
+                        val junctions = when {
+                            row == 0L -> "┌┬┐"
+                            row.toDouble() == height -> "└┴┘"
+                            else -> "├┼┤"
+                        }
+                        val edge = when {
+                            column == 0L -> 0
+                            column.toDouble() == width -> 2
+                            else -> 1
+                        }
+                        junctions[edge].toString()
+                    }
+                    horizontal -> "─"
+                    vertical -> "│"
+                    else -> null
+                }
+                var style = lines
+                val text = glyph ?: if (column.toDouble() % pitch == 1.0) {
+                    val symbol = grid[(column / pitch).toInt(), (row / 2).toInt()]
+                    style = appearance.merge(UiAppearance(foreground = symbol.color))
+                    symbol.glyph.toString()
+                } else {
+                    " "
+                }
+                drawText(text, UiRect(x.toDouble(), y.toDouble(), 1.0, 1.0), visible, false, false, style)
             }
         }
     }

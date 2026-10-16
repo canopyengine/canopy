@@ -5,6 +5,7 @@ import io.canopy.engine.core.exceptions.NodeDestroyedException
 import io.canopy.engine.core.managers.ManagersRegistry
 import io.canopy.engine.core.managers.SceneManager
 import io.canopy.engine.graphics.GridContent
+import io.canopy.engine.graphics.GridStyle
 import io.canopy.engine.graphics.GridSymbol
 import io.canopy.engine.input.InputFocus
 import io.canopy.engine.ui.components.Divider
@@ -25,9 +26,9 @@ class GridNodeTests {
         var painted = emptyList<GridSymbol>()
         var dividerBounds: UiRect? = null
         override fun measureText(text: String, maxWidth: Double, wrap: Boolean) = UiSize(text.length.toDouble(), 1.0)
-        override fun measureGrid(columns: Int, rows: Int, columnGap: Int): UiSize {
+        override fun measureGrid(columns: Int, rows: Int, columnGap: Int, gridStyle: GridStyle): UiSize {
             measurements++
-            return super.measureGrid(columns, rows, columnGap)
+            return super.measureGrid(columns, rows, columnGap, gridStyle)
         }
         override fun begin(viewport: UiSize) {
             frames++
@@ -89,6 +90,42 @@ class GridNodeTests {
         assertEquals(GridSymbol('~'), grid[1, 0])
         grid.clear()
         assertEquals(GridSymbol(' '), grid[1, 0])
+    }
+
+    @Test
+    fun `grid style changes layout and default decoration while preserving explicit content`() {
+        // Arrange
+        lateinit var grid: GridNode
+        scenes.currScene = UiRoot { node("map") { GridNode(2, 2).also { grid = it } } }
+        grid.set(1, 0, 'r')
+        ui.updateFrame()
+        val frames = backend.frames
+        val measurements = backend.measurements
+
+        // Act
+        grid.gridStyle = GridStyle.Solid
+        ui.updateFrame()
+
+        // Assert
+        assertEquals(UiRect(0.0, 0.0, 7.0, 5.0), backend.gridBounds)
+        assertEquals(listOf(' ', 'r', ' ', ' '), backend.painted.map { it.glyph })
+        assertEquals(measurements + 1, backend.measurements)
+        grid.gridStyle = GridStyle.Solid
+        ui.updateFrame()
+        assertEquals(frames + 1, backend.frames)
+        grid.gridColor = UiColor.Rgb(40, 50, 60)
+        ui.updateFrame()
+        assertEquals(measurements + 1, backend.measurements)
+        assertEquals(GridSymbol(' ', grid.gridColor), grid[0, 0])
+        assertEquals(GridSymbol('r'), grid[1, 0])
+        grid.empty('_')
+        grid.fill('~')
+        grid.clear(0, 0)
+        grid.gridStyle = GridStyle.Dotted
+        ui.updateFrame()
+        assertEquals(GridSymbol('_'), grid[0, 0])
+        assertEquals(GridSymbol('~'), grid[1, 0])
+        assertEquals(UiRect(0.0, 0.0, 3.0, 2.0), backend.gridBounds)
     }
 
     @Test

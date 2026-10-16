@@ -3,6 +3,7 @@ package io.canopy.engine.ui
 import kotlin.math.max
 import kotlin.math.min
 import io.canopy.engine.graphics.GridContent
+import io.canopy.engine.graphics.GridStyle
 
 /** Logical dimensions: cells for a terminal backend, pixels for a graphical backend. */
 data class UiSize(val width: Double, val height: Double) {
@@ -80,6 +81,16 @@ data class UiStyle(
 
 /** Platform implements metrics and primitives; containers and sizing remain shared engine behavior. */
 interface UiBackend {
+    /** Style-aware natural size; solid grids reserve a line around each cell, including the outside edges. */
+    fun measureGrid(columns: Int, rows: Int, columnGap: Int, gridStyle: GridStyle): UiSize {
+        if (gridStyle == GridStyle.Dotted) return measureGrid(columns, rows, columnGap)
+        val cell = measureText("M", Double.MAX_VALUE, false)
+        return UiSize(
+            (columns.toDouble() * (columnGap.toDouble() + 2) + 1) * cell.width,
+            (rows.toDouble() * 2 + 1) * cell.height
+        )
+    }
+
     /** Natural grid dimensions using this backend's character metrics; grids clip rather than wrap. */
     fun measureGrid(columns: Int, rows: Int, columnGap: Int): UiSize {
         val cell = measureText("M", Double.MAX_VALUE, false)
