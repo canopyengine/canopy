@@ -95,7 +95,7 @@ class GridNodeTests {
     @Test
     fun `grid style changes layout and default decoration while preserving explicit content`() {
         // Arrange
-        lateinit var grid: GridNode
+        lateinit var grid: GridNode<*>
         scenes.currScene = UiRoot { node("map") { GridNode(2, 2).also { grid = it } } }
         grid.set(1, 0, 'r')
         ui.updateFrame()
@@ -148,7 +148,7 @@ class GridNodeTests {
     @Test
     fun `grid measures itself and batches cells without remeasuring or submitting equal frames`() {
         // Arrange
-        lateinit var grid: GridNode
+        lateinit var grid: GridNode<*>
         scenes.currScene = UiRoot { node("map") { GridNode(3, 2).also { grid = it } } }
         ui.updateFrame()
         assertEquals(UiRect(0.0, 0.0, 5.0, 2.0), backend.gridBounds)
@@ -175,7 +175,7 @@ class GridNodeTests {
     @Test
     fun `grid inherits border clipping and hidden or destroyed content leaves no live grid`() {
         // Arrange
-        lateinit var grid: GridNode
+        lateinit var grid: GridNode<*>
         val root = UiRoot {
             node("map") {
                 GridNode(2, 2).also {
@@ -202,7 +202,7 @@ class GridNodeTests {
     @Test
     fun `divider fills available width without taking focus`() {
         // Arrange
-        lateinit var divider: Divider
+        lateinit var divider: Divider<*>
         val root = UiRoot { node("separator") { Divider().also { divider = it } } }
         scenes.currScene = root
 
@@ -219,7 +219,7 @@ class GridNodeTests {
     @Test
     fun `resizing clips presentation without changing grid content or dimensions`() {
         // Arrange
-        lateinit var grid: GridNode
+        lateinit var grid: GridNode<*>
         scenes.currScene = UiRoot { node("map") { GridNode(3, 2).also { grid = it } } }
         grid.set(2, 1, 'r')
         ui.updateFrame()

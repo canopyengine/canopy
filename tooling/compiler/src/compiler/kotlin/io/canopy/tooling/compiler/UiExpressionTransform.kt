@@ -57,6 +57,7 @@ internal class UiExpressionTransform(private val messages: MessageCollector) : I
                 private val enclosingFunctions = mutableListOf<IrSimpleFunction>()
                 private val structuralLocals = mutableSetOf<IrVariable>()
                 private val objectLiteralCalls = mutableSetOf<IrConstructorCall>()
+                private val nodeInitializers = mutableSetOf<IrSimpleFunction>()
                 private fun derivesFrom(type: IrType, name: String): Boolean {
                     val klass = type.classifierOrNull?.owner as? IrClass ?: return false
                     return klass.fqNameWhenAvailable?.asString() == name ||
@@ -64,6 +65,15 @@ internal class UiExpressionTransform(private val messages: MessageCollector) : I
                 }
 
                 private fun isUiNode(type: IrType): Boolean = derivesFrom(type, "io.canopy.engine.ui.UiNode")
+
+                private fun markNodeInitializer(expression: IrExpression?) {
+                    when (expression) {
+                        is IrFunctionExpression -> if (expression.function.parameters.any { isUiNode(it.type) }) {
+                            nodeInitializers += expression.function
+                        }
+                        is IrWhen -> expression.branches.forEach { markNodeInitializer(it.result) }
+                    }
+                }
                 override fun visitSimpleFunction(declaration: IrSimpleFunction): IrStatement {
                     val previous = function
                     if (previous != null) enclosingFunctions += previous
@@ -132,6 +142,7 @@ internal class UiExpressionTransform(private val messages: MessageCollector) : I
                     current.parameters.firstOrNull {
                         it.type.classFqName?.asString() == "io.canopy.engine.ui.UiScope"
                     }?.let { return it }
+                    if (current in nodeInitializers) return null
                     // UI element configuration lambdas retain the surrounding declaration scope;
                     // zero-argument action callbacks deliberately do not inherit it.
                     if (current.name.asString() != "<anonymous>" ||
@@ -141,11 +152,13 @@ internal class UiExpressionTransform(private val messages: MessageCollector) : I
                     ) {
                         return null
                     }
-                    return enclosingFunctions.asReversed().firstNotNullOfOrNull { enclosing ->
+                    for (enclosing in enclosingFunctions.asReversed()) {
+                        if (enclosing in nodeInitializers) return null
                         enclosing.parameters.firstOrNull {
                             it.type.classFqName?.asString() == "io.canopy.engine.ui.UiScope"
-                        }
+                        }?.let { return it }
                     }
+                    return null
                 }
 
                 private fun declaresUi(element: IrElement): Boolean {
@@ -331,6 +344,8 @@ internal class UiExpressionTransform(private val messages: MessageCollector) : I
                 }
 
                 override fun visitVariable(declaration: IrVariable): IrStatement {
+                    // Stored receiver callbacks are values, not inline reactive UI decorators.
+                    markNodeInitializer(declaration.initializer)
                     if (uiReceiver() != null &&
                         declaration.initializer is IrWhen &&
                         declaresUi(declaration.initializer!!)
@@ -387,6 +402,10 @@ internal class UiExpressionTransform(private val messages: MessageCollector) : I
                 }
 
                 override fun visitConstructorCall(expression: IrConstructorCall): IrExpression {
+                    if (derivesFrom(expression.type, "io.canopy.engine.core.nodes.Node")) {
+                        // Initializers run later under the constructed node's ownership, not the outer UI scope.
+                        expression.arguments.forEach(::markNodeInitializer)
+                    }
                     expression.transformChildren(this, null)
                     if (expression in objectLiteralCalls ||
                         !derivesFrom(expression.type, "io.canopy.engine.core.nodes.Node") ||

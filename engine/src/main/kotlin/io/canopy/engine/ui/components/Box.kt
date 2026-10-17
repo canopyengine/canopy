@@ -6,11 +6,19 @@ import io.canopy.engine.ui.UiNode
 import io.canopy.engine.ui.UiScope
 import io.canopy.engine.ui.UiStyle
 
-/** Extensible container that overlays children in declaration order. */
-open class Box(
+/**
+ * Extensible container that overlays children in declaration order.
+ * @param N Concrete node type exposed to its initialization block.
+ * @param block Runs once after nodeInit, before entry callbacks; not replayed on reentry.
+ */
+open class Box<N : Box<N>>(
     style: UiStyle = UiStyle(width = UiLength.Fill, height = UiLength.Fill),
     name: String = "Box",
-    block: UiScope.() -> Unit = {},
-) : UiNode<Box>(name, style, block = { if (content == null) ui(block) }) {
+    block: N.() -> Unit = {},
+    content: UiScope.() -> Unit = {},
+) : UiNode<N>(name, style, block = {
+    block()
+    if (this.content == null) ui(content)
+}) {
     internal override val kind: UiKind get() = UiKind.Box
 }

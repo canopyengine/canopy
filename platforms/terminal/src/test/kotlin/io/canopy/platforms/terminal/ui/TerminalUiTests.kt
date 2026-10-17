@@ -222,7 +222,7 @@ class TerminalUiTests {
         app.engineLoop.enter()
         var clicks = 0
         var executions = 0
-        lateinit var button: Button
+        lateinit var button: Button<*>
         val root = UiRoot { button = Button("game action") { clicks++ } }
         root.zIndex = Int.MAX_VALUE
         val scene = UiTestScene()

@@ -87,7 +87,7 @@ class InputFocusTests {
         // Arrange
         val parent = EmptyNode("root") { EmptyNode("child") }
         scenes.currScene = parent
-        val child = parent.getNode<EmptyNode>("child")
+        val child = parent.getNode<EmptyNode<*>>("child")
         var routed = 0
         focus.register(owner = child, capturesGameplay = { true }) {
             routed++

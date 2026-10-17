@@ -37,7 +37,9 @@ instead of silently changing the architecture to match an old example.
 - Public concrete Node components intended for reuse must be `open`; abstract
   bases are already extensible. Structural scopes such as Context and internal
   runtime implementation nodes remain final. Typed node helpers must accept
-  indirect subclasses of reusable built-in nodes.
+  indirect subclasses of reusable built-in nodes. Extensible node constructors
+  propagate their concrete self type in initialization blocks. Keep node configuration,
+  UI child content and action callbacks separate; configuration runs once before entry.
 - Respect the separation between engine, adapters, platforms, and tooling.
   Put backend-specific behavior in the appropriate adapter or platform.
 - Treat lifecycle order, tree membership, ownership, mutation, and threading as

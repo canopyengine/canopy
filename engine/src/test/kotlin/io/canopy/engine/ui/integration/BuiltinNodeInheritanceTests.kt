@@ -7,6 +7,7 @@ import io.canopy.engine.commands.CommandPrompt
 import io.canopy.engine.commands.CommandPromptHost
 import io.canopy.engine.commands.CommandPromptPresentation
 import io.canopy.engine.commands.CommandPromptSnapshot
+import io.canopy.engine.core.exceptions.InvalidNodeOperationException
 import io.canopy.engine.core.exceptions.NodeDestroyedException
 import io.canopy.engine.core.flows.Context
 import io.canopy.engine.core.flows.events.Signal
@@ -29,40 +30,62 @@ class BuiltinNodeInheritanceTests {
         override fun defaultConfig() = AppConfig()
         override fun internalLaunch(config: AppConfig, vararg args: String) = Unit
     }
-    private class World : EmptyNode("world")
-    private class Fish : EmptyNode2D("fish") {
+    private class World(block: World.() -> Unit = {}) : EmptyNode<World>("world", block)
+    private class Fish(block: Fish.() -> Unit = {}) : EmptyNode2D<Fish>("fish", block) {
         var energy = 10
     }
-    private class Console : CommandPrompt("console") {
+    private class Console(block: Console.() -> Unit = {}) : CommandPrompt<Console>("console", block) {
         init {
             command("feed") { execute { reply("fed") } }
         }
     }
-    private class Aquarium(block: UiScope.() -> Unit) : UiRoot("aquarium", block)
-    private class Stack(block: UiScope.() -> Unit) : Column(name = "stack", block = block)
-    private class Controls(block: UiScope.() -> Unit) : Row(name = "controls", block = block)
-    private class Panel(block: UiScope.() -> Unit) :
-        Box(
+    private class Aquarium(block: Aquarium.() -> Unit = {}, content: UiScope.() -> Unit) :
+        UiRoot<Aquarium>("aquarium", block = block, content = content)
+    private class Stack(block: Stack.() -> Unit = {}, content: UiScope.() -> Unit) :
+        Column<Stack>(name = "stack", block = block, content = content)
+    private class Controls(block: Controls.() -> Unit = {}, content: UiScope.() -> Unit) :
+        Row<Controls>(name = "controls", block = block, content = content)
+    private class Panel(block: Panel.() -> Unit = {}, content: UiScope.() -> Unit) :
+        Box<Panel>(
             style = UiStyle(width = UiLength.Content, height = UiLength.Content),
             name = "panel",
-            block = block
+            block = block,
+            content = content
         )
-    private class Status(food: Signal<Int>) : Text("", name = "status") {
+    private class Status(food: Signal<Int>, block: Status.() -> Unit = {}) :
+        Text<Status>("", name = "status", block = block) {
         private val food = food
         override fun onEnterTree() {
             super.onEnterTree()
             effect { text = "Food: ${food()}" }
         }
     }
-    private class Feed(onClick: () -> Unit) : Button("Feed", name = "feed", onClick = onClick) {
+    private class Feed(block: Feed.() -> Unit = {}, onClick: () -> Unit) :
+        Button<Feed>("Feed", name = "feed", block = block, onClick = onClick) {
         var updates = 0
         override fun onUpdate(delta: Float) {
             super.onUpdate(delta)
             updates++
         }
     }
-    private class Tank : GridNode(2, 1, name = "tank")
-    private class Separator : Divider(name = "separator")
+    private class Tank(block: Tank.() -> Unit = {}) : GridNode<Tank>(2, 1, name = "tank", block = block)
+    private class Separator(block: Separator.() -> Unit = {}) : Divider<Separator>(name = "separator", block = block)
+
+    private open class Habitat<N : Habitat<N>>(block: N.() -> Unit = {}) : GridNode<N>(10, 10, block = block) {
+        var capacity = 6
+        override fun nodeInit() {
+            super.nodeInit()
+            gridColor = UiColor.Rgb(0, 100, 200)
+        }
+    }
+    private class Reef(block: Reef.() -> Unit = {}) : Habitat<Reef>(block) {
+        var corals = 1
+        var enteredWith = ""
+        override fun onEnterTree() {
+            super.onEnterTree()
+            enteredWith = "$capacity/$corals"
+        }
+    }
 
     private class Backend : UiBackend {
         val labels = mutableListOf<String>()
@@ -121,6 +144,172 @@ class BuiltinNodeInheritanceTests {
     fun cleanup() = ManagersRegistry.exit()
 
     @Test
+    fun `every UI component forwards its subclass configuration without replacing content or actions`() {
+        // Arrange
+        val food = signal(owner = null, 0)
+        val configured = mutableListOf<String>()
+        lateinit var feed: Feed
+        lateinit var tank: Tank
+        val root = Aquarium(block = {
+            configured += "root"
+            zIndex = 2
+        }) {
+            Stack(block = { configured += "column" }) {
+                Panel(block = { configured += "box" }) {
+                    Status(food) { configured += "text" }
+                }
+                Controls(block = { configured += "row" }) {
+                    feed = Feed(block = {
+                        configured += "button"
+                        updates = 4
+                    }) { food.update { it + 1 } }
+                }
+                Separator { configured += "divider" }
+                tank = Tank {
+                    configured += "grid"
+                    columnGap = 0
+                }
+            }
+        }
+        assertTrue(configured.isEmpty())
+
+        // Act
+        scenes.currScene = root
+        feed.activate()
+        ui.updateFrame()
+
+        // Assert
+        assertEquals(listOf("root", "column", "box", "text", "row", "button", "divider", "grid"), configured)
+        assertEquals(2, root.zIndex)
+        assertEquals(4, feed.updates)
+        assertEquals(0, tank.columnGap)
+        assertEquals(listOf("Food: 1", "Feed"), backend.labels)
+        root.nodeExitTree()
+        root.buildTree()
+        assertEquals(8, configured.size)
+        food.dispose()
+    }
+
+    @Test
+    fun `multi level receiver block runs after subclass initialization and defaults and retains identity`() {
+        // Arrange
+        val shown = signal(owner = null, true)
+        val desired = signal(owner = null, 3)
+        var configured = 0
+        lateinit var reef: Reef
+        val green = UiColor.Rgb(40, 180, 80)
+        val root = UiRoot {
+            if (shown()) {
+                reef = Reef {
+                    configured++
+                    capacity = desired()
+                    corals = 4
+                    gridColor = green
+                }
+            }
+        }
+        scenes.currScene = root
+        val first = reef
+        ui.updateFrame()
+
+        // Act / Assert
+        assertEquals("3/4", reef.enteredWith)
+        assertEquals(green, reef.gridColor)
+        desired.update { 8 }
+        ui.updateFrame()
+        assertEquals(1, configured)
+        assertSame(first, reef)
+        assertEquals(3, reef.capacity)
+        root.nodeExitTree()
+        root.buildTree()
+        assertEquals(1, configured)
+        shown.update { false }
+        ui.updateFrame()
+        scenes.onUpdate(0f)
+        assertTrue(first.isFreed)
+        shown.update { true }
+        ui.updateFrame()
+        assertEquals(2, configured)
+        assertNotSame(first, reef)
+        assertEquals("8/4", reef.enteredWith)
+        shown.dispose()
+        desired.dispose()
+    }
+
+    @Test
+    fun `stored receiver blocks initialize once rather than installing outer UI property bindings`() {
+        // Arrange
+        val red = UiColor.Rgb(220, 40, 40)
+        val color = signal(owner = null, red)
+        lateinit var reef: Reef
+        val root = UiRoot {
+            val setup: Reef.() -> Unit = {
+                style = UiStyle(appearance = UiAppearance(foreground = color()))
+            }
+            reef = Reef(block = setup)
+        }
+        scenes.currScene = root
+        ui.updateFrame()
+
+        // Act
+        color.update { UiColor.Rgb(40, 220, 40) }
+        ui.updateFrame()
+
+        // Assert
+        assertEquals(red, reef.style.appearance.foreground)
+        color.dispose()
+    }
+
+    @Test
+    fun `root configuration precedes child composition`() {
+        // Arrange
+        lateinit var root: Aquarium
+        root = Aquarium(block = { zIndex = 7 }) {
+            Text("Layer: ${root.zIndex}")
+        }
+
+        // Act
+        scenes.currScene = root
+        ui.updateFrame()
+
+        // Assert
+        assertEquals(listOf("Layer: 7"), backend.labels)
+    }
+
+    @Test
+    fun `UI initializer cannot escape its composition guard through the surrounding scope`() {
+        // Arrange
+        lateinit var reef: Reef
+        val root = UiRoot {
+            reef = Reef {
+                assertFailsWith<InvalidNodeOperationException> { EmptyNode("decoration") }
+            }
+        }
+
+        // Act
+        scenes.currScene = root
+
+        // Assert
+        assertTrue(reef.children.isEmpty())
+        assertEquals(listOf(reef), root.children.values.toList())
+    }
+
+    @Test
+    fun `inferred direct grid construction preserves its self returning helpers`() {
+        // Arrange
+        val grid = GridNode(10, 10) { columnGap = 0 }
+
+        // Act
+        val prefab = grid.asPrefab()
+        prefab.buildTree()
+
+        // Assert
+        assertSame(grid, prefab)
+        assertEquals(10, prefab.columns)
+        assertEquals(0, prefab.columnGap)
+    }
+
+    @Test
     fun `built in subclasses retain UI composition actions state and lifecycle`() {
         // Arrange
         val food = signal(owner = null, 0)
@@ -167,14 +356,21 @@ class BuiltinNodeInheritanceTests {
     @Test
     fun `typed lookup patch and behavior helpers accept subclasses of concrete nodes`() {
         // Arrange
-        val world = World()
+        val world = World { addGroup("worlds") }
         val settings = Context("settings") { provide("difficulty") { "cozy" } }
-        val fish = Fish()
+        val fish = Fish {
+            energy = 15
+            EmptyNode("inventory")
+        }
+        assertEquals(10, fish.energy)
         world.addChild(settings)
         settings.addChild(fish)
         scenes.currScene = world
 
         // Act / Assert
+        assertEquals(15, fish.energy)
+        assertSame(fish, fish.getNode<EmptyNode<*>>("inventory").parent)
+        assertTrue("worlds" in world.groups)
         assertSame(fish, world.getNode<Fish>("fish"))
         assertEquals("cozy", fish.fromContext<String>("difficulty"))
         assertSame(fish, world.getNodeOrNull<Fish>("fish"))
@@ -201,7 +397,7 @@ class BuiltinNodeInheritanceTests {
     @Test
     fun `command prompt subclass keeps command registration and owned cleanup`() {
         // Arrange
-        val console = Console()
+        val console = Console { prompt = "aquarium> " }
         scenes.currScene = console
 
         // Act
@@ -209,6 +405,7 @@ class BuiltinNodeInheritanceTests {
         console.submit("feed")
 
         // Assert
+        assertEquals("aquarium> ", console.prompt)
         assertTrue(console.isOpen)
         assertTrue(console.transcript.any { it.contains("fed") })
         console.queueFree()

@@ -10,7 +10,7 @@ internal class TerminalCommandPresentation(
     private val output: (String) -> Unit,
     private val ui: TerminalCommandUi,
 ) : CommandPromptPresentation {
-    override fun bind(owner: CommandPrompt?) = ui.bind(owner)
+    override fun bind(owner: CommandPrompt<*>?) = ui.bind(owner)
 
     override val isLineInput: Boolean get() = lineMode()
     private var previousLines = emptyList<String>()

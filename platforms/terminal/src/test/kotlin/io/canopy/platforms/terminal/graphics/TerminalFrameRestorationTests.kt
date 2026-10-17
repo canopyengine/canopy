@@ -489,7 +489,7 @@ class TerminalFrameRestorationTests {
     private fun start(
         configure: TerminalApp.() -> Unit = {},
         write: (String) -> Unit = output::add,
-    ): Triple<TerminalApp, CommandPromptHost, CommandPrompt> {
+    ): Triple<TerminalApp, CommandPromptHost, CommandPrompt<*>> {
         val app = TerminalApp(terminal, write, { viewport })
         app.commandPanelHeightFraction = 1.0
         this.app = app

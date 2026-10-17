@@ -42,9 +42,9 @@ public class NodeCleanupBenchmark {
                 scenes.addSystem(system);
                 scenes.onEnter();
                 long created = System.nanoTime();
-                ArrayList<EmptyNode2D> nodes = new ArrayList<>(count);
+                ArrayList<EmptyNode2D<?>> nodes = new ArrayList<>(count);
                 for (int i = 0; i < count; i++) {
-                    EmptyNode2D node = new EmptyNode2D("node-" + i, ignored -> Unit.INSTANCE);
+                    EmptyNode2D<?> node = new EmptyNode2D<>("node-" + i, ignored -> Unit.INSTANCE);
                     nodes.add(node);
                     if (i != 0) nodes.get((i - 1) / 8).addChild(node);
                 }
@@ -83,9 +83,9 @@ public class NodeCleanupBenchmark {
             ReadingSystem system = new ReadingSystem();
             scenes.addSystem(system);
             scenes.onEnter();
-            ArrayList<EmptyNode2D> nodes = new ArrayList<>(count);
+            ArrayList<EmptyNode2D<?>> nodes = new ArrayList<>(count);
             for (int i = 0; i < count; i++) {
-                EmptyNode2D node = new EmptyNode2D("node-" + i, ignored -> Unit.INSTANCE);
+                EmptyNode2D<?> node = new EmptyNode2D<>("node-" + i, ignored -> Unit.INSTANCE);
                 nodes.add(node);
                 if (i != 0) nodes.get((i - 1) / 8).addChild(node);
             }

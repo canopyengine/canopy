@@ -9,8 +9,12 @@ import io.canopy.engine.core.nodes.core.NodeRef
 import io.canopy.engine.core.reactive.asSignal
 import io.canopy.engine.graphics.managers.CameraManager
 
-/** Extensible orthographic camera node with optional target following, smoothing, zoom, and position limits. */
-open class Camera2D(
+/**
+ * Extensible orthographic camera node with optional target following, smoothing, zoom, and position limits.
+ * @param N Concrete node type exposed to its initialization block.
+ * @param block Runs once after nodeInit, before entry callbacks; not replayed on reentry.
+ */
+open class Camera2D<N : Camera2D<N>>(
     name: String = "Camera2D",
     // Specific props
     active: Boolean = true,
@@ -19,8 +23,8 @@ open class Camera2D(
     var enableSmoothing: Boolean = true,
     var smoothingSpeed: Float = 8f,
     // DSL
-    block: Camera2D.() -> Unit = {},
-) : Node<Camera2D>(
+    block: N.() -> Unit = {},
+) : Node<N>(
     name,
     block
 ) {

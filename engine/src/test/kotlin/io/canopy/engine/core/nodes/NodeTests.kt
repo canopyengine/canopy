@@ -40,10 +40,10 @@ class NodeTests {
         scene.buildTree()
 
         assertEquals(2, scene.children.size)
-        assertSame(scene, scene.getNode<EmptyNode>("child-b").parent)
+        assertSame(scene, scene.getNode<EmptyNode<*>>("child-b").parent)
         assertSame(
-            scene.getNode<EmptyNode>("child-b"),
-            scene.getNode<EmptyNode>("child-b/child-c").parent
+            scene.getNode<EmptyNode<*>>("child-b"),
+            scene.getNode<EmptyNode<*>>("child-b/child-c").parent
         )
     }
 
@@ -53,7 +53,7 @@ class NodeTests {
         val childCount: MutableMap<String, Int> = mutableMapOf()
 
         val lambdaBehavior =
-            createBehavior<EmptyNode>(
+            createBehavior<EmptyNode<*>>(
                 onReady = {
                     val parent = parent ?: return@createBehavior
                     childCount.merge(parent.name, 1) { old, new -> old + new }
@@ -93,7 +93,7 @@ class NodeTests {
         val callOrder = mutableListOf<String>()
 
         val behaviour =
-            createBehavior<EmptyNode>(
+            createBehavior<EmptyNode<*>>(
                 onReady = { callOrder += name }
             )
 
@@ -131,7 +131,7 @@ class NodeTests {
         var nPhysicsTicks = 0
 
         val behavior =
-            createBehavior<EmptyNode>(
+            createBehavior<EmptyNode<*>>(
                 onUpdate = { nTicks++ },
                 onPhysicsUpdate = { nPhysicsTicks++ }
             )
@@ -163,7 +163,7 @@ class NodeTests {
         var wasCalled = false
 
         val behavior =
-            createBehavior<EmptyNode>(
+            createBehavior<EmptyNode<*>>(
                 onReady = { wasCalled = true }
             )
 
@@ -185,7 +185,7 @@ class NodeTests {
         var wasCalled = false
 
         val behavior =
-            createBehavior<EmptyNode>(
+            createBehavior<EmptyNode<*>>(
                 onExitTree = { wasCalled = true }
             )
 
@@ -213,7 +213,7 @@ class NodeTests {
 
         tree.buildTree()
 
-        val child = tree.getNode<EmptyNode>("child")
+        val child = tree.getNode<EmptyNode<*>>("child")
         assertNotNull(child)
 
         child.queueFree()
@@ -254,14 +254,14 @@ class NodeTests {
         }
 
         val node = CustomScene {
-            patch<EmptyNode2D>("./empty") {
+            patch<EmptyNode2D<*>>("./empty") {
                 name = "patched"
                 position += Vector2(100f, 100f)
             }
         }
         node.buildTree()
 
-        val child = node.getNode<EmptyNode2D>("./patched")
+        val child = node.getNode<EmptyNode2D<*>>("./patched")
 
         assertEquals("patched", child.name)
         assertEquals(Vector2(100f, 100f), child.position)
@@ -322,7 +322,7 @@ class NodeTests {
     fun `children can be added during update`() {
         val root = EmptyNode("root")
         val child = EmptyNode("child")
-        child.behavior = createBehavior<EmptyNode>(
+        child.behavior = createBehavior<EmptyNode<*>>(
             onUpdate = { root.addChild(EmptyNode("added")) }
         )(child)
         root.addChild(child)
@@ -336,12 +336,12 @@ class NodeTests {
     fun `replacing behavior exits old and enters new behavior`() {
         val calls = mutableListOf<String>()
         val node = EmptyNode("root")
-        node.behavior = createBehavior<EmptyNode>(
+        node.behavior = createBehavior<EmptyNode<*>>(
             onExitTree = { calls += "old-exit" }
         )(node)
         node.buildTree()
 
-        node.behavior = createBehavior<EmptyNode>(
+        node.behavior = createBehavior<EmptyNode<*>>(
             onEnterTree = { calls += "new-enter" }
         )(node)
 

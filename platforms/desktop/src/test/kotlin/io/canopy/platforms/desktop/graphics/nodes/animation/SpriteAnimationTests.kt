@@ -41,7 +41,7 @@ class SpriteAnimationTests {
     fun `should create empty animation`() {
         val emptyNode =
             EmptyNode("root") {
-                AnimatedSprite2D<TextureRegion>("sprite")
+                AnimatedSprite2D("sprite")
                 AnimationPlayer("player")
             }
 
@@ -57,7 +57,7 @@ class SpriteAnimationTests {
         val animation =
             Animation("animation", 1f) {
                 val animatedSprite =
-                    emptyNode.getNode<AnimatedSprite2D<TextureRegion>>("sprite")
+                    emptyNode.getNode<AnimatedSprite2D<*, TextureRegion>>("sprite")
 
                 SpriteTrack(animatedSprite, frames) {
                     keyFrame(0.2f, 0)

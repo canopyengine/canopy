@@ -5,18 +5,22 @@ import io.canopy.engine.core.nodes.Node2D
 import io.canopy.platforms.desktop.graphics.systems.RenderSystem
 import ktx.log.logger
 
-/** Extensible node exposing an optional texture region used as the current frame by RenderSystem. */
-open class AnimatedSprite2D<T : TextureRegion>(
+/**
+ * Extensible node exposing an optional texture region used as the current frame by RenderSystem.
+ * @param N Concrete node type exposed to its initialization block.
+ * @param block Runs once after nodeInit, before entry callbacks; not replayed on reentry.
+ */
+open class AnimatedSprite2D<N : AnimatedSprite2D<N, T>, T : TextureRegion>(
     name: String,
     // Node base props
-    block: AnimatedSprite2D<*>.() -> Unit = {},
-) : Node2D<AnimatedSprite2D<T>>(
+    block: N.() -> Unit = {},
+) : Node2D<N>(
     name,
     block
 ) {
     var currFrame: T? = null
 
-    private val logger = logger<AnimatedSprite2D<T>>()
+    private val logger = logger<AnimatedSprite2D<*, T>>()
 
     init {
         if (!sceneManager.hasSystem(

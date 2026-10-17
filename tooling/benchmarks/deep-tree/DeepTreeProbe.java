@@ -7,7 +7,7 @@ import io.canopy.engine.input.events.TextInputEvent;
 import kotlin.Unit;
 
 public final class DeepTreeProbe {
-    private static void operation(String operation, EmptyNode root, SceneManager manager) {
+    private static void operation(String operation, EmptyNode<?> root, SceneManager manager) {
         switch (operation) {
             case "entry":
                 root.nodeEnterTree();
@@ -51,8 +51,8 @@ public final class DeepTreeProbe {
             SceneManager manager = new SceneManager();
             ManagersRegistry.INSTANCE.register(manager);
             manager.onEnter();
-            EmptyNode root = new EmptyNode("r", node -> Unit.INSTANCE);
-            EmptyNode cursor = root;
+            EmptyNode<?> root = new EmptyNode<>("r", node -> Unit.INSTANCE);
+            EmptyNode<?> cursor = root;
             if (!operation.equals("entry")) {
                 if (operation.equals("destroy")) {
                     root.nodeEnterTree();
@@ -61,7 +61,7 @@ public final class DeepTreeProbe {
                 }
             }
             for (int index = 1; index < nodes; index++) {
-                EmptyNode child = new EmptyNode(shape.equals("chain") ? "x" : "n" + index, node -> Unit.INSTANCE);
+                EmptyNode<?> child = new EmptyNode<>(shape.equals("chain") ? "x" : "n" + index, node -> Unit.INSTANCE);
                 (shape.equals("chain") ? cursor : root).addChild(child);
                 cursor = child;
             }

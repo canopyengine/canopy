@@ -66,7 +66,7 @@ class UiMouseTests {
     @Test
     fun `hover enters once leaves once and never changes keyboard focus or activates buttons`() {
         // Arrange
-        lateinit var button: Button
+        lateinit var button: Button<*>
         var actions = 0
         var entries = 0
         var exits = 0
@@ -135,7 +135,7 @@ class UiMouseTests {
     @Test
     fun `exclusive editor clears hover and closing it requires fresh pointer input`() {
         // Arrange
-        lateinit var button: Button
+        lateinit var button: Button<*>
         val root = UiRoot { button = Button("action") {} }
         scenes.currScene = root
         ui.updateFrame()
@@ -164,7 +164,7 @@ class UiMouseTests {
     @Test
     fun `hover callbacks may destroy their root without retaining or painting destroyed nodes`() {
         // Arrange
-        lateinit var button: Button
+        lateinit var button: Button<*>
         val root = UiRoot { button = Button("action") {} }
         scenes.currScene = root
         val listener = button.mouseEntered.connect {
@@ -186,8 +186,8 @@ class UiMouseTests {
     @Test
     fun `hover follows root layers clipping and disabled button style`() {
         // Arrange
-        lateinit var back: Button
-        lateinit var front: Button
+        lateinit var back: Button<*>
+        lateinit var front: Button<*>
         val world = EmptyNode("world")
         val lower = UiRoot("lower") { back = Button("back") {} }
         val upper = UiRoot("upper") { front = Button("front") {} }.also { it.layer = UiLayer.Overlay }
@@ -212,7 +212,7 @@ class UiMouseTests {
     @Test
     fun `ordinary elements ignore pointers and buttons accept only primary presses`() {
         var actions = 0
-        lateinit var button: Button
+        lateinit var button: Button<*>
         scenes.currScene = UiRoot {
             button = Button("action") { actions++ }.also {
                 it.style = UiStyle(width = UiLength.Fixed(10.0), height = UiLength.Fixed(3.0))

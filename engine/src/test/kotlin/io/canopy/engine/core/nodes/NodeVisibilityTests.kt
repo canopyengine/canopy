@@ -45,8 +45,8 @@ class NodeVisibilityTests {
             EmptyNode("visible")
         }
         scenes.currScene = root
-        val hidden = root.getNode<EmptyNode>("hidden")
-        val visible = root.getNode<EmptyNode>("visible")
+        val hidden = root.getNode<EmptyNode<*>>("hidden")
+        val visible = root.getNode<EmptyNode<*>>("visible")
         val child = EmptyNode("child")
         hidden.addChild(child)
         // Act
@@ -92,8 +92,8 @@ class NodeVisibilityTests {
             EmptyNode("second")
         }
         scenes.currScene = root
-        val first = root.getNode<EmptyNode>("first")
-        val second = root.getNode<EmptyNode>("second")
+        val first = root.getNode<EmptyNode<*>>("first")
+        val second = root.getNode<EmptyNode<*>>("second")
         val extra = EmptyNode("extra")
         root.markChildrenManaged()
         // Act and Assert

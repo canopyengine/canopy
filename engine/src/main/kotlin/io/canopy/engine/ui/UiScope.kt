@@ -14,7 +14,7 @@ import io.canopy.engine.ui.components.Text as TextNode
 /** Declarative construction receiver. The compiler lowers property expressions and structural regions independently. */
 @DeclarativeUi
 @Suppress("ktlint:standard:function-naming")
-class UiScope internal constructor(private val root: UiRoot, private val parent: Node<*>) {
+class UiScope internal constructor(private val root: UiRoot<*>, private val parent: Node<*>) {
     private val retained = linkedMapOf<Any, Entry>()
     private var requested = mutableListOf<Any>()
     private var counter = 0
@@ -124,7 +124,7 @@ class UiScope internal constructor(private val root: UiRoot, private val parent:
                     require(
                         added == listOf(it) &&
                             it.parent === parent &&
-                            it !is UiRoot &&
+                            it !is UiRoot<*> &&
                             it !is UiRegion
                     ) {
                         "A node declaration must construct exactly one fresh child in this scope"
@@ -143,18 +143,18 @@ class UiScope internal constructor(private val root: UiRoot, private val parent:
     private fun slot(prefix: String) = "$prefix:${counter++}"
 
     /** Universal horizontal container. */
-    fun Row(style: UiStyle = UiStyle(width = UiLength.Fill), block: UiScope.() -> Unit): RowNode =
-        container(UiKind.Row, style, block) as RowNode
+    fun Row(style: UiStyle = UiStyle(width = UiLength.Fill), block: UiScope.() -> Unit): RowNode<*> =
+        container(UiKind.Row, style, block) as RowNode<*>
 
     /** Universal vertical container. */
-    fun Column(style: UiStyle = UiStyle(width = UiLength.Fill), block: UiScope.() -> Unit): ColumnNode =
-        container(UiKind.Column, style, block) as ColumnNode
+    fun Column(style: UiStyle = UiStyle(width = UiLength.Fill), block: UiScope.() -> Unit): ColumnNode<*> =
+        container(UiKind.Column, style, block) as ColumnNode<*>
 
     /** Universal overlapping container. */
     fun Box(
         style: UiStyle = UiStyle(width = UiLength.Fill, height = UiLength.Fill),
         block: UiScope.() -> Unit,
-    ): BoxNode = container(UiKind.Box, style, block) as BoxNode
+    ): BoxNode<*> = container(UiKind.Box, style, block) as BoxNode<*>
     private fun container(kind: UiKind, style: UiStyle, block: UiScope.() -> Unit): UiNode<*> {
         val element = element(slot(kind.name), kind)
         element.style = style
@@ -164,31 +164,31 @@ class UiScope internal constructor(private val root: UiRoot, private val parent:
     }
 
     /** Text primitive. With the compiler plugin, signal reads in [value] update this property only. */
-    fun Text(value: String): TextNode = (element(slot("Text"), UiKind.Text) as TextNode).also { it.text = value }
+    fun Text(value: String): TextNode<*> = (element(slot("Text"), UiKind.Text) as TextNode<*>).also { it.text = value }
 
     /** Action primitive, invoked by keyboard focus or explicit activation. */
-    fun Button(label: String, onClick: () -> Unit): ButtonNode =
-        (element(slot("Button"), UiKind.Button) as ButtonNode).also {
+    fun Button(label: String, onClick: () -> Unit): ButtonNode<*> =
+        (element(slot("Button"), UiKind.Button) as ButtonNode<*>).also {
             it.text = label
             it.action = onClick
         }
 
     /** Compiler ABI: installs a targeted text expression observer. */
-    fun bindText(site: String, value: () -> String): TextNode = bind(site, UiKind.Text, value, null) as TextNode
+    fun bindText(site: String, value: () -> String): TextNode<*> = bind(site, UiKind.Text, value, null) as TextNode<*>
 
     /** Compiler ABI: installs a targeted button-label observer while leaving event callbacks unobserved. */
-    fun bindButtonText(site: String, label: () -> String, onClick: () -> Unit): ButtonNode =
-        bind(site, UiKind.Button, label, onClick) as ButtonNode
+    fun bindButtonText(site: String, label: () -> String, onClick: () -> Unit): ButtonNode<*> =
+        bind(site, UiKind.Button, label, onClick) as ButtonNode<*>
     private fun bind(site: String, kind: UiKind, value: () -> String, action: (() -> Unit)?): UiNode<*> {
         val element = element(site, kind)
-        if (element is ButtonNode) element.action = action ?: {}
+        if (element is ButtonNode<*>) element.action = action ?: {}
         val entry = retained[site]!!
         entry.observer?.dispose()
         entry.observer = UiObserver(element) {
             val next = value()
             when (element) {
-                is TextNode -> element.text = next
-                is ButtonNode -> element.text = next
+                is TextNode<*> -> element.text = next
+                is ButtonNode<*> -> element.text = next
             }
         }
         return element
@@ -213,16 +213,16 @@ class UiScope internal constructor(private val root: UiRoot, private val parent:
     }
 
     /** Compiler ABI for a targeted reactive row style. */
-    fun bindRow(site: String, style: () -> UiStyle, block: UiScope.() -> Unit): RowNode =
-        bindContainer(site, UiKind.Row, style, block) as RowNode
+    fun bindRow(site: String, style: () -> UiStyle, block: UiScope.() -> Unit): RowNode<*> =
+        bindContainer(site, UiKind.Row, style, block) as RowNode<*>
 
     /** Compiler ABI for a targeted reactive column style. */
-    fun bindColumn(site: String, style: () -> UiStyle, block: UiScope.() -> Unit): ColumnNode =
-        bindContainer(site, UiKind.Column, style, block) as ColumnNode
+    fun bindColumn(site: String, style: () -> UiStyle, block: UiScope.() -> Unit): ColumnNode<*> =
+        bindContainer(site, UiKind.Column, style, block) as ColumnNode<*>
 
     /** Compiler ABI for a targeted reactive box style. */
-    fun bindBox(site: String, style: () -> UiStyle, block: UiScope.() -> Unit): BoxNode =
-        bindContainer(site, UiKind.Box, style, block) as BoxNode
+    fun bindBox(site: String, style: () -> UiStyle, block: UiScope.() -> Unit): BoxNode<*> =
+        bindContainer(site, UiKind.Box, style, block) as BoxNode<*>
     private fun bindContainer(site: String, kind: UiKind, style: () -> UiStyle, block: UiScope.() -> Unit): UiNode<*> {
         val element = element(site, kind)
         val scope = element.content ?: UiScope(root, element).also { element.content = it }
@@ -267,7 +267,7 @@ class UiScope internal constructor(private val root: UiRoot, private val parent:
     /** Compiler ABI for action eligibility. */
     fun bindEnabled(site: String, element: UiNode<*>, value: () -> Boolean) = property(site, element) {
         val next = value()
-        require(element is ButtonNode)
+        require(element is ButtonNode<*>)
         if (element.enabled != next) {
             element.enabled = next
             root.dirty = true
@@ -324,7 +324,7 @@ class UiScope internal constructor(private val root: UiRoot, private val parent:
     private fun layoutChildren(node: Node<*>, action: (UiNode<*>) -> Unit) {
         if (!node.isValid) return
         when (node) {
-            is UiRoot -> Unit
+            is UiRoot<*> -> Unit
             is UiNode<*> -> action(node)
             else -> node.children.values.forEach { layoutChildren(it, action) }
         }

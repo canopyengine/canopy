@@ -37,11 +37,11 @@ abstract class UiNode<N : UiNode<N>> protected constructor(
     internal open val presentationKey: Any? get() = null
     internal open fun measureContent(backend: UiBackend, available: UiSize): UiSize? = null
     internal open fun paintContent(backend: UiBackend, clip: UiRect, appearance: UiAppearance) = Unit
-    internal val root: UiRoot
+    internal val root: UiRoot<*>
         get() {
             var node: Node<*>? = this
             while (node != null) {
-                if (node is UiRoot) return node
+                if (node is UiRoot<*>) return node
                 node = node.parent
             }
             error("UI components must be attached beneath a UiRoot before layout or composition")
@@ -155,9 +155,9 @@ abstract class UiNode<N : UiNode<N>> protected constructor(
         markChildrenManaged()
     }
 
-    /** Builds the component's retained children once during initialization. */
+    /** Builds retained children once from nodeInit or the node's initialization block. */
     protected fun ui(block: UiScope.() -> Unit) {
-        check(state("compose component").initializing) { "Compose UI children from nodeInit, once per component" }
+        check(state("compose component").initializing) { "Compose UI children once during node initialization" }
         check(content == null) { "A UI component has one composition builder" }
         markChildrenManaged()
         val scope = UiScope(root, this)
@@ -169,7 +169,7 @@ abstract class UiNode<N : UiNode<N>> protected constructor(
     internal fun invalidate() {
         var node: Node<*>? = this
         while (node != null) {
-            if (node is UiRoot) {
+            if (node is UiRoot<*>) {
                 node.dirty = true
                 return
             }

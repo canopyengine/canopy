@@ -34,7 +34,7 @@ class TerminalGridTests {
             register(InputFocus())
             register(ui)
         }
-        lateinit var grid: GridNode
+        lateinit var grid: GridNode<*>
         scenes.currScene = UiRoot {
             Column {
                 node("grid") { GridNode(3, 2).also { grid = it } }

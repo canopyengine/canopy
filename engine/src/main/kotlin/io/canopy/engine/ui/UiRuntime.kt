@@ -24,7 +24,7 @@ import io.canopy.engine.ui.components.Button
 @Target(AnnotationTarget.CLASS)
 annotation class DeclarativeUi
 
-internal class UiRegion(root: UiRoot, name: String) : Node<UiRegion>(name, skipOnSearch = true) {
+internal class UiRegion(root: UiRoot<*>, name: String) : Node<UiRegion>(name, skipOnSearch = true) {
     internal val root by nodeProperty(root)
     internal var content by nodeProperty<UiScope?>(null)
     override fun nodeInit() {
@@ -32,9 +32,17 @@ internal class UiRegion(root: UiRoot, name: String) : Node<UiRegion>(name, skipO
     }
 }
 
-/** An extensible retained declarative tree initialized once; viewport changes recompute its universal layout. */
-open class UiRoot(name: String = "UiRoot", block: UiScope.() -> Unit) :
-    UiNode<UiRoot>(name, UiStyle(width = UiLength.Fill, height = UiLength.Fill)) {
+/**
+ * An extensible retained declarative tree initialized once; viewport changes recompute its universal layout.
+ * @param N Concrete root type exposed to its initialization block.
+ * @param block Configures the root once after nodeInit, before composing content and entering the tree.
+ * @param content Retained child composition, separate from root configuration.
+ */
+open class UiRoot<N : UiRoot<N>>(name: String = "UiRoot", block: N.() -> Unit = {}, content: UiScope.() -> Unit = {}) :
+    UiNode<N>(name, UiStyle(width = UiLength.Fill, height = UiLength.Fill), block = {
+        block()
+        if (this.content == null) ui(content)
+    }) {
     private var viewportBounds by nodeProperty(UiRect(0.0, 0.0, 0.0, 0.0))
 
     /** Common presentation layer; overlays paint above content regardless of content zIndex. */
@@ -48,7 +56,6 @@ open class UiRoot(name: String = "UiRoot", block: UiScope.() -> Unit) :
 
     /** Painter order for overlays; higher values paint above lower values. */
     var zIndex by nodeProperty(0)
-    private var initializer by nodeProperty<(UiScope.() -> Unit)?>(block)
 
     /** Focus is retained by element identity across keyed reorder. */
     var focusedElement by nodeProperty<UiNode<*>?>(null)
@@ -57,13 +64,6 @@ open class UiRoot(name: String = "UiRoot", block: UiScope.() -> Unit) :
     private var lastLayout by nodeProperty<List<Any?>>(emptyList())
     private var focusLease by nodeProperty<AutoCloseable?>(null)
 
-    override fun nodeInit() {
-        markChildrenManaged()
-        content = UiScope(this, this).also { scope -> scope.compose { initializer?.invoke(this) } }
-        initializer = null
-        val scope = content
-        onDestroy { scope?.dispose() }
-    }
     override fun onEnterTree() {
         manager<UiManager>().mount(this)
         val scope = content
@@ -87,7 +87,7 @@ open class UiRoot(name: String = "UiRoot", block: UiScope.() -> Unit) :
 
     /** Moves keyboard focus to a visible entered button in this tree, or releases focus. */
     fun focus(element: UiNode<*>?) {
-        require(element == null || element is Button)
+        require(element == null || element is Button<*>)
         val target = element?.takeIf { it.isInsideTree && it.isVisibleInTree && it.actionEnabled }
         require(target == null || target.root === this)
         if (target != null) manager<UiManager>().releaseOtherFocus(this)
@@ -128,7 +128,7 @@ open class UiRoot(name: String = "UiRoot", block: UiScope.() -> Unit) :
                 false
             }
             Key.ENTER, Key.SPACE -> focusedElement?.let {
-                (it as Button).activate()
+                (it as Button<*>).activate()
                 true
             } ?: false
             else -> false
@@ -266,7 +266,7 @@ open class UiRoot(name: String = "UiRoot", block: UiScope.() -> Unit) :
  * Explicit backend replacement is supported. Native backend resources remain owned by the host.
  */
 open class UiManager(var backend: UiBackend? = null) : Manager {
-    private val roots = linkedSetOf<UiRoot>()
+    private val roots = linkedSetOf<UiRoot<*>>()
     private val pending = linkedSetOf<UiObserver>()
 
     // Buffers swap only after a successful end. Equal/failed frames clear scratch references.
@@ -282,7 +282,7 @@ open class UiManager(var backend: UiBackend? = null) : Manager {
     val needsMouseMovement: Boolean
         get() = !manager<InputFocus>().capturesAbove(Int.MAX_VALUE - 1) && activeRoots().any { it.hasPointerTargets() }
 
-    private fun updateHover(active: List<UiRoot>) {
+    private fun updateHover(active: List<UiRoot<*>>) {
         if (manager<InputFocus>().capturesAbove(Int.MAX_VALUE - 1)) pointer = null
         val next = linkedSetOf<UiNode<*>>()
         pointer?.let { position ->
@@ -323,8 +323,8 @@ open class UiManager(var backend: UiBackend? = null) : Manager {
         }
     }
 
-    private fun activeRoots(): List<UiRoot> = roots.toList().filter { it.isValid && it.isInsideTree }
-        .sortedWith(compareBy<UiRoot> { it.layer.ordinal }.thenBy { it.zIndex })
+    private fun activeRoots(): List<UiRoot<*>> = roots.toList().filter { it.isValid && it.isInsideTree }
+        .sortedWith(compareBy<UiRoot<*>> { it.layer.ordinal }.thenBy { it.zIndex })
 
     /** Defers explicit painting until all application update callbacks have completed successfully. */
     internal fun afterUpdates(block: () -> Unit) {
@@ -341,14 +341,14 @@ open class UiManager(var backend: UiBackend? = null) : Manager {
     /** Current host dimensions in the backend's logical units. */
     var viewport = UiSize(0.0, 0.0)
         private set
-    internal fun releaseOtherFocus(root: UiRoot) {
+    internal fun releaseOtherFocus(root: UiRoot<*>) {
         roots.filter { it !== root && it.isValid }.forEach { it.focus(null) }
     }
-    internal fun mount(root: UiRoot) {
+    internal fun mount(root: UiRoot<*>) {
         ensureMouseRoute()
         roots += root
     }
-    internal fun unmount(root: UiRoot) {
+    internal fun unmount(root: UiRoot<*>) {
         roots -= root
     }
     internal fun enqueue(observer: UiObserver) {
@@ -412,7 +412,7 @@ open class UiManager(var backend: UiBackend? = null) : Manager {
                     val area = UiRect(0.0, 0.0, logicalViewport.width, logicalViewport.height)
                     val context = DrawContext(renderer, area, area)
                     try {
-                        scene.currScene?.drawSubtree(context) { it is UiRoot }
+                        scene.currScene?.drawSubtree(context) { it is UiRoot<*> }
                     } finally {
                         context.close()
                     }
@@ -440,7 +440,7 @@ open class UiManager(var backend: UiBackend? = null) : Manager {
             }
         }
     }
-    private fun snapshot(root: UiRoot, snapshot: MutableList<Any?>) {
+    private fun snapshot(root: UiRoot<*>, snapshot: MutableList<Any?>) {
         snapshot.add(root)
         snapshot.add(root.isVisibleInTree)
         snapshot.add(root.style)

@@ -26,12 +26,12 @@ internal class TerminalCommandUi(
     private val panelRows: () -> Int,
     private val panelFraction: () -> Double,
 ) {
-    private var owner: CommandPrompt? = null
-    private var root: UiRoot? = null
-    private var transcript: UiText? = null
-    private var editor: UiText? = null
+    private var owner: CommandPrompt<*>? = null
+    private var root: UiRoot<*>? = null
+    private var transcript: UiText<*>? = null
+    private var editor: UiText<*>? = null
 
-    fun bind(prompt: CommandPrompt?) {
+    fun bind(prompt: CommandPrompt<*>?) {
         if (owner === prompt) return
         root?.takeIf { it.isValid }?.let { old ->
             old.hide()

@@ -51,13 +51,13 @@ class RenderSystem(worldWidth: Int, worldHeight: Int) :
                 .filter { it.isVisibleInTree }
                 .sortedByDescending { it.globalPosition.y }.forEach { node ->
                     when (node) {
-                        is Sprite2D -> {
+                        is Sprite2D<*> -> {
                             val sprite = node.sprite
                             sprite.setCenter(node.globalPosition.x, node.globalPosition.y)
                             sprite.draw(b)
                         }
 
-                        is AnimatedSprite2D<*> -> {
+                        is AnimatedSprite2D<*, *> -> {
                             node.currFrame?.let {
                                 batch.draw(
                                     it,

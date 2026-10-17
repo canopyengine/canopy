@@ -95,7 +95,7 @@ private class ColoredMap :
         )
     ) {
     private var elapsed by nodeProperty(0f)
-    private var map by nodeProperty<GridNode?>(null)
+    private var map by nodeProperty<GridNode<*>?>(null)
 
     override fun nodeInit() {
         super.nodeInit()

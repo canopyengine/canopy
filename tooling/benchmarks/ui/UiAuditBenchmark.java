@@ -30,7 +30,7 @@ public final class UiAuditBenchmark {
             ui.onResize(80,Math.max(24,n));
             Signal<Integer> value=new Signal<>(0,null); long[] evaluations={0};
             UiStyle column=new UiStyle(UiLength.Fill.INSTANCE,UiLength.Content.INSTANCE,0,0,UiAlignment.Start,true,true,null,null,null,UiAppearance.Companion.getEmpty());
-            UiRoot root=new UiRoot("audit",scope->{scope.Column(column,children->{
+            UiRoot<?> root=new UiRoot<>("audit",ignored->Unit.INSTANCE,scope->{scope.Column(column,children->{
                 for(int i=0;i<n;i++){final int index=i;children.bindText("label-"+i,()->{evaluations[0]++;return index==0?"Value: "+value.invoke():"Static label "+index;});}
                 return Unit.INSTANCE;});return Unit.INSTANCE;});
             scenes.setCurrScene(root); ui.updateFrame();

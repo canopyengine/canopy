@@ -105,7 +105,7 @@ class NodeStateSafetyTests {
     fun `diagnostic state labels survive entry detachment and permanent cleanup`() {
         val node = EmptyNode("diagnostic")
         fun lookupState() = assertFailsWith<NodeNotFoundException> {
-            node.getNode<EmptyNode>("missing")
+            node.getNode<EmptyNode<*>>("missing")
         }.diagnostic.state
         assertEquals("Detached", lookupState())
         scenes.currScene = node

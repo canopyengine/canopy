@@ -16,9 +16,11 @@ import kotlinx.coroutines.CancellationException
  * closing and reusable tree exit. The terminal host supplies focus and presentation automatically.
  * All configuration, parsing and execution run synchronously on the serialized lifecycle thread.
  * Permanent destruction invalidates gameplay reads and releases command/presentation ownership.
+ * @param N Concrete node type exposed to its initialization block.
+ * @param block Runs once after nodeInit, before entry callbacks; not replayed on reentry.
  */
-open class CommandPrompt(name: String, block: CommandPrompt.() -> Unit = {}) :
-    Node<CommandPrompt>(name, block = block) {
+open class CommandPrompt<N : CommandPrompt<N>>(name: String, block: N.() -> Unit = {}) :
+    Node<N>(name, block = block) {
     private val runtime by nodeProperty(PromptState())
 
     init {

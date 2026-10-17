@@ -6,7 +6,7 @@ import io.canopy.engine.core.nodes.Node
 import io.canopy.engine.graphics.DrawContext
 
 internal object UiLayoutEngine {
-    fun layout(root: UiRoot, backend: UiBackend, viewport: UiSize) {
+    fun layout(root: UiRoot<*>, backend: UiBackend, viewport: UiSize) {
         val elements = root.content?.elements().orEmpty()
         val available = UiSize(
             resolve(root.style.width, viewport.width, viewport.width, root.style.maxWidth),
@@ -318,7 +318,7 @@ internal object UiLayoutEngine {
             try {
                 node.drawSubtree(context) {
                     when (it) {
-                        is UiRoot -> true
+                        is UiRoot<*> -> true
                         is UiNode<*> -> {
                             paint(it, backend, clip, focused)
                             true

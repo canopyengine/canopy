@@ -9,9 +9,11 @@ import io.canopy.engine.ui.*
  * Extensible bounded character grid with automatic UI sizing and platform-owned drawing. Operations change retained
  * display content on the lifecycle thread; the next frame presents it. Simulation and occupancy rules
  * belong to the game. Dimensions initialize once; cells use sparse storage rather than one Node per cell.
+ * @param N Concrete node type exposed to its initialization block.
+ * @param block Runs once after nodeInit, before entry callbacks; not replayed on reentry.
  */
-open class GridNode(columns: Int, rows: Int, name: String = "Grid", block: GridNode.() -> Unit = {}) :
-    UiNode<GridNode>(name, block = block),
+open class GridNode<N : GridNode<N>>(columns: Int, rows: Int, name: String = "Grid", block: N.() -> Unit = {}) :
+    UiNode<N>(name, block = block),
     GridContent {
     override val columns by nodeProperty(columns)
     override val rows by nodeProperty(rows)

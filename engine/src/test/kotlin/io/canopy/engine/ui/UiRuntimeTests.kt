@@ -77,8 +77,8 @@ class UiRuntimeTests {
     @Test
     fun `appearance and theme changes repaint without remeasuring and explicit overrides reset inheritance`() {
         // Arrange
-        lateinit var label: io.canopy.engine.ui.components.Text
-        lateinit var button: Button
+        lateinit var label: io.canopy.engine.ui.components.Text<*>
+        lateinit var button: Button<*>
         val red = UiColor.Rgb(230, 40, 50)
         val blue = UiColor.Rgb(40, 80, 230)
         val root = UiRoot {
@@ -113,7 +113,7 @@ class UiRuntimeTests {
     @Test
     fun `borders reserve content space once and update child placement`() {
         // Arrange
-        lateinit var box: io.canopy.engine.ui.components.Box
+        lateinit var box: io.canopy.engine.ui.components.Box<*>
         scenes.currScene = UiRoot {
             box = Box(UiStyle(width = UiLength.Fixed(8.0), height = UiLength.Fixed(4.0), border = UiBorder.Double)) {
                 Text("inside")
@@ -186,7 +186,7 @@ class UiRuntimeTests {
     @Test
     fun `a failed changed frame retains the last successful comparison and retries current content`() {
         // Arrange
-        lateinit var label: io.canopy.engine.ui.components.Text
+        lateinit var label: io.canopy.engine.ui.components.Text<*>
         scenes.currScene = UiRoot { label = Text("first") }
         ui.updateFrame()
         var fail = true
@@ -221,7 +221,7 @@ class UiRuntimeTests {
         val red = UiColor.Rgb(200, 20, 20)
         val green = UiColor.Rgb(20, 200, 20)
         val blue = UiColor.Rgb(20, 20, 200)
-        lateinit var inner: io.canopy.engine.ui.components.Box
+        lateinit var inner: io.canopy.engine.ui.components.Box<*>
         val root = UiRoot {
             Box(UiStyle(appearance = UiAppearance(foreground = red, bold = true))) {
                 inner = Box(UiStyle(appearance = UiAppearance(background = blue, bold = false))) {
@@ -426,7 +426,7 @@ class UiRuntimeTests {
         val ids = signal(owner = null, listOf("a", "b"))
         val pulse = signal(owner = null, 0)
         val counters = mutableMapOf<String, Signal<Int>>()
-        val buttons = mutableMapOf<String, Button>()
+        val buttons = mutableMapOf<String, Button<*>>()
         val creations = mutableListOf<String>()
         val effects = mutableListOf<String>()
         val root = UiRoot {
@@ -508,7 +508,7 @@ class UiRuntimeTests {
     @Test
     fun `hidden element reserves layout space but cannot draw or retain focus`() {
         // Arrange
-        lateinit var button: Button
+        lateinit var button: Button<*>
         val root = UiRoot {
             Column {
                 button = Button("action") {}
@@ -572,7 +572,7 @@ class UiRuntimeTests {
     fun `focus draws without measurement and action reads never become reactive dependencies`() {
         val pulse = signal(owner = null, 0)
         var actions = 0
-        lateinit var button: Button
+        lateinit var button: Button<*>
         scenes.currScene = UiRoot {
             button = Button("action") {
                 pulse()
@@ -581,7 +581,7 @@ class UiRuntimeTests {
         }
         ui.updateFrame()
         val measures = backend.measurements
-        val root = scenes.currScene as UiRoot
+        val root = scenes.currScene as UiRoot<*>
         root.focus(button)
         ui.updateFrame()
         assertEquals(measures, backend.measurements)
@@ -706,7 +706,7 @@ class UiRuntimeTests {
 
     @Test
     fun `reusable root exit releases focus and renews cleanup without accumulating destruction handlers`() {
-        lateinit var button: Button
+        lateinit var button: Button<*>
         val root = UiRoot { button = Button("action") {} }
         scenes.currScene = root
         ui.updateFrame()

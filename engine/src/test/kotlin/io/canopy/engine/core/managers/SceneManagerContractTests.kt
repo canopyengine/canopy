@@ -77,7 +77,7 @@ class SceneManagerContractTests {
         ManagersRegistry.exit()
     }
 
-    private fun scene(): EmptyNode = EmptyNode("root") {
+    private fun scene(): EmptyNode<*> = EmptyNode("root") {
         EmptyNode("child")
         EmptyNode2D("unmatched")
     }.also { scenes.currScene = it }

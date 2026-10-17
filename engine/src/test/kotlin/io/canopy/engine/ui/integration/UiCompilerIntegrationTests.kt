@@ -16,7 +16,7 @@ import org.junit.jupiter.api.BeforeEach
 class UiCompilerIntegrationTests {
     private class CounterCard(name: String, initial: Int, created: () -> Unit) : UiNode<CounterCard>(name) {
         val count = signal(initial)
-        var increment: Button? = null
+        var increment: Button<*>? = null
         init {
             created()
         }
@@ -109,8 +109,8 @@ class UiCompilerIntegrationTests {
         // Arrange
         val color = signal(owner = null, UiColor.Rgb(255, 0, 0))
         val theme = signal(owner = null, UiTheme())
-        lateinit var label: io.canopy.engine.ui.components.Text
-        lateinit var column: io.canopy.engine.ui.components.Column
+        lateinit var label: io.canopy.engine.ui.components.Text<*>
+        lateinit var column: io.canopy.engine.ui.components.Column<*>
         scenes.currScene = UiRoot {
             column = Column {
                 label = Text("styled").also { it.style = UiStyle(appearance = UiAppearance(foreground = color())) }
@@ -194,7 +194,7 @@ class UiCompilerIntegrationTests {
     fun `direct changes beneath ordinary grouping nodes invalidate an otherwise equal frame`() {
         // Arrange
         lateinit var group: Group
-        lateinit var label: io.canopy.engine.ui.components.Text
+        lateinit var label: io.canopy.engine.ui.components.Text<*>
         val root = UiRoot {
             group = Group { label = io.canopy.engine.ui.components.Text("first", name = "label") }
         }

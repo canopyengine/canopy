@@ -49,8 +49,8 @@ class PhysicsBodyTests {
         assertEquals(2, tree.body.fixtureList.size)
 
         val body = tree.body
-        val collider = tree.getNode<Collider2D>("collider")
-        val area = tree.getNode<Area2D>("area")
+        val collider = tree.getNode<Collider2D<*>>("collider")
+        val area = tree.getNode<Area2D<*>>("area")
 
         assertNotNull(collider)
         assertNotNull(area)

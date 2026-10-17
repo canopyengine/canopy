@@ -32,7 +32,7 @@ class TerminalStylingTests {
             register(InputFocus())
             register(ui)
         }
-        lateinit var label: io.canopy.engine.ui.components.Text
+        lateinit var label: io.canopy.engine.ui.components.Text<*>
         scenes.currScene = UiRoot {
             Column {
                 label =

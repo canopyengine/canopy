@@ -68,8 +68,8 @@ class NodeLifetimeTests {
             EmptyNode("sibling")
         }
         scenes.currScene = root
-        val branch = root.getNode<EmptyNode>("branch")
-        val leaf = branch.getNode<EmptyNode>("leaf")
+        val branch = root.getNode<EmptyNode<*>>("branch")
+        val leaf = branch.getNode<EmptyNode<*>>("leaf")
 
         // Act
         scenes.onUpdate(0f)
@@ -95,7 +95,7 @@ class NodeLifetimeTests {
         // Arrange
         val root = EmptyNode("root") { EmptyNode("child") }
         scenes.currScene = root
-        val child = root.getNode<EmptyNode>("child")
+        val child = root.getNode<EmptyNode<*>>("child")
         var replaced = 0
         val subscription = scenes.onSceneReplaced.connect { replaced++ }
         root.queueFree()
@@ -200,7 +200,7 @@ class NodeLifetimeTests {
             }
         }
         scenes.currScene = root
-        val child = root.getNode<EmptyNode>("child")
+        val child = root.getNode<EmptyNode<*>>("child")
         source.emit(1)
         state.update { 1 }
         assertEquals(1, eventCalls)
@@ -267,10 +267,10 @@ class NodeLifetimeTests {
             EmptyNode("second")
         }
         scenes.currScene = root
-        val first = root.getNode<EmptyNode>("first")
-        val second = root.getNode<EmptyNode>("second")
+        val first = root.getNode<EmptyNode<*>>("first")
+        val second = root.getNode<EmptyNode<*>>("second")
         val context = first.children.getValue("scope") as Context
-        val leaf = context.getNode<EmptyNode>("leaf")
+        val leaf = context.getNode<EmptyNode<*>>("leaf")
         first.reparent(context, second)
         source.emit()
         assertSame(context, leaf.parent)
@@ -454,7 +454,7 @@ class NodeLifetimeTests {
     fun `manually registered system matches release on node removal`() {
         val root = EmptyNode("root") { EmptyNode("child") }
         scenes.currScene = root
-        val child = root.getNode<EmptyNode>("child")
+        val child = root.getNode<EmptyNode<*>>("child")
         val system = Matches()
         system.register(child)
         root.removeChild(child)

@@ -80,15 +80,15 @@ class CommandPromptTests {
         ManagersRegistry.exit()
     }
 
-    private fun enter(block: CommandPrompt.() -> Unit = {}): CommandPrompt =
-        CommandPrompt("Console", block).also { scenes.currScene = it }
+    private fun enter(block: CommandPrompt<*>.() -> Unit = {}): CommandPrompt<*> =
+        CommandPrompt("Console") { block(this) }.also { scenes.currScene = it }
 
     @Test
     fun `hidden prompt releases command capture and presentation without changing activation`() {
         // Arrange
         val root = EmptyNode("root") { CommandPrompt("Console") }
         scenes.currScene = root
-        val prompt = root.getNode<CommandPrompt>("Console")
+        val prompt = root.getNode<CommandPrompt<*>>("Console")
         prompt.open()
         host.onUpdate(0f)
         // Act
@@ -117,7 +117,7 @@ class CommandPromptTests {
         val primary = IllegalStateException("bind")
         val cleanup = IllegalStateException("cleanup")
         val failing = object : CommandPromptPresentation {
-            override fun bind(owner: CommandPrompt?) {
+            override fun bind(owner: CommandPrompt<*>?) {
                 val wasBound = bound
                 bound = owner != null
                 if (owner != null) {

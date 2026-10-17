@@ -10,8 +10,17 @@ import io.canopy.engine.ui.UiKind
 import io.canopy.engine.ui.UiMouseFilter
 import io.canopy.engine.ui.UiNode
 
-/** Extensible focusable action. Its label and eligibility may change without replacing its identity. */
-open class Button(text: String = "", name: String = "Button", onClick: () -> Unit = {}) : UiNode<Button>(name) {
+/**
+ * Extensible focusable action. Its label and eligibility may change without replacing its identity.
+ * @param N Concrete node type exposed to its initialization block.
+ * @param block Runs once after nodeInit, before entry callbacks; not replayed on reentry.
+ */
+open class Button<N : Button<N>>(
+    text: String = "",
+    name: String = "Button",
+    block: N.() -> Unit = {},
+    onClick: () -> Unit = {},
+) : UiNode<N>(name, block = block) {
     init {
         mouseFilter = UiMouseFilter.Stop
     }

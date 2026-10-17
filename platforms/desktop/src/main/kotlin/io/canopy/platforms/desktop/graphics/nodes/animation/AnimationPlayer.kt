@@ -6,15 +6,19 @@ import io.canopy.engine.core.nodes.Node
 import io.canopy.engine.utils.UnstableApi
 import io.canopy.platforms.desktop.graphics.systems.AnimationSystem
 
-/** Extensible node that tracks animation playback position and emits change and completion events. */
+/**
+ * Extensible node that tracks animation playback position and emits change and completion events.
+ * @param N Concrete node type exposed to its initialization block.
+ * @param block Runs once after nodeInit, before entry callbacks; not replayed on reentry.
+ */
 @UnstableApi
-open class AnimationPlayer(name: String, block: AnimationPlayer.() -> Unit = {}) :
-    Node<AnimationPlayer>(
+open class AnimationPlayer<N : AnimationPlayer<N>>(name: String, block: N.() -> Unit = {}) :
+    Node<N>(
         name,
         block
     ) {
     private val animations = mutableMapOf<String, io.canopy.platforms.desktop.graphics.nodes.animation.Animation>()
-    private val logger = logger<AnimationPlayer>()
+    private val logger = logger<AnimationPlayer<*>>()
 
     private var time = 0f
     private var direction = 1
