@@ -7,8 +7,8 @@ import io.canopy.engine.core.reactive.event
 import io.canopy.engine.physics.nodes.body.PhysicsBody2D
 import io.canopy.engine.physics.nodes.shape.PhysicsShape2D
 
-/** Creates a sensor fixture on its parent physics body and emits contact events. */
-class Area2D(
+/** Extensible node that creates a sensor fixture on its parent physics body and emits contact events. */
+open class Area2D(
     name: String,
     // Specific props
     var shape: PhysicsShape2D,

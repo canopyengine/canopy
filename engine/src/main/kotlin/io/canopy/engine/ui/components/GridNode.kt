@@ -6,11 +6,11 @@ import io.canopy.engine.graphics.GridSymbol
 import io.canopy.engine.ui.*
 
 /**
- * Bounded character grid with automatic UI sizing and platform-owned drawing. Operations change retained
+ * Extensible bounded character grid with automatic UI sizing and platform-owned drawing. Operations change retained
  * display content on the lifecycle thread; the next frame presents it. Simulation and occupancy rules
  * belong to the game. Dimensions initialize once; cells use sparse storage rather than one Node per cell.
  */
-class GridNode(columns: Int, rows: Int, name: String = "Grid", block: GridNode.() -> Unit = {}) :
+open class GridNode(columns: Int, rows: Int, name: String = "Grid", block: GridNode.() -> Unit = {}) :
     UiNode<GridNode>(name, block = block),
     GridContent {
     override val columns by nodeProperty(columns)

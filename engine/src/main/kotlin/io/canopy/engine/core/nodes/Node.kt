@@ -22,6 +22,8 @@ import kotlinx.coroutines.Job
  * Typed, guarded node facade preserving class-named Kotlin construction and concrete DSL receivers.
  * Engine-owned state is referenced weakly. Destruction invalidates state access, releases owned work,
  * and leaves only immutable identity/diagnostics in retained facades. All operations are game-thread confined.
+ * Reusable Canopy node components are open for subclassing; structural scopes such as Context remain final.
+ * Override lifecycle hooks to add behavior; identity, ownership and dispatch remain engine-controlled.
  * The matching Canopy compiler stores ordinary custom properties in engine state.
  * Without the plugin, custom stored values must use [nodeProperty]; runtime queries use the concrete
  * [io.canopy.engine.core.queries.NodeDependency] or [io.canopy.engine.core.queries.GlobalDependency] delegates.
@@ -285,8 +287,8 @@ abstract class Node<N : Node<N>> protected constructor(
         if (s.entered) s.owner.updateGroups(this)
     }
 
-    internal var behavior: Behavior<N>?
-        get() = state("read behavior").behavior as Behavior<N>?
+    internal var behavior: Behavior<*>?
+        get() = state("read behavior").behavior
         set(value) {
             val s = state("attach behavior")
             if (s.behavior === value) return
@@ -475,16 +477,16 @@ abstract class Node<N : Node<N>> protected constructor(
         return cursor?.takeIf { it.isValid }
     }
 
-    /** Resolves typed facades through context-transparent paths; invalid receivers always fail. */
-    inline fun <reified T : Node<T>> getNode(path: String): T =
+    /** Resolves any node subclass through context-transparent paths; invalid receivers always fail. */
+    inline fun <reified T : Node<*>> getNode(path: String): T =
         lookup(path, T::class) ?: throw NodeNotFoundException(diagnostic("getNode"), path)
 
     /** Missing nodes return null; invalid receivers and incompatible requested types still fail. */
-    inline fun <reified T : Node<T>> getNodeOrNull(path: String): T? = lookup(path, T::class)
+    inline fun <reified T : Node<*>> getNodeOrNull(path: String): T? = lookup(path, T::class)
 
     @PublishedApi
     @JvmSynthetic
-    internal fun <T : Node<T>> lookup(path: String, type: KClass<T>): T? {
+    internal fun <T : Node<*>> lookup(path: String, type: KClass<T>): T? {
         val result = resolve(path) ?: return null
         if (!type.isInstance(
                 result
@@ -496,10 +498,10 @@ abstract class Node<N : Node<N>> protected constructor(
     }
 
     /** Typed indexing shorthand. */
-    inline operator fun <reified T : Node<T>> get(path: String): T = getNode(path)
+    inline operator fun <reified T : Node<*>> get(path: String): T = getNode(path)
 
     /** Applies a typed patch without exposing private engine state. */
-    inline fun <reified T : Node<T>> patch(path: String, handler: T.() -> Unit) = getNode<T>(path).apply(handler)
+    inline fun <reified T : Node<*>> patch(path: String, handler: T.() -> Unit) = getNode<T>(path).apply(handler)
 
     /** Marks this facade as a reusable prefab; skips automatic entry during attachment. */
     fun asPrefab(): N {

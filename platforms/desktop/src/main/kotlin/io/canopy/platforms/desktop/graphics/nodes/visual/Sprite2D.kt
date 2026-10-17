@@ -6,8 +6,8 @@ import io.canopy.engine.core.nodes.Node2D
 import io.canopy.platforms.desktop.graphics.systems.RenderSystem
 import ktx.log.logger
 
-/** Node exposing a LibGDX sprite for RenderSystem; the supplied texture remains externally owned. */
-class Sprite2D(
+/** Extensible node exposing a LibGDX sprite for RenderSystem; the supplied texture remains externally owned. */
+open class Sprite2D(
     name: String,
     // Node specific props
     texture: Texture,

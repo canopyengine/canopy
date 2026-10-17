@@ -34,6 +34,10 @@ instead of silently changing the architecture to match an old example.
   change explicitly alters them.
 - Prefer clear Kotlin and existing engine patterns. Keep modules cohesive and
   avoid unnecessary abstractions or public implementation details.
+- Public concrete Node components intended for reuse must be `open`; abstract
+  bases are already extensible. Structural scopes such as Context and internal
+  runtime implementation nodes remain final. Typed node helpers must accept
+  indirect subclasses of reusable built-in nodes.
 - Respect the separation between engine, adapters, platforms, and tooling.
   Put backend-specific behavior in the appropriate adapter or platform.
 - Treat lifecycle order, tree membership, ownership, mutation, and threading as

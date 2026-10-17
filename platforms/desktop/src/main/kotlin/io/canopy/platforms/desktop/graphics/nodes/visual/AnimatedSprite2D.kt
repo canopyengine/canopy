@@ -5,8 +5,8 @@ import io.canopy.engine.core.nodes.Node2D
 import io.canopy.platforms.desktop.graphics.systems.RenderSystem
 import ktx.log.logger
 
-/** Node exposing an optional texture region used as the current frame by RenderSystem. */
-class AnimatedSprite2D<T : TextureRegion>(
+/** Extensible node exposing an optional texture region used as the current frame by RenderSystem. */
+open class AnimatedSprite2D<T : TextureRegion>(
     name: String,
     // Node base props
     block: AnimatedSprite2D<*>.() -> Unit = {},

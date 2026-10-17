@@ -6,8 +6,8 @@ import io.canopy.engine.ui.UiNode
 import io.canopy.engine.ui.UiScope
 import io.canopy.engine.ui.UiStyle
 
-/** Arranges children vertically. */
-class Column(
+/** Extensible container that arranges children vertically. */
+open class Column(
     style: UiStyle = UiStyle(width = UiLength.Fill),
     name: String = "Column",
     block: UiScope.() -> Unit = {},

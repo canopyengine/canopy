@@ -32,8 +32,8 @@ internal class UiRegion(root: UiRoot, name: String) : Node<UiRegion>(name, skipO
     }
 }
 
-/** A retained declarative tree initialized once; viewport changes recompute its universal layout. */
-class UiRoot(name: String = "UiRoot", block: UiScope.() -> Unit) :
+/** An extensible retained declarative tree initialized once; viewport changes recompute its universal layout. */
+open class UiRoot(name: String = "UiRoot", block: UiScope.() -> Unit) :
     UiNode<UiRoot>(name, UiStyle(width = UiLength.Fill, height = UiLength.Fill)) {
     private var viewportBounds by nodeProperty(UiRect(0.0, 0.0, 0.0, 0.0))
 
@@ -265,7 +265,7 @@ class UiRoot(name: String = "UiRoot", block: UiScope.() -> Unit) :
  * App binds the host backend before startup callbacks; standalone drivers supply it explicitly when rendering is needed.
  * Explicit backend replacement is supported. Native backend resources remain owned by the host.
  */
-class UiManager(var backend: UiBackend? = null) : Manager {
+open class UiManager(var backend: UiBackend? = null) : Manager {
     private val roots = linkedSetOf<UiRoot>()
     private val pending = linkedSetOf<UiObserver>()
 

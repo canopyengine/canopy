@@ -6,8 +6,8 @@ import io.canopy.engine.ui.UiNode
 import io.canopy.engine.ui.UiScope
 import io.canopy.engine.ui.UiStyle
 
-/** Overlays children in declaration order. */
-class Box(
+/** Extensible container that overlays children in declaration order. */
+open class Box(
     style: UiStyle = UiStyle(width = UiLength.Fill, height = UiLength.Fill),
     name: String = "Box",
     block: UiScope.() -> Unit = {},

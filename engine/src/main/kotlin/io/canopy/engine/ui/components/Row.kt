@@ -6,8 +6,8 @@ import io.canopy.engine.ui.UiNode
 import io.canopy.engine.ui.UiScope
 import io.canopy.engine.ui.UiStyle
 
-/** Arranges children horizontally. */
-class Row(style: UiStyle = UiStyle(width = UiLength.Fill), name: String = "Row", block: UiScope.() -> Unit = {}) :
+/** Extensible container that arranges children horizontally. */
+open class Row(style: UiStyle = UiStyle(width = UiLength.Fill), name: String = "Row", block: UiScope.() -> Unit = {}) :
     UiNode<Row>(name, style, block = { if (content == null) ui(block) }) {
     internal override val kind: UiKind get() = UiKind.Row
 }
