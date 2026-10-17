@@ -12,6 +12,7 @@ import io.canopy.engine.core.exceptions.NodeNotFoundException
 import io.canopy.engine.core.managers.ManagersRegistry
 import io.canopy.engine.core.managers.SceneManager
 import io.canopy.engine.core.nodes.types.empty.EmptyNode
+import io.canopy.engine.input.events.InputEvent
 import io.canopy.engine.input.events.TextInputEvent
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.BeforeEach
@@ -19,6 +20,17 @@ import org.junit.jupiter.api.BeforeEach
 /** Exercises retained-facade guards, reusable detachment and unsafe precompiled class rejection. */
 class NodeStateSafetyTests {
     private lateinit var scenes: SceneManager
+
+    private class InputNode(name: String, calls: MutableList<String>, consume: Boolean = false) :
+        Node<InputNode>(name) {
+        private val handler by nodeProperty<(InputEvent) -> Unit>({ event ->
+            calls += name
+            if (consume) event.consume()
+        })
+        override fun onInput(event: InputEvent) {
+            handler(event)
+        }
+    }
 
     /** Concrete managed-state node used to preserve the class-named DSL and typed lookup contract. */
     private class EnemyNode(name: String, block: EnemyNode.() -> Unit = {}) : Node<EnemyNode>(name, block = block) {
@@ -142,5 +154,26 @@ class NodeStateSafetyTests {
         calls.clear()
         root.nodeInput(TextInputEvent("handled").apply { consume() })
         assertTrue(calls.isEmpty())
+    }
+
+    @Test
+    fun `consumed input stops remaining children siblings and behaviors in tree order`() {
+        val calls = mutableListOf<String>()
+        val root = InputNode("root", calls)
+        val first = InputNode("first", calls, consume = true)
+        first.addChild(InputNode("grandchild", calls))
+        first.behavior = object : Behavior<InputNode>(first) {
+            override fun onInput(event: InputEvent) {
+                calls += "behavior"
+            }
+        }
+        root.addChild(first)
+        root.addChild(InputNode("sibling", calls))
+        scenes.currScene = root
+        root.nodeInput(TextInputEvent("first dispatch"))
+        assertEquals(listOf("root", "first"), calls)
+        calls.clear()
+        root.nodeInput(TextInputEvent("independent dispatch"))
+        assertEquals(listOf("root", "first"), calls)
     }
 }

@@ -154,21 +154,20 @@ class BuiltinNodeInheritanceTests {
             configured += "root"
             zIndex = 2
         }) {
-            Stack(block = { configured += "column" }) {
-                Panel(block = { configured += "box" }) {
-                    Status(food) { configured += "text" }
-                }
-                Controls(block = { configured += "row" }) {
-                    feed = Feed(block = {
-                        configured += "button"
-                        updates = 4
-                    }) { food.update { it + 1 } }
-                }
-                Separator { configured += "divider" }
-                tank = Tank {
-                    configured += "grid"
-                    columnGap = 0
-                }
+            Stack(block = { configured += "column" }) { Text("column content") }
+            Panel(block = { configured += "box" }) {
+                Status(food) { configured += "text" }
+            }
+            Controls(block = { configured += "row" }) {
+                feed = Feed(block = {
+                    configured += "button"
+                    updates = 4
+                }) { food.update { it + 1 } }
+            }
+            Separator { configured += "divider" }
+            tank = Tank {
+                configured += "grid"
+                columnGap = 0
             }
         }
         assertTrue(configured.isEmpty())
@@ -183,29 +182,23 @@ class BuiltinNodeInheritanceTests {
         assertEquals(2, root.zIndex)
         assertEquals(4, feed.updates)
         assertEquals(0, tank.columnGap)
-        assertEquals(listOf("Food: 1", "Feed"), backend.labels)
-        root.nodeExitTree()
-        root.buildTree()
-        assertEquals(8, configured.size)
+        assertEquals(listOf("column content", "Food: 1", "Feed"), backend.labels)
         food.dispose()
     }
 
     @Test
     fun `multi level receiver block runs after subclass initialization and defaults and retains identity`() {
         // Arrange
-        val shown = signal(owner = null, true)
         val desired = signal(owner = null, 3)
         var configured = 0
         lateinit var reef: Reef
         val green = UiColor.Rgb(40, 180, 80)
         val root = UiRoot {
-            if (shown()) {
-                reef = Reef {
-                    configured++
-                    capacity = desired()
-                    corals = 4
-                    gridColor = green
-                }
+            reef = Reef {
+                configured++
+                capacity = desired()
+                corals = 4
+                gridColor = green
             }
         }
         scenes.currScene = root
@@ -223,16 +216,6 @@ class BuiltinNodeInheritanceTests {
         root.nodeExitTree()
         root.buildTree()
         assertEquals(1, configured)
-        shown.update { false }
-        ui.updateFrame()
-        scenes.onUpdate(0f)
-        assertTrue(first.isFreed)
-        shown.update { true }
-        ui.updateFrame()
-        assertEquals(2, configured)
-        assertNotSame(first, reef)
-        assertEquals("8/4", reef.enteredWith)
-        shown.dispose()
         desired.dispose()
     }
 

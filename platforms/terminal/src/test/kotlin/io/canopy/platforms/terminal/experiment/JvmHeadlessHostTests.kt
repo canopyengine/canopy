@@ -70,7 +70,7 @@ class JvmHeadlessHostTests {
     }
 
     @Test
-    fun `paused callbacks get zero while managers remain driven and resume discards remainder`() {
+    fun `paused app callbacks get zero while managers remain driven and gameplay resumes`() {
         val clock = Clock()
         val frames = mutableListOf<Float>()
         val physics = mutableListOf<Float>()

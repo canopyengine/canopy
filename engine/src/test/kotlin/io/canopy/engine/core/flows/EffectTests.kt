@@ -66,22 +66,12 @@ class EffectTests {
         }
 
         e.dispose()
+        e.dispose()
 
         hp.update { 0 }
         hp.update { 50 }
 
         assertEquals(1, runCount, "Effect should not run after dispose")
-    }
-
-    @Test
-    fun `effect dispose is idempotent`() {
-        val hp = signal(100)
-        val e = effect { hp() }
-
-        // Should not throw
-        e.dispose()
-        e.dispose()
-        e.dispose()
     }
 
     @Test
@@ -110,7 +100,11 @@ class EffectTests {
         val y = signal(20)
 
         var lastValue = 0
-        val e = effect { lastValue = if (useX()) x() else y() }
+        var runs = 0
+        val e = effect {
+            runs++
+            lastValue = if (useX()) x() else y()
+        }
 
         assertEquals(10, lastValue)
 
@@ -118,23 +112,18 @@ class EffectTests {
         useX.update { false }
         assertEquals(20, lastValue)
 
-        var runAfterSwitch = 0
-        val watcher = effect {
-            useX() // keep a ref to track changes
-            runAfterSwitch++
-        }
-
         // Changing x should NOT re-run e now
         val prevValue = lastValue
         x.update { 99 }
         assertEquals(prevValue, lastValue, "x should not trigger effect after branch switch")
+        assertEquals(2, runs)
 
         // Changing y SHOULD re-run e
         y.update { 55 }
         assertEquals(55, lastValue)
+        assertEquals(3, runs)
 
         e.dispose()
-        watcher.dispose()
     }
 
     @Test

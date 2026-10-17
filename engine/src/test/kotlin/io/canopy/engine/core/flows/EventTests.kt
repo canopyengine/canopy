@@ -3,6 +3,8 @@ package io.canopy.engine.core.flows
 import kotlin.concurrent.atomics.AtomicInt
 import kotlin.concurrent.atomics.ExperimentalAtomicApi
 import kotlin.test.Test
+import kotlin.test.assertEquals
+import kotlin.test.assertNull
 import io.canopy.engine.core.flows.events.event
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.joinAll
@@ -22,7 +24,7 @@ import kotlinx.coroutines.runBlocking
 class EventTests {
 
     @Test
-    fun `callback should be called on signal emission`() {
+    fun `callback should be called on event emission`() {
         // Create a 1-argument signal
         val signal = event<Int>()
 
@@ -34,7 +36,7 @@ class EventTests {
         val connection = signal connect callback
         // Emit a value — listener should receive it
         signal.emit(42)
-        assert(receivedValue == 42) { "Listener should have received the emitted value." }
+        assertEquals(42, receivedValue)
 
         // Disconnect listener
         connection.disconnect()
@@ -44,11 +46,11 @@ class EventTests {
         signal.emit(100)
 
         // Listener should not be triggered after disconnection
-        assert(receivedValue == null) { "Listener should not receive value after disconnection." }
+        assertNull(receivedValue)
     }
 
     @Test
-    fun `signal disconnection shouldn't impact other listeners`() {
+    fun `event disconnection shouldn't impact other listeners`() {
         val signal = event<Int>()
 
         var receivedByFirst: Int? = null
@@ -63,8 +65,8 @@ class EventTests {
 
         // Both listeners should receive the emission
         signal.emit(10)
-        assert(receivedByFirst == 10) { "First callback should have received 10" }
-        assert(receivedBySecond == 10) { "Second callback should have received 10" }
+        assertEquals(10, receivedByFirst)
+        assertEquals(10, receivedBySecond)
 
         // Disconnect the first listener
         firstConnection.disconnect()
@@ -77,13 +79,13 @@ class EventTests {
         signal.emit(20)
 
         // Only the second listener should receive the value
-        assert(receivedByFirst == null) { "First callback should not receive value after disconnection" }
-        assert(receivedBySecond == 20) { "Second callback should still receive emitted value" }
+        assertNull(receivedByFirst)
+        assertEquals(20, receivedBySecond)
     }
 
     @OptIn(ExperimentalAtomicApi::class)
     @Test
-    fun `test signal thread-safety`() = runBlocking {
+    fun `concurrent producers deliver every event`() = runBlocking {
         /**
          * Verifies that the event system behaves correctly under concurrent emission.
          *
@@ -112,13 +114,11 @@ class EventTests {
         producers.joinAll()
 
         // Expected result: 10 threads × 1000 emits
-        assert(container.load() == 10_000) {
-            "Container should be 10000 but was ${container.load()}"
-        }
+        assertEquals(10_000, container.load())
     }
 
     @Test
-    fun `test signal clear`() {
+    fun `clear removes all event listeners`() {
         /**
          * Verifies that clear() removes all registered listeners.
          */
@@ -139,8 +139,6 @@ class EventTests {
         // Second emission should trigger nothing
         signal.emit(100)
 
-        assert(callCount == 1) {
-            "Listener should have been called only once before clear."
-        }
+        assertEquals(1, callCount)
     }
 }

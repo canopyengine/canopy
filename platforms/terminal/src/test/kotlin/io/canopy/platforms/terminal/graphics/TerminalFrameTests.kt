@@ -33,6 +33,8 @@ class TerminalFrameTests {
         val screen = Screen(width = 8)
         val surface = surface(screen, width = 8)
         surface.renderWorld(listOf("long line wraps across rows"))
+        assertEquals(listOf("long li"), screen.lines())
+        assertEquals(0 to 0, screen.cursor())
         surface.renderWorld(listOf("next"))
         assertEquals(listOf("next"), screen.lines())
     }

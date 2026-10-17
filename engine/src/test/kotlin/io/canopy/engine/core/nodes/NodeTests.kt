@@ -1,30 +1,23 @@
 package io.canopy.engine.core.nodes
 
 import kotlin.test.*
-import kotlin.time.DurationUnit
-import kotlin.time.toDuration
 import io.canopy.engine.core.managers.ManagersRegistry
 import io.canopy.engine.core.managers.SceneManager
 import io.canopy.engine.core.nodes.types.empty.EmptyNode
 import io.canopy.engine.core.nodes.types.empty.EmptyNode2D
 import io.canopy.engine.math.Vector2
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.runBlocking
-import org.junit.jupiter.api.BeforeAll
+import org.junit.jupiter.api.AfterEach
+import org.junit.jupiter.api.BeforeEach
 
 class NodeTests {
 
-    companion object {
-        @BeforeAll
-        @JvmStatic
-        fun setup() {
-            // Tests share the same JVM; ensure a clean manager baseline.
-            ManagersRegistry.withScope {
-                register(SceneManager())
-            }
-        }
+    @BeforeEach
+    fun setup() {
+        ManagersRegistry.withScope { register(SceneManager()) }
     }
+
+    @AfterEach
+    fun cleanup() = ManagersRegistry.exit()
 
     @Test
     fun `structure should pass`() {
@@ -125,7 +118,7 @@ class NodeTests {
     }
 
     @Test
-    fun `ticks should update state`() = runBlocking {
+    fun `ticks should update state`() {
         // Verifies that nodeUpdate and nodePhysicsUpdate trigger behavior callbacks.
         var nTicks = 0
         var nPhysicsTicks = 0
@@ -141,17 +134,8 @@ class NodeTests {
         }
         tree.buildTree()
 
-        launch {
-            repeat(2) { i ->
-                // Simulate "physics tick occasionally"
-                if (nTicks % (i + 1) == 0) {
-                    tree.nodePhysicsUpdate(0f)
-                }
-
-                tree.nodeUpdate(0f)
-                delay(20.toDuration(DurationUnit.MILLISECONDS))
-            }
-        }.join()
+        tree.nodePhysicsUpdate(0f)
+        repeat(2) { tree.nodeUpdate(0f) }
 
         assertEquals(2, nTicks)
         assertEquals(1, nPhysicsTicks)
@@ -277,10 +261,12 @@ class NodeTests {
         assertTrue(first.position !== second.position)
 
         val rootPosition = first.globalPosition
+        rootPosition.x = 99f
         assertEquals(Vector2(3f, 4f), first.globalPosition)
 
         first.scale = Vector2(2f, 3f)
         val rootScale = first.globalScale
+        rootScale.y = 99f
         assertEquals(Vector2(2f, 3f), first.globalScale)
 
         val child = EmptyNode2D("child")
@@ -290,11 +276,13 @@ class NodeTests {
 
         val childGlobalPosition = child.globalPosition
         assertEquals(Vector2(8f, 10f), childGlobalPosition)
+        childGlobalPosition.x = 99f
         assertEquals(Vector2(8f, 10f), child.globalPosition)
         assertEquals(Vector2(5f, 6f), child.position)
 
         val childGlobalScale = child.globalScale
         assertEquals(Vector2(8f, 15f), childGlobalScale)
+        childGlobalScale.y = 99f
         assertEquals(Vector2(8f, 15f), child.globalScale)
         assertEquals(Vector2(4f, 5f), child.scale)
     }

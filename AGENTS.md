@@ -44,8 +44,10 @@ instead of silently changing the architecture to match an old example.
   Put backend-specific behavior in the appropriate adapter or platform.
 - Treat lifecycle order, tree membership, ownership, mutation, and threading as
   explicit contracts. Document changed contracts and cover them with regressions.
-- Preserve the immutable Vector2 value contract. Change vector components by
-  assigning values. Profile performance concerns before adding caches or pooling;
+- Preserve Vector2 arithmetic returning new values without changing operands.
+  Components are mutable; copy when independent state is needed and treat the shared
+  Vector2.Zero as a constant. Global transform reads return defensive copies.
+  Profile performance concerns before adding caches or pooling;
   a cache must correctly invalidate for local and hierarchy changes.
 - Preserve unrelated user changes. Inspect the diff before staging and stage
   only files or hunks belonging to the current task.

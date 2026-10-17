@@ -10,8 +10,8 @@ import io.canopy.engine.core.nodes.types.empty.EmptyNode
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.BeforeEach
 
-/** Regressions for callback ownership and failure-resistant removal found during PR #135 review. */
-class Pr135ReviewTests {
+/** Callback ownership and failure-resistant tree removal contracts. */
+class NodeCallbackOwnershipTests {
     private lateinit var scenes: SceneManager
 
     @BeforeEach fun setup() {

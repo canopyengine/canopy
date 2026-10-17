@@ -52,7 +52,7 @@ class Vector2Tests {
     }
 
     @Test
-    fun `zero is a shared immutable zero vector`() {
+    fun `zero is the shared origin value`() {
         assertEquals(Vector2(0f, 0f), Vector2.Zero)
         assertTrue(Vector2.Zero === Vector2.Zero)
     }

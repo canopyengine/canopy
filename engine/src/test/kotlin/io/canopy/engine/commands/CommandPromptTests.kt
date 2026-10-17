@@ -6,14 +6,11 @@ import io.canopy.engine.app.AppConfig
 import io.canopy.engine.core.exceptions.CanopyException
 import io.canopy.engine.core.managers.ManagersRegistry
 import io.canopy.engine.core.managers.SceneManager
-import io.canopy.engine.core.nodes.Behavior
-import io.canopy.engine.core.nodes.Node
 import io.canopy.engine.core.nodes.types.empty.EmptyNode
 import io.canopy.engine.input.InputFocus
 import io.canopy.engine.input.InputManager
 import io.canopy.engine.input.binds.InputBind
 import io.canopy.engine.input.binds.Key
-import io.canopy.engine.input.events.InputEvent
 import io.canopy.engine.input.events.InputState
 import io.canopy.engine.input.events.KeyInputEvent
 import io.canopy.engine.input.events.TextInputEvent
@@ -41,17 +38,6 @@ class CommandPromptTests {
     private class Input : InputManager() {
         val pressed = mutableSetOf<InputBind>()
         override fun pollPressed(bind: InputBind) = bind in pressed
-    }
-
-    private class InputNode(name: String, calls: MutableList<String>, consume: Boolean = false) :
-        Node<InputNode>(name) {
-        private val handler by nodeProperty<(InputEvent) -> Unit>({ event ->
-            calls += name
-            if (consume) event.consume()
-        })
-        override fun onInput(event: InputEvent) {
-            handler(event)
-        }
     }
 
     private lateinit var app: TestApp
@@ -534,27 +520,6 @@ class CommandPromptTests {
         assertEquals(1, presentation.hides)
         assertFalse(first.isOpen)
         assertFalse(input.blocksGameplay)
-    }
-
-    @Test
-    fun `consumed input stops remaining children siblings and behaviors in tree order`() {
-        val calls = mutableListOf<String>()
-        val root = InputNode("root", calls)
-        val first = InputNode("first", calls, consume = true)
-        first.addChild(InputNode("grandchild", calls))
-        first.behavior = object : Behavior<InputNode>(first) {
-            override fun onInput(event: InputEvent) {
-                calls += "behavior"
-            }
-        }
-        root.addChild(first)
-        root.addChild(InputNode("sibling", calls))
-        scenes.currScene = root
-        root.nodeInput(TextInputEvent("first dispatch"))
-        assertEquals(listOf("root", "first"), calls)
-        calls.clear()
-        root.nodeInput(TextInputEvent("independent dispatch"))
-        assertEquals(listOf("root", "first"), calls)
     }
 
     @Test

@@ -1,11 +1,10 @@
 package io.canopy.engine.math
 
 /**
- * Immutable two-dimensional vector.
+ * Two-dimensional vector with mutable components and structural equality.
  *
- * Components cannot be changed after construction. Arithmetic helpers and
- * operators return vector values, so a [Vector2] can be safely shared or used
- * as a map key.
+ * Arithmetic helpers return vector values without changing the operands.
+ * Copy a vector when two owners need independent component state.
  *
  * Example:
  * ```
@@ -81,7 +80,7 @@ data class Vector2(
     }
 
     companion object {
-        /** Shared immutable zero vector. */
+        /** Shared origin value. Treat it as a constant; use [copy] for mutable state. */
         val Zero = Vector2(0f, 0f)
     }
 }

@@ -14,6 +14,8 @@ import java.util.Base64
 import java.util.concurrent.TimeUnit
 import com.github.ajalt.mordant.rendering.Size
 import io.canopy.platforms.terminal.graphics.TerminalSurface
+import org.junit.jupiter.api.condition.EnabledOnOs
+import org.junit.jupiter.api.condition.OS
 import org.junit.jupiter.api.io.TempDir
 
 class WindowsConsoleOutputTests {
@@ -21,8 +23,8 @@ class WindowsConsoleOutputTests {
     lateinit var directory: Path
 
     @Test
+    @EnabledOnOs(OS.WINDOWS)
     fun `fresh Windows console interprets ANSI and restores both output modes`() {
-        if (!System.getProperty("os.name").startsWith("Windows")) return
         // Arrange: Gradle's test worker has piped output, so create a real console for this regression.
         val marker = directory.resolve("console-result.txt")
         val java = Path.of(System.getProperty("java.home"), "bin", "java.exe")

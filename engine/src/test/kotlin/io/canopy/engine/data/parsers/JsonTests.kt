@@ -1,10 +1,12 @@
 package io.canopy.engine.data.core.parsers
 
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertIs
 import io.canopy.engine.data.parsers.Json
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.SerializationException
 import kotlinx.serialization.modules.SerializersModule
 import kotlinx.serialization.modules.polymorphic
 import kotlinx.serialization.modules.subclass
@@ -55,7 +57,7 @@ class JsonTests {
         }
 
         @Test
-        fun `should ignore unknown keys by default`() {
+        fun `caller configuration overrides the default acceptance of unknown keys`() {
             // JsonParser is configured with ignoreUnknownKeys = true.
             val jsonString = """{"id":2,"name":"Unknown","extraField":"ignored"}"""
 
@@ -63,6 +65,9 @@ class JsonTests {
 
             assertEquals(2, parsed.id)
             assertEquals("Unknown", parsed.name)
+            assertFailsWith<SerializationException> {
+                Json.fromString<SimpleData>(jsonString, config = { ignoreUnknownKeys = false })
+            }
         }
 
         @Test
