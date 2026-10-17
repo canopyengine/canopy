@@ -28,11 +28,11 @@ import io.canopy.engine.input.events.InputEvent
  * }
  * ```
  *
- * @param N Type of the [Node] this behavior operates on.
+ * @param N Type of the [Node] this behavior operates on, including subclasses of built-in nodes.
  * @property node Reference to the node the behavior is attached to.
  *                 May be null if the behavior was created detached.
  */
-abstract class Behavior<N : Node<N>>(protected open val node: N? = null) {
+abstract class Behavior<N : Node<*>>(protected open val node: N? = null) {
 
     internal fun dependencyOwner(): Node<*>? = node
 
@@ -108,7 +108,7 @@ abstract class Behavior<N : Node<N>>(protected open val node: N? = null) {
  * @param onUpdate Called every frame
  * @param onPhysicsUpdate Called on physics tick
  */
-fun <N : Node<N>> N.behavior(
+fun <N : Node<*>> N.behavior(
     onEnterTree: N.() -> Unit = {},
     onReady: N.() -> Unit = {},
     onExitTree: N.() -> Unit = {},
@@ -127,7 +127,7 @@ fun <N : Node<N>> N.behavior(
  * node.attachBehavior { MyCustomBehavior(it) }
  * ```
  */
-fun <N : Node<N>> N.attachBehavior(builder: (node: N) -> Behavior<N>) {
+fun <N : Node<*>> N.attachBehavior(builder: (node: N) -> Behavior<N>) {
     behavior = builder(this)
 }
 
@@ -139,14 +139,14 @@ fun <N : Node<N>> N.attachBehavior(builder: (node: N) -> Behavior<N>) {
  * node += { MyBehavior(it) }
  * ```
  */
-operator fun <N : Node<N>> N.plusAssign(builder: (node: N) -> Behavior<N>) = attachBehavior(builder)
+operator fun <N : Node<*>> N.plusAssign(builder: (node: N) -> Behavior<N>) = attachBehavior(builder)
 
 /**
  * Factory function that creates a behavior implementation backed by lambdas.
  *
  * Internally used by the [behavior] DSL helper.
  */
-fun <N : Node<N>> createBehavior(
+fun <N : Node<*>> createBehavior(
     onEnterTree: N.() -> Unit = {},
     onReady: N.() -> Unit = {},
     onExitTree: N.() -> Unit = {},

@@ -1,255 +1,142 @@
 package io.canopy.engine.core.flows
 
+import kotlin.test.Test
+import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
-import kotlin.time.Duration.Companion.seconds
-import java.util.concurrent.atomic.AtomicBoolean
+import kotlin.test.assertFalse
+import kotlin.test.assertNull
+import kotlin.test.assertTrue
 import io.canopy.engine.core.managers.ManagersRegistry
 import io.canopy.engine.core.managers.SceneManager
-import io.canopy.engine.core.nodes.Node
 import io.canopy.engine.core.nodes.types.empty.EmptyNode
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.runBlocking
-import kotlinx.coroutines.withTimeout
-import org.junit.jupiter.api.Assertions.*
-import org.junit.jupiter.api.BeforeAll
-import org.junit.jupiter.api.Test
-import org.junit.jupiter.api.assertThrows
+import org.junit.jupiter.api.AfterEach
+import org.junit.jupiter.api.BeforeEach
 
-/**
- * Adjust `n(name)` helper if your Node concrete class differs.
- */
 class ContextTests {
-
-    companion object {
-
-        @JvmStatic
-        @BeforeAll
-        fun setup() {
-            ManagersRegistry.withScope {
-                +SceneManager()
-            }
-        }
+    private enum class Key(override val key: String) : ContextKey {
+        Debug("debug"),
+        Season("season"),
     }
 
-    // --- Helpers ------------------------------------------------------------
+    @BeforeEach
+    fun setup() {
+        ManagersRegistry.withScope { register(SceneManager()) }
+    }
 
-    private fun n(name: String, block: EmptyNode.() -> Unit = {}) = EmptyNode(name, block)
-
-    private object DebugModeKey // any object key (no ::class)
-    private object SeasonKey
-
-    // --- Tests --------------------------------------------------------------
+    @AfterEach
+    fun cleanup() = ManagersRegistry.exit()
 
     @Test
     fun `context resolves from nearest scope`() {
-        val root = n("root") {
+        val root = EmptyNode("root") {
             Context {
                 provide("debug") { true }
-                n("child") {
-                    // child node exists under scope
-                }
+                EmptyNode("child")
             }
         }
-
         root.buildTree()
 
-        // Find the "child" node. Adjust if you have find-by-path utilities.
-        val child = root.getNode<EmptyNode>("./child")
-
-        val debug: Boolean = child.fromContext("debug")
-        assertTrue(debug)
+        assertTrue(root.getNode<EmptyNode<*>>("child").fromContext<Boolean>("debug"))
     }
 
     @Test
-    fun `context resolves from ancestor scope when not provided locally`() {
-        val root = n("root") {
+    fun `nearest provider shadows an outer provider`() {
+        val root = EmptyNode("root") {
             Context {
                 provide("debug") { true }
-                n("a") {
-                    n("b") { }
-                }
-            }
-        }
-
-        root.buildTree()
-
-        val b = root.getNode<EmptyNode>("./a/b")
-
-        val debug: Boolean = b.fromContext("debug")
-        assertTrue(debug)
-    }
-
-    @Test
-    fun `nearest provider wins (shadowing overrides)`() {
-        val root = n("root") {
-            Context {
-                provide("debug") { true }
-
-                n("a") { }
-
+                EmptyNode("a")
                 Context {
                     provide("debug") { false }
-                    n("b") { }
+                    EmptyNode("b")
                 }
             }
         }
-
         root.buildTree()
 
-        val a = root.getNode<EmptyNode>("./a")
-        val b = root.getNode<EmptyNode>("./b")
-
-        val aDebug: Boolean = a.fromContext("debug")
-        val bDebug: Boolean = b.fromContext("debug")
-
-        assertTrue(aDebug)
-        assertFalse(bDebug)
+        assertTrue(root.getNode<EmptyNode<*>>("a").fromContext<Boolean>("debug"))
+        assertFalse(root.getNode<EmptyNode<*>>("b").fromContext<Boolean>("debug"))
     }
 
     @Test
-    fun `contextOrNull returns null when missing`() {
-        val root = n("root") { n("child") { } }
-
+    fun `optional context lookup returns null when missing`() {
+        val root = EmptyNode("root") { EmptyNode("child") }
         root.buildTree()
 
-        val child = root.getNode<EmptyNode>("./child")
-
-        val missing: String? = child.fromContextOrNull("nope")
-        assertNull(missing)
+        assertNull(root.getNode<EmptyNode<*>>("child").fromContextOrNull<String>("missing"))
     }
 
     @Test
-    fun `context throws when missing`() {
-        val root = n("root") { n("child") { } }
-
+    fun `required lookup through an empty context identifies the missing key`() {
+        val root = EmptyNode("root") { Context { EmptyNode("child") } }
         root.buildTree()
+        val child = root.getNode<EmptyNode<*>>("child")
 
-        val child = root.getNode<EmptyNode>("./child")
+        val failure = assertFailsWith<NoSuchElementException> { child.fromContext<Int>("missing") }
 
-        val ex = assertThrows<NoSuchElementException> {
-            child.fromContext<Int>("missing")
-        }
-
-        // Optional: if your error message includes path/name
-        assertTrue(ex.message!!.contains("missing", ignoreCase = true))
+        assertTrue(failure.message.orEmpty().contains("missing"))
     }
 
     @Test
-    fun `supports non-string keys (Any keys)`() {
-        val root = n("root") {
+    fun `ContextKey providers and lookups interoperate with their string keys`() {
+        val root = EmptyNode("root") {
             Context {
-                provide("debugMode") { true }
+                provide(Key.Debug) { true }
                 provide("season") { "winter" }
-                n("child") { }
+                EmptyNode("child")
             }
         }
-
         root.buildTree()
+        val child = root.getNode<EmptyNode<*>>("child")
 
-        val child = root.getNode<EmptyNode>("./child")
-
-        val debug: Boolean = child.fromContext("debugMode")
-        val season: String = child.fromContext("season")
-
-        assertTrue(debug)
-        assertEquals("winter", season)
+        assertTrue(child.fromContext<Boolean>("debug"))
+        assertTrue(child.fromContext<Boolean>(Key.Debug))
+        assertEquals("winter", child.fromContext<String>(Key.Season))
     }
 
     @Test
-    fun `multiple keys of same value type do not collide`() {
-        val root = n("root") {
+    fun `multiple keys of the same value type do not collide`() {
+        val root = EmptyNode("root") {
             Context {
-                provide("keyA") { 1 }
-                provide("keyB") { 2 }
-                n("child") { }
+                provide("first") { 1 }
+                provide("second") { 2 }
+                EmptyNode("child")
             }
         }
-
         root.buildTree()
+        val child = root.getNode<EmptyNode<*>>("child")
 
-        val child = root.getNode<EmptyNode>("./child")
-
-        assertEquals(1, child.fromContext("keyA"))
-        assertEquals(2, child.fromContext("keyB"))
+        assertEquals(1, child.fromContext<Int>("first"))
+        assertEquals(2, child.fromContext<Int>("second"))
     }
 
     @Test
-    fun `deep nesting still resolves correctly`() {
-        val root = n("root") {
+    fun `ancestor context resolves through ordinary grouping nodes`() {
+        val root = EmptyNode("root") {
             Context {
-                provide("x") { 42 }
-
-                n("a") {
-                    n("b") {
-                        n("c") { }
-                    }
-                }
+                provide("value") { 42 }
+                EmptyNode("a") { EmptyNode("b") { EmptyNode("c") } }
             }
         }
-
         root.buildTree()
 
-        val c = root.getNode<EmptyNode>("./a/b/c")
-        assertEquals(42, c.fromContext("x"))
+        assertEquals(42, root.getNode<EmptyNode<*>>("a/b/c").fromContext<Int>("value"))
     }
 
     @Test
-    fun `nested contexts should feed into each other`() {
-        val root = n("root") {
+    fun `nested contexts retain both outer and inner providers`() {
+        val root = EmptyNode("root") {
             Context {
-                provide("keyA") { 1 }
-
+                provide("outer") { 1 }
                 Context {
-                    provide("keyB") { 2 }
-
-                    n("a")
+                    provide("inner") { 2 }
+                    EmptyNode("child")
                 }
             }
         }
         root.buildTree()
+        val child = root.getNode<EmptyNode<*>>("child")
 
-        val c = root.getNode<EmptyNode>("./a")
-
-        assertEquals(1, c.fromContext("keyA"))
-    }
-
-    @Test
-    fun `resolving un-provided data shouldn't hang the thread`() = runBlocking {
-        val root = n("root") {
-            Context {
-                n("a")
-            }
-        }
-
-        root.buildTree()
-
-        val a = root.getNode<EmptyNode>("./a")
-
-        val noHang = AtomicBoolean(false)
-
-        val job = launch(Dispatchers.Default) {
-            withTimeout(2.seconds) {
-                assertFailsWith<NoSuchElementException> {
-                    a.fromContext<String>("data")
-                }
-                noHang.set(true)
-            }
-        }
-
-        job.join()
-
-        assertTrue(noHang.get())
-    }
-
-    // --- Tiny adapter -------------------------------------------------------
-    // If your Node doesn't expose children()/name, replace these calls with your real APIs.
-
-    private fun Node<*>.children(): List<Node<*>> = // Replace with your actual children accessor
-        // e.g. this.children.values.toList()
-        (this as DynamicChildren).childrenList()
-
-    private interface DynamicChildren {
-        fun childrenList(): List<Node<*>>
+        assertEquals(1, child.fromContext<Int>("outer"))
+        assertEquals(2, child.fromContext<Int>("inner"))
     }
 }

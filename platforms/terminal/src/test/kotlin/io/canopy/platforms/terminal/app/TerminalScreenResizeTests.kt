@@ -39,15 +39,15 @@ class TerminalScreenResizeTests {
         }
         try {
             app.engineLoop.enter()
-            app.updateTerminalFrame(0f)
+            app.update(0f)
             assertEquals(listOf(30 to 10), first.dimensions)
             ManagersRegistry.getManager(ScreenManager::class).start(Second::class)
             assertEquals(listOf(30 to 10), second.dimensions)
             assertTrue(output.last().contains("second 30,10"))
-            app.updateTerminalFrame(0f)
+            app.update(0f)
             assertEquals(listOf(30 to 10), second.dimensions)
             viewport = Size(15, 5)
-            app.updateTerminalFrame(0f)
+            app.update(0f)
             assertEquals(listOf(30 to 10, 15 to 5), second.dimensions)
             assertEquals(listOf(30 to 10), first.dimensions)
         } finally {

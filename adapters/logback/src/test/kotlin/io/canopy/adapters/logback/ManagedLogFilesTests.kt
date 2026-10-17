@@ -79,7 +79,7 @@ class ManagedLogFilesTests {
 
             // Assert
             assertEquals(directory.toRealPath(), first.directory)
-            assertEquals(directory.resolve("history/second"), second.directory)
+            assertEquals(directory.toRealPath().resolve("history/second"), second.directory)
             assertEquals("active-first", directory.resolve("engine.log").readText())
             assertEquals("active-second", second.directory.resolve("engine.log").readText())
             assertFalse(second.json)
@@ -97,7 +97,7 @@ class ManagedLogFilesTests {
             val run = ManagedLogFiles.open(config("concurrent"), "concurrent")
             try {
                 // Assert
-                assertEquals(directory.resolve("history/concurrent"), run.directory)
+                assertEquals(directory.toRealPath().resolve("history/concurrent"), run.directory)
                 assertFalse(run.json)
                 assertFalse(Files.exists(directory.resolve("engine.log")))
             } finally {
@@ -118,7 +118,7 @@ class ManagedLogFilesTests {
         run.close()
 
         // Assert
-        assertEquals(directory.resolve("history/safe-fallback"), run.directory)
+        assertEquals(directory.toRealPath().resolve("history/safe-fallback"), run.directory)
         assertEquals("user-engine", directory.resolve("engine.log").readText())
         assertEquals("user-game", directory.resolve("app.log").readText())
         assertEquals("unrecognized user marker", directory.resolve(".canopy-current.properties").readText())
@@ -158,7 +158,7 @@ class ManagedLogFilesTests {
         run.close()
 
         // Assert
-        assertEquals(base.resolve("safe"), run.directory)
+        assertEquals(base.toRealPath().resolve("safe"), run.directory)
         assertEquals("outside-owned", outside.resolve("engine.log").readText())
         assertTrue(Files.isSymbolicLink(base.resolve("history")))
         assertTrue(Files.isSymbolicLink(base.resolve("engine.log")))
@@ -180,9 +180,34 @@ class ManagedLogFilesTests {
         run.close()
 
         // Assert
-        assertEquals(base.resolve("next"), run.directory)
+        assertEquals(base.toRealPath().resolve("next"), run.directory)
         assertEquals("previous-engine", base.resolve("engine.log").readText())
         assertFalse(Files.exists(outside.resolve("previous/engine.log")))
+    }
+
+    @Test
+    fun `user selected ancestor alias resolves once for current and isolated runs`() {
+        // Arrange
+        val realHome = Files.createDirectory(directory.resolve("real-home"))
+        val alias = Files.createSymbolicLink(directory.resolve("home-alias"), realHome)
+        val base = Files.createDirectory(alias.resolve("project"))
+        val expected = realHome.toRealPath().resolve("project")
+
+        // Act
+        val first = ManagedLogFiles.open(config("first").copy(baseLogDir = base), "first")
+        try {
+            val second = ManagedLogFiles.open(config("second").copy(baseLogDir = base), "second")
+            try {
+                // Assert
+                assertEquals(expected, first.directory)
+                assertEquals(expected.resolve("history/second"), second.directory)
+                assertFalse(Files.isSymbolicLink(second.directory))
+            } finally {
+                second.close()
+            }
+        } finally {
+            first.close()
+        }
     }
 
     @Test

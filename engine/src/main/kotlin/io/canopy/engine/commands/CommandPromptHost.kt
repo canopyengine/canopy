@@ -31,7 +31,7 @@ interface CommandPromptPresentation {
     val isLineInput: Boolean get() = false
 
     /** Binds the entered editor owner; null releases platform-owned UI without disposing the editor. */
-    fun bind(owner: CommandPrompt?) {}
+    fun bind(owner: CommandPrompt<*>?) {}
 
     /** Presents a copied snapshot of an open prompt on the lifecycle thread. */
     fun render(snapshot: CommandPromptSnapshot)
@@ -46,7 +46,7 @@ interface CommandPromptPresentation {
  * All access belongs to the serialized lifecycle thread.
  */
 class CommandPromptHost(val app: App<*>, private val presentation: CommandPromptPresentation) : Manager {
-    private var entered: CommandPrompt? = null
+    private var entered: CommandPrompt<*>? = null
     private var focusLease: AutoCloseable? = null
     private var presented = false
     private var capturedThisFrame = false
@@ -56,7 +56,7 @@ class CommandPromptHost(val app: App<*>, private val presentation: CommandPrompt
     internal val blocksGameplay: Boolean
         get() = capturedThisFrame || interactive()?.isOpen == true
 
-    internal fun attach(prompt: CommandPrompt) {
+    internal fun attach(prompt: CommandPrompt<*>) {
         check(entered == null || entered === prompt) { "Only one command prompt may enter a host" }
         if (entered === prompt) return
         val focus = manager<InputFocus>()
@@ -82,7 +82,7 @@ class CommandPromptHost(val app: App<*>, private val presentation: CommandPrompt
         }
     }
 
-    internal fun detach(prompt: CommandPrompt) {
+    internal fun detach(prompt: CommandPrompt<*>) {
         if (entered !== prompt) return
         entered = null
         focusLease?.close()
@@ -193,9 +193,9 @@ class CommandPromptHost(val app: App<*>, private val presentation: CommandPrompt
         failure?.let { throw it }
     }
 
-    private fun interactive(): CommandPrompt? = current()?.takeIf { it.isVisibleInTree }
+    private fun interactive(): CommandPrompt<*>? = current()?.takeIf { it.isVisibleInTree }
 
-    private fun current(): CommandPrompt? {
+    private fun current(): CommandPrompt<*>? {
         val prompt = entered ?: return null
         if (!prompt.isValid || !prompt.isInsideTree) {
             detach(prompt)

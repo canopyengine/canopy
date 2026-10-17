@@ -1,19 +1,24 @@
 package io.canopy.engine.app
 
 import kotlin.time.Duration
+import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicLong
 import java.util.concurrent.atomic.AtomicReference
 import io.canopy.engine.core.CanopyBuildInfo
 import io.canopy.engine.core.CleanupFailures
+import io.canopy.engine.core.managers.ExecutionMode
 import io.canopy.engine.core.managers.InjectionManager
 import io.canopy.engine.core.managers.Manager
+import io.canopy.engine.core.managers.ManagerScope
 import io.canopy.engine.core.managers.ManagersRegistry
 import io.canopy.engine.core.managers.SceneManager
+import io.canopy.engine.core.managers.manager
 import io.canopy.engine.input.InputFocus
 import io.canopy.engine.logging.EngineLogs
 import io.canopy.engine.logging.LogContext
 import io.canopy.engine.logging.LoggingPolicy
 import io.canopy.engine.logging.LoggingSession
+import io.canopy.engine.ui.UiBackend
 import io.canopy.engine.ui.UiManager
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
@@ -23,6 +28,10 @@ import kotlinx.coroutines.withTimeout
 
 /**
  * Shared application lifecycle and configuration, driven by a platform through [engineLoop].
+ * Only one App may run per JVM process. Startup reserves ownership before the host starts;
+ * shutdown retains it through callbacks and logging cleanup. Use a fresh App for each successive run.
+ * [launchAsync] moves host startup to another thread; it does not permit concurrent Apps.
+ * Manager, scene and node operations belong to the serialized host lifecycle thread.
  * Failed startup rolls back the manager scope and runs shutdown hooks. Teardown attempts all stages,
  * preserving the first runtime failure with later cleanup failures suppressed before completing [handle].
  * Hosts must call [EngineLoop.reportFailure] before exit for failures outside loop dispatch.
@@ -33,6 +42,14 @@ abstract class App<C : AppConfig> protected constructor() {
      * ============================================================ */
     private var _config: C? = null
     private var loggingPolicy: LoggingPolicy? = null
+    private val managerScope = ManagerScope()
+
+    /** This app's diagnostic mode. Configure before startup or change on the lifecycle thread. */
+    var executionMode: ExecutionMode
+        get() = managerScope.executionMode
+        set(value) {
+            managerScope.executionMode = value
+        }
 
     @Volatile
     private var loggingSession: LoggingSession? = null
@@ -47,6 +64,7 @@ abstract class App<C : AppConfig> protected constructor() {
      * ============================================================ */
 
     private var updateSequence: Long = 0
+    private var notifiedFrameSize: FrameSize? = null
     private val gameplayFrames = AtomicLong(0)
 
     @Volatile
@@ -57,12 +75,18 @@ abstract class App<C : AppConfig> protected constructor() {
     val frameCount: Long
         get() = gameplayFrames.get()
 
-    /** Pauses gameplay updates while allowing the app loop to continue handling input and rendering. */
+    /**
+     * Pauses gameplay updates while the app loop continues input and rendering.
+     * A physics tick in progress retains its starting eligibility until it completes.
+     */
     fun pause() {
         isPaused = true
     }
 
-    /** Resumes gameplay updates. */
+    /**
+     * Resumes gameplay updates, preserving earned running physics time.
+     * A physics tick in progress retains its starting eligibility until it completes.
+     */
     fun resume() {
         isPaused = false
     }
@@ -73,6 +97,7 @@ abstract class App<C : AppConfig> protected constructor() {
     private val backendExitRef = AtomicReference<(() -> Unit)?>(null)
     private val backendForceRef = AtomicReference<(() -> Unit)?>(null)
     private val launchThreadRef = AtomicReference<Thread?>(null)
+    private val launchRequested = AtomicBoolean(false)
 
     /* ============================================================
      * User callbacks
@@ -91,13 +116,17 @@ abstract class App<C : AppConfig> protected constructor() {
         onPhysicsUpdate = ::performPhysicsUpdate,
         onResize = ::performResize,
         onExit = ::performExit,
-        isPaused = { isPaused }
+        isPaused = { isPaused },
+        onBeginFrame = ::prepareFrame,
+        onPresentFrame = ::presentFrame,
+        onAbortFrame = ::abortFrame
     ).also { it.validateExit = ManagersRegistry::checkCanExit }
 
     /* ============================================================
      * Builder hooks
      * ============================================================ */
     protected var managerBuilder: ManagersRegistry.() -> Unit = {}
+    internal var screenBuilder: ScreenRegistry.() -> Unit = {}
 
     /* ============================================================
      * Public handle
@@ -167,7 +196,26 @@ abstract class App<C : AppConfig> protected constructor() {
     /** Platform logging default; core applications use host-owned logging. */
     protected open fun defaultLoggingPolicy(): LoggingPolicy = LoggingPolicy.Host
 
+    /**
+     * Supplies the common UiManager's backend once during startup, before manager/screen/app entry callbacks.
+     * Null selects a host without presentation. Native resources remain owned by the platform's shutdown hooks.
+     */
+    protected open fun provideUiBackend(): UiBackend? = null
+
     protected open fun afterEnter() = Unit
+
+    /** Opens native frame output and returns current dimensions in host units, or null when unavailable. */
+    protected open fun beginFrame(): FrameSize? = null
+
+    /** Publishes or processes host input after geometry notification and before physics; called on the lifecycle thread. */
+    protected open fun processFrameInput() = Unit
+
+    /** Presents output after successful physics, application, manager and UI processing. */
+    protected open fun presentFrame() = Unit
+
+    /** Discards partial output when frame preparation, processing or presentation fails. Must tolerate partial preparation. */
+    protected open fun abortFrame() = Unit
+
     protected open fun beforeUpdate(delta: Float) = Unit
     protected open fun afterResize(width: Int, height: Int) = Unit
     protected open fun beforeExit() = Unit
@@ -190,6 +238,7 @@ abstract class App<C : AppConfig> protected constructor() {
     /** Compatibility wrapper; drivers should forward lifecycle events through [engineLoop]. */
     fun enter() = engineLoop.enter()
 
+    /** Processes one complete engine-owned frame, including host preparation and presentation; delta is in seconds. */
     fun update(delta: Float) = engineLoop.update(delta)
 
     fun physicsUpdate(delta: Float) = engineLoop.physicsUpdate(delta)
@@ -201,6 +250,8 @@ abstract class App<C : AppConfig> protected constructor() {
     private fun performEnter() {
         var ownsManagerScope = false
         try {
+            ManagersRegistry.acquire(managerScope, allowCurrent = true)
+            ownsManagerScope = true
             loggingSession = (loggingPolicy ?: defaultLoggingPolicy()).start(CanopyBuildInfo.projectVersion)
 
             val backendName = this::class.simpleName ?: "unknown"
@@ -209,20 +260,20 @@ abstract class App<C : AppConfig> protected constructor() {
                     EngineLogs.lifecycle.info { "Booting Canopy..." }
 
                     var sceneManager: SceneManager? = null
-                    ownsManagerScope = true
-                    ManagersRegistry.withScope {
+                    ManagersRegistry.apply {
                         provideManagers().forEach(::register)
                         +InjectionManager()
                         +InputFocus()
-                        +ScreenManager()
+                        +ScreenManager().also { it.configure = screenBuilder }
                         +SceneManager().also {
                             sceneManager = it
                             it.pauseState = { isPaused }
                             it.configureSceneManager()
                         }
-                        +UiManager()
+                        +UiManager(provideUiBackend())
                         managerBuilder()
                     }
+                    ManagersRegistry.enter()
                     sceneManager?.let { engineLoop.configurePhysicsStep(it.physicsStep) }
 
                     onEnter(this@App)
@@ -241,22 +292,34 @@ abstract class App<C : AppConfig> protected constructor() {
         }
     }
 
+    private fun prepareFrame() {
+        val size = beginFrame()
+        if (size != null && size != notifiedFrameSize) {
+            performResize(size.width, size.height)
+            notifiedFrameSize = size
+        }
+        processFrameInput()
+    }
+
     private fun performUpdate(delta: Float) = withLoggingContext {
         updateSequence++
         if (!isPaused) gameplayFrames.incrementAndGet()
 
-        LogContext.with("frame" to updateSequence) {
-            val gameplayDelta = if (isPaused) 0f else delta
-            beforeUpdate(gameplayDelta)
-            onUpdate(this@App, gameplayDelta)
-        }
+        manager<UiManager>().afterUpdates {
+            LogContext.with("frame" to updateSequence) {
+                val gameplayDelta = if (isPaused) 0f else delta
+                beforeUpdate(gameplayDelta)
+                onUpdate(this@App, gameplayDelta)
+            }
 
-        ManagersRegistry.update(delta, isPaused)
+            ManagersRegistry.update(delta, isPaused)
+        }
     }
 
     private fun performPhysicsUpdate(delta: Float) = withLoggingContext {
-        if (!isPaused) onPhysicsUpdate(this@App, delta)
-        ManagersRegistry.physicsUpdate(delta, isPaused)
+        val paused = isPaused
+        if (!paused) onPhysicsUpdate(this@App, delta)
+        ManagersRegistry.physicsUpdate(delta, paused)
     }
 
     private fun performResize(width: Int, height: Int) = withLoggingContext {
@@ -292,7 +355,7 @@ abstract class App<C : AppConfig> protected constructor() {
 
         scopedAttempt { EngineLogs.lifecycle.info("event" to "app.dispose") { "Disposing app" } }
         scopedAttempt { beforeExit() }
-        if (ownsManagerScope) scopedAttempt { ManagersRegistry.exit() }
+        if (ownsManagerScope) scopedAttempt { ManagersRegistry.dispose(managerScope) }
         scopedAttempt {
             loggingSession?.end(
                 reason = if (failures.failure ==
@@ -309,6 +372,7 @@ abstract class App<C : AppConfig> protected constructor() {
         val session = loggingSession
         loggingSession = null
         failures.attempt { session?.close() }
+        failures.attempt { ManagersRegistry.release(managerScope) }
         val error = failures.failure
         if (error == null) {
             onStopped.safeComplete()
@@ -324,11 +388,13 @@ abstract class App<C : AppConfig> protected constructor() {
 
     /** Launches the platform on the calling thread; blocking behavior depends on the backend. */
     fun launch(vararg args: String) {
+        reserveLaunch()
         launchHost(args)
     }
 
     /** Launches the platform on a non-daemon thread and returns lifecycle controls. */
     fun launchAsync(threadName: String = "canopy-app", vararg args: String): AppHandle {
+        reserveLaunch()
         val thread = Thread({
             try {
                 launchHost(args)
@@ -349,10 +415,22 @@ abstract class App<C : AppConfig> protected constructor() {
 
     private fun launchHost(args: Array<out String>) {
         try {
+            ManagersRegistry.acquire(managerScope)
             internalLaunch(config, *args)
         } catch (error: Throwable) {
             fail(error)
         }
+    }
+
+    private fun reserveLaunch() {
+        check(!onStarted.isCompleted && !onStopped.isCompleted) { "An App can only be launched before entry" }
+        check(launchRequested.compareAndSet(false, true)) { "An App can only be launched once" }
+    }
+
+    @PublishedApi
+    internal fun currentScreenManager(): ScreenManager {
+        ManagersRegistry.checkAppScope(managerScope)
+        return manager<ScreenManager>()
     }
 
     /**
@@ -371,6 +449,11 @@ abstract class App<C : AppConfig> protected constructor() {
             if (cleanup !== primary && primary.suppressed.none { it === cleanup }) primary.addSuppressed(cleanup)
         }
         val primary = engineLoop.failure ?: error
+        try {
+            ManagersRegistry.release(managerScope)
+        } catch (cleanup: Throwable) {
+            if (cleanup !== primary && primary.suppressed.none { it === cleanup }) primary.addSuppressed(cleanup)
+        }
         onStarted.safeFail(primary)
         onStopped.safeFail(primary)
         throw primary

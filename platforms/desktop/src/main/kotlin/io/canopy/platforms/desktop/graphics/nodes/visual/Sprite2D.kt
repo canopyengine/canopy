@@ -6,19 +6,23 @@ import io.canopy.engine.core.nodes.Node2D
 import io.canopy.platforms.desktop.graphics.systems.RenderSystem
 import ktx.log.logger
 
-/** Node exposing a LibGDX sprite for RenderSystem; the supplied texture remains externally owned. */
-class Sprite2D(
+/**
+ * Extensible node exposing a LibGDX sprite for RenderSystem; the supplied texture remains externally owned.
+ * @param N Concrete node type exposed to its initialization block.
+ * @param block Runs once after nodeInit, before entry callbacks; not replayed on reentry.
+ */
+open class Sprite2D<N : Sprite2D<N>>(
     name: String,
     // Node specific props
     texture: Texture,
     // Node base props
-    block: Sprite2D.() -> Unit = {},
-) : Node2D<Sprite2D>(
+    block: N.() -> Unit = {},
+) : Node2D<N>(
     name,
     block
 ) {
     val sprite = Sprite(texture)
-    private val logger = logger<Sprite2D>()
+    private val logger = logger<Sprite2D<*>>()
 
     init {
         if (!sceneManager.hasSystem(

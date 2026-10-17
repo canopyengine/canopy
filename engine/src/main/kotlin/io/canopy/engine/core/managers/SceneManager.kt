@@ -40,6 +40,8 @@ class SceneManager(val physicsStep: Float = 1f / 60f, private val block: SceneMa
 
     /** Node equality is final identity equality; paths do not define membership. */
     private val indexedNodes = linkedSetOf<Node<*>>()
+    private val drawingNodes = linkedSetOf<Node<*>>()
+    internal val hasDrawables: Boolean get() = drawingNodes.any { it.isValid && it.isInsideTree }
     private val ownedStates = mutableMapOf<Long, NodeState>()
     internal val retainedStateCount: Int get() = ownedStates.size
     internal val indexedNodeCount: Int get() = indexedNodes.size
@@ -82,8 +84,13 @@ class SceneManager(val physicsStep: Float = 1f / 60f, private val block: SceneMa
     private var flushing = false
     internal var pauseState: () -> Boolean = { false }
 
-    /** Application pause state. Standalone scene managers default to running. */
-    val isPaused: Boolean get() = pauseState()
+    private var physicsPauseSnapshot: Boolean? = null
+
+    /**
+     * Application pause state, held at the tick's starting value during physics traversal.
+     * Standalone scene managers default to running.
+     */
+    val isPaused: Boolean get() = physicsPauseSnapshot ?: pauseState()
 
     private var _currScene: Node<*>? = null
 
@@ -203,6 +210,7 @@ class SceneManager(val physicsStep: Float = 1f / 60f, private val block: SceneMa
             val children = node.childSnapshot()
             for (i in children.indices.reversed()) pending.addLast(children[i])
             indexedNodes.add(node)
+            if (node.draws) drawingNodes.add(node)
 
             systemsFor(node).toList().forEach { sys ->
                 if (
@@ -244,6 +252,7 @@ class SceneManager(val physicsStep: Float = 1f / 60f, private val block: SceneMa
         val failures = CleanupFailures()
         for (node in nodes) {
             if (indexedNodes.remove(node)) indexRemovalCount++
+            drawingNodes.remove(node)
             groupsByNode.remove(node)?.forEach { group ->
                 groups[group]?.remove(node)
                 if (groups[group].isNullOrEmpty()) groups.remove(group)
@@ -485,18 +494,27 @@ class SceneManager(val physicsStep: Float = 1f / 60f, private val block: SceneMa
         }
     }
 
-    /** Dispatches a complete physics traversal, then drains queued destruction even if callbacks fail. */
-    override fun onPhysicsUpdate(delta: Float) = updateBoundary {
-        val root = currScene ?: return@updateBoundary
+    /**
+     * Dispatches a complete physics traversal with pause eligibility fixed at entry, then drains queued destruction.
+     * Pause changes during callbacks affect the next traversal; the current tick is never split or replayed.
+     */
+    override fun onPhysicsUpdate(delta: Float) = physicsUpdate(delta, isPaused)
 
-        LogContext.with("scene" to root.name, "delta" to delta) {
-            log.trace("event" to "tick.physics") { "Physics tick" }
-
-            runPhase(TreeSystem.UpdatePhase.PhysicsPre, delta)
-
-            NodeLifetime.withOwner(root) { root.dispatchPhysicsUpdate(delta) }
-
-            runPhase(TreeSystem.UpdatePhase.PhysicsPost, delta)
+    internal fun physicsUpdate(delta: Float, paused: Boolean) {
+        val previous = physicsPauseSnapshot
+        physicsPauseSnapshot = paused
+        try {
+            updateBoundary {
+                val root = currScene ?: return@updateBoundary
+                LogContext.with("scene" to root.name, "delta" to delta) {
+                    log.trace("event" to "tick.physics") { "Physics tick" }
+                    runPhase(TreeSystem.UpdatePhase.PhysicsPre, delta)
+                    NodeLifetime.withOwner(root) { root.dispatchPhysicsUpdate(delta) }
+                    runPhase(TreeSystem.UpdatePhase.PhysicsPost, delta)
+                }
+            }
+        } finally {
+            physicsPauseSnapshot = previous
         }
     }
 

@@ -56,6 +56,24 @@ internal class UiExpressionTransform(private val messages: MessageCollector) : I
                 private var function: IrSimpleFunction? = null
                 private val enclosingFunctions = mutableListOf<IrSimpleFunction>()
                 private val structuralLocals = mutableSetOf<IrVariable>()
+                private val objectLiteralCalls = mutableSetOf<IrConstructorCall>()
+                private val nodeInitializers = mutableSetOf<IrSimpleFunction>()
+                private fun derivesFrom(type: IrType, name: String): Boolean {
+                    val klass = type.classifierOrNull?.owner as? IrClass ?: return false
+                    return klass.fqNameWhenAvailable?.asString() == name ||
+                        klass.superTypes.any { derivesFrom(it, name) }
+                }
+
+                private fun isUiNode(type: IrType): Boolean = derivesFrom(type, "io.canopy.engine.ui.UiNode")
+
+                private fun markNodeInitializer(expression: IrExpression?) {
+                    when (expression) {
+                        is IrFunctionExpression -> if (expression.function.parameters.any { isUiNode(it.type) }) {
+                            nodeInitializers += expression.function
+                        }
+                        is IrWhen -> expression.branches.forEach { markNodeInitializer(it.result) }
+                    }
+                }
                 override fun visitSimpleFunction(declaration: IrSimpleFunction): IrStatement {
                     val previous = function
                     if (previous != null) enclosingFunctions += previous
@@ -124,19 +142,23 @@ internal class UiExpressionTransform(private val messages: MessageCollector) : I
                     current.parameters.firstOrNull {
                         it.type.classFqName?.asString() == "io.canopy.engine.ui.UiScope"
                     }?.let { return it }
+                    if (current in nodeInitializers) return null
                     // UI element configuration lambdas retain the surrounding declaration scope;
                     // zero-argument action callbacks deliberately do not inherit it.
-                    if (current.parameters.none {
-                            it.type.classFqName?.asString() == "io.canopy.engine.ui.UiElement"
+                    if (current.name.asString() != "<anonymous>" ||
+                        current.parameters.none {
+                            isUiNode(it.type)
                         }
                     ) {
                         return null
                     }
-                    return enclosingFunctions.asReversed().firstNotNullOfOrNull { enclosing ->
+                    for (enclosing in enclosingFunctions.asReversed()) {
+                        if (enclosing in nodeInitializers) return null
                         enclosing.parameters.firstOrNull {
                             it.type.classFqName?.asString() == "io.canopy.engine.ui.UiScope"
-                        }
+                        }?.let { return it }
                     }
+                    return null
                 }
 
                 private fun declaresUi(element: IrElement): Boolean {
@@ -156,6 +178,10 @@ internal class UiExpressionTransform(private val messages: MessageCollector) : I
                             }
                             expression.acceptChildrenVoid(this)
                         }
+                        override fun visitConstructorCall(expression: IrConstructorCall) {
+                            if (derivesFrom(expression.type, "io.canopy.engine.core.nodes.Node")) found = true
+                            expression.acceptChildrenVoid(this)
+                        }
                     })
                     return found
                 }
@@ -168,6 +194,20 @@ internal class UiExpressionTransform(private val messages: MessageCollector) : I
                 }
 
                 override fun visitBlock(expression: IrBlock): IrExpression {
+                    val constructor = expression.statements.lastOrNull() as? IrConstructorCall
+                    if (expression.origin == IrStatementOrigin.OBJECT_LITERAL &&
+                        constructor != null &&
+                        uiReceiver() != null &&
+                        derivesFrom(constructor.type, "io.canopy.engine.core.nodes.Node")
+                    ) {
+                        objectLiteralCalls += constructor
+                        try {
+                            expression.transformChildren(this, null)
+                            return retainNode(expression)
+                        } finally {
+                            objectLiteralCalls -= constructor
+                        }
+                    }
                     if (expression.origin == IrStatementOrigin.FOR_LOOP &&
                         uiReceiver() != null &&
                         declaresUi(expression)
@@ -207,6 +247,12 @@ internal class UiExpressionTransform(private val messages: MessageCollector) : I
                                     return
                                 }
                                 block.acceptChildrenVoid(this)
+                            }
+                            override fun visitConstructorCall(expression: IrConstructorCall) {
+                                if (derivesFrom(expression.type, "io.canopy.engine.core.nodes.Node")) {
+                                    unkeyedDeclaration = true
+                                }
+                                expression.acceptChildrenVoid(this)
                             }
                         })
                         if (!keyed || unkeyedDeclaration) {
@@ -298,6 +344,8 @@ internal class UiExpressionTransform(private val messages: MessageCollector) : I
                 }
 
                 override fun visitVariable(declaration: IrVariable): IrStatement {
+                    // Stored receiver callbacks are values, not inline reactive UI decorators.
+                    markNodeInitializer(declaration.initializer)
                     if (uiReceiver() != null &&
                         declaration.initializer is IrWhen &&
                         declaresUi(declaration.initializer!!)
@@ -305,7 +353,7 @@ internal class UiExpressionTransform(private val messages: MessageCollector) : I
                         diagnostic(
                             declaration,
                             "A conditional declaring UI children must be a statement, " +
-                                "not a value assigned as UiElement."
+                                "not a value assigned as a UI node."
                         )
                         return declaration
                     }
@@ -353,6 +401,49 @@ internal class UiExpressionTransform(private val messages: MessageCollector) : I
                     return declaration
                 }
 
+                override fun visitConstructorCall(expression: IrConstructorCall): IrExpression {
+                    if (derivesFrom(expression.type, "io.canopy.engine.core.nodes.Node")) {
+                        // Initializers run later under the constructed node's ownership, not the outer UI scope.
+                        expression.arguments.forEach(::markNodeInitializer)
+                    }
+                    expression.transformChildren(this, null)
+                    if (expression in objectLiteralCalls ||
+                        !derivesFrom(expression.type, "io.canopy.engine.core.nodes.Node") ||
+                        expression.type.classFqName?.asString() == "io.canopy.engine.ui.UiRoot"
+                    ) {
+                        return expression
+                    }
+                    return retainNode(expression)
+                }
+
+                private fun retainNode(expression: IrExpression): IrExpression {
+                    val receiver = uiReceiver() ?: return expression
+                    val owner = function ?: return expression
+                    val scope = receiver.type.classifierOrNull!!.owner as IrClass
+                    val hook = scope.declarations.filterIsInstance<IrSimpleFunction>().singleOrNull {
+                        it.name.asString() == "node" && it.typeParameters.size == 1
+                    }
+                    if (hook == null) {
+                        diagnostic(expression, "Node declarations require the matching UiScope.node runtime ABI.")
+                        return expression
+                    }
+                    val evaluatorType = pluginContext.irBuiltIns.functionN(0).typeWith(expression.type)
+                    val evaluator = capture(expression, evaluatorType, owner, pluginContext)
+                    val builder = DeclarationIrBuilder(
+                        pluginContext,
+                        owner.symbol,
+                        expression.startOffset,
+                        expression.endOffset
+                    )
+                    return builder.irCall(hook.symbol).apply {
+                        type = expression.type
+                        typeArguments[0] = expression.type
+                        arguments[0] = builder.irGet(receiver)
+                        arguments[1] = builder.irString("${owner.file.fileEntry.name}:${expression.startOffset}:node")
+                        arguments[2] = evaluator
+                    }
+                }
+
                 override fun visitCall(expression: IrCall): IrExpression {
                     expression.transformChildren(this, null)
                     val target = expression.symbol.owner
@@ -369,12 +460,11 @@ internal class UiExpressionTransform(private val messages: MessageCollector) : I
                         return structural(expression)
                     }
                     val targetClass = target.parent as? IrClass ?: return expression
-                    val isUiElement = targetClass.fqNameWhenAvailable?.asString() == "io.canopy.engine.ui.UiElement" ||
-                        expression.arguments.getOrNull(0)?.type?.classFqName?.asString() ==
-                        "io.canopy.engine.ui.UiElement"
-                    if (receiver != null && isUiElement) {
+                    val isUiComponent = expression.arguments.getOrNull(0)?.type?.let(::isUiNode) == true
+                    if (receiver != null && isUiComponent) {
                         val hookName = when (target.name.asString()) {
                             "<set-style>" -> "bindStyle"
+                            "<set-theme>" -> "bindTheme"
                             "<set-isVisible>" -> "bindVisible"
                             "<set-enabled>" -> "bindEnabled"
                             else -> null

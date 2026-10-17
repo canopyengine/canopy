@@ -24,6 +24,7 @@ interface ContextKey {
 
 /**
  * A transparent "scope" node used to attach contextual values to a subtree.
+ * This structural scope remains final; configure providers through its builder rather than subclassing it.
  *
  * Context scopes are implementation details of the DSL and are typically treated as invisible:
  * - [Node.getNode] path resolution intentionally skips these nodes so you don't have to include

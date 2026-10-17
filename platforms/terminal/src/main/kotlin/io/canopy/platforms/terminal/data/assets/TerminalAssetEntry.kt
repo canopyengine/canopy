@@ -13,6 +13,7 @@ import io.canopy.engine.logging.EngineLogs
  * Terminal-specific asset entry using standard Java I/O.
  * No libGDX dependencies - works purely on JVM filesystem/classpath.
  * Classpath entries are read-only and never fall back to the working directory.
+ * Classpath reads disable connection caching and close their streams, releasing JAR handles after each read.
  * Classpath directory enumeration is unsupported; [list] returns an empty list.
  */
 class TerminalAssetEntry(
@@ -25,14 +26,18 @@ class TerminalAssetEntry(
 
     override val path: String = file.path
     override val name: String = file.name
-    override val extension: String = file.extension ?: ""
+    override val extension: String = file.extension
     override val isDirectory: Boolean = source != FileSource.Classpath && file.isDirectory
 
     override fun exists(): Boolean = if (source == FileSource.Classpath) classpathUrl != null else file.exists()
 
     override fun readBytes(): ByteArray = if (source == FileSource.Classpath) {
         val url = classpathUrl ?: throw FileNotFoundException("Classpath resource not found: $path")
-        url.openStream().use { it.readAllBytes() }
+        val connection = url.openConnection().apply {
+            // A cached JarURLConnection retains its archive even after the entry stream closes.
+            useCaches = false
+        }
+        connection.getInputStream().use { it.readAllBytes() }
     } else {
         file.readBytes()
     }

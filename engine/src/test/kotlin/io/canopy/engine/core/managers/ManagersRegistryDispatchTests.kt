@@ -81,20 +81,24 @@ class ManagersRegistryDispatchTests {
             override fun internalLaunch(config: AppConfig, vararg args: String) = Unit
         }
         var appExited = false
+        var managerExited = false
         app.onExit { appExited = true }
         app.managers {
             +object : Manager {
                 override fun onExit() {
-                    assertFailsWith<IllegalStateException> { app.engineLoop.exit() }
+                    managerExited = true
+                    app.engineLoop.exit()
                 }
             }
         }
         app.enter()
-        ManagersRegistry.exit()
+        assertFailsWith<IllegalStateException> { ManagersRegistry.exit() }
         assertFalse(appExited)
+        assertFalse(managerExited)
         assertFalse(app.handle.join(1.milliseconds))
         app.exit()
         assertTrue(appExited)
+        assertTrue(managerExited)
         assertTrue(app.handle.join(1.seconds))
     }
 

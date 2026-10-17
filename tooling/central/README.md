@@ -1,11 +1,10 @@
 # Preparing a Maven Central prerelease
 
-`0.1.0-alpha.1` is already published and cannot be replaced. This workflow
-prepares the proposed `0.1.0-alpha.2` artifacts under verified
-namespace `io.github.canopyengine`, including plugin ID
-`io.github.canopyengine.compiler`. It does not declare stable 0.1.0 or automatically
-publish to Central. Kotlin packages remain unchanged. Follow the matching pinned
-consumer installation instructions in canopy-docs.
+This workflow prepares the version committed as `canopyVersion` in `gradle.properties`
+under namespace `io.github.canopyengine`, including plugin ID
+`io.github.canopyengine.compiler`. It stages and validates artifacts locally;
+publication requires a separate manual step in Central. Kotlin packages remain
+unchanged. Use matching engine and compiler versions in consumer projects.
 
 ## One-time owner setup
 
@@ -55,7 +54,7 @@ Equivalent local commands, with signing environment variables configured:
 ./gradlew test ktlintCheck build coverageReport
 ./gradlew cleanCentralStaging
 ./gradlew stageCentralPublication -PrequireSigning=true
-python3 tooling/central/bundle.py --version 0.1.0-alpha.2 --require-signatures --output build/central-bundle.zip
+python3 tooling/central/bundle.py --version YOUR_COMMITTED_VERSION --require-signatures --output build/central-bundle.zip
 ```
 
 Run the clean command before staging; do not run separate publication builds
@@ -82,3 +81,15 @@ issue #213 open until distribution and this consumer check are complete.
 The upload helper's network path is not exercised with real publishing credentials
 in local preparation. Local test keys validate signing only; never use them for
 an actual release. Windows consumer execution is a separate platform check.
+
+## Offline tests
+
+Regression tests live in `tests/`; `bundle.py` and `upload.py` remain the actual
+publication tools. Run from the repository root:
+
+```sh
+python3 -m unittest discover -s tooling/central/tests -p 'test_*.py'
+```
+
+These tests use temporary artifact fixtures and mocked upload responses. They
+do not contact Central or require publishing credentials.

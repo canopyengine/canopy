@@ -6,7 +6,10 @@ import io.canopy.engine.logging.EngineLogs
 import io.canopy.engine.logging.LogContext
 
 /**
- * Global registry for engine managers.
+ * Lifecycle-thread access to the running application's manager registry.
+ * App owns its registrations; this facade keeps ordinary manager lookups simple.
+ * Only one App may run per JVM process; ownership remains reserved until its cleanup finishes.
+ * Standalone scopes remain available for tests and custom lifecycle drivers when no App owns the registry.
  *
  * Registration, lookup, lifecycle dispatch, and teardown are expected to run
  * serially on the game thread. The registry's maps are not thread-safe.
@@ -17,10 +20,57 @@ object ManagersRegistry {
 
     private val log = EngineLogs.managers
 
-    private val managers = linkedMapOf<KClass<out Manager>, Manager>()
-    private val resolvedCache = mutableMapOf<KClass<out Manager>, Manager>()
-    private var exiting = false
-    private var dispatching = false
+    private val standalone = ManagerScope()
+    private var scope = standalone
+    private val managers get() = scope.managers
+    private val resolvedCache get() = scope.resolvedCache
+    private var exiting: Boolean
+        get() = scope.exiting
+        set(value) {
+            scope.exiting = value
+        }
+    private var dispatching: Boolean
+        get() = scope.dispatching
+        set(value) {
+            scope.dispatching = value
+        }
+
+    internal var executionMode: ExecutionMode
+        get() = scope.executionMode
+        set(value) {
+            scope.executionMode = value
+        }
+
+    /** Reserves the app's registry before platform startup can produce side effects. */
+    @Synchronized
+    internal fun acquire(appScope: ManagerScope, allowCurrent: Boolean = false) {
+        if (allowCurrent && scope === appScope) return
+        check(scope === standalone) { "Another App is running; stop it before starting a new App" }
+        checkCanExit()
+        exit()
+        scope = appScope
+    }
+
+    /** Only the owning app can release its registry; failed cleanup still releases the reservation. */
+    @Synchronized
+    internal fun release(appScope: ManagerScope) {
+        if (scope !== appScope) return
+        checkCanExit()
+        try {
+            if (appScope.managers.isNotEmpty()) exitScope()
+        } finally {
+            scope = standalone
+        }
+    }
+
+    /** Disposes managers while retaining the app reservation through its remaining shutdown callbacks. */
+    internal fun dispose(appScope: ManagerScope) {
+        if (scope === appScope) exitScope()
+    }
+
+    internal fun checkAppScope(appScope: ManagerScope) {
+        check(scope === standalone || scope === appScope) { "This App does not own the running manager scope" }
+    }
 
     /** Registers a unique manager on the engine thread; rejected during lifecycle dispatch and teardown. */
     fun <T : Manager> register(manager: T) {
@@ -131,7 +181,10 @@ object ManagersRegistry {
         }
     }
 
-    /** Dispatches physics; while [paused], only scene managers process eligible nodes. */
+    /**
+     * Dispatches physics; while [paused], only scene managers process eligible nodes.
+     * Scene eligibility uses this pause snapshot for the entire tick, including callback-driven pause changes.
+     */
     fun physicsUpdate(delta: Float, paused: Boolean = false) = dispatch {
         check(!exiting) { "Cannot update managers during teardown" }
         LogContext.with("delta" to delta, "registered" to managers.size) {
@@ -143,7 +196,11 @@ object ManagersRegistry {
             val name = manager::class.simpleName ?: "UnknownManager"
             try {
                 LogContext.with("manager" to name, "delta" to delta) {
-                    manager.onPhysicsUpdate(delta)
+                    if (manager is SceneManager) {
+                        manager.physicsUpdate(delta, paused)
+                    } else {
+                        manager.onPhysicsUpdate(delta)
+                    }
                 }
             } catch (t: Throwable) {
                 log.error(
@@ -182,12 +239,18 @@ object ManagersRegistry {
     }
 
     /**
-     * Attempts every manager's shutdown in registration order on the game thread, then clears registry and cache.
+     * Shuts down standalone managers. Stop a running App through its lifecycle, not through this facade.
+     * Attempts every shutdown in registration order on the game thread, then clears registry and cache.
      * The first failure is rethrown with later distinct failures suppressed. Nested shutdown is harmless;
      * registration, removal and other lifecycle dispatch are rejected until shutdown completes.
      * Lookup remains available during callbacks so managers can finish dependent cleanup.
      */
     fun exit() {
+        check(scope === standalone) { "Stop the running App before exiting standalone managers" }
+        exitScope()
+    }
+
+    private fun exitScope() {
         if (exiting) return
         checkCanExit()
         exiting = true
@@ -214,8 +277,9 @@ object ManagersRegistry {
         failures.rethrow()
     }
 
-    /** Replaces the global scope and enters the new registrations; rejected during lifecycle dispatch and teardown. */
+    /** Replaces a standalone scope; rejected while an App owns the registry or during lifecycle dispatch. */
     fun withScope(block: ManagersRegistry.() -> Unit) {
+        check(scope === standalone) { "Cannot replace a running App's manager scope" }
         log.info("event" to "managers.scope") { "Creating scoped Managers registry..." }
         exit()
         block()
@@ -319,6 +383,15 @@ object ManagersRegistry {
 
     private fun KClass<*>.isSubclassOfManager(): Boolean = Manager::class.java.isAssignableFrom(this.java)
     private fun KClass<*>.isConcreteManagerLookupType(): Boolean = isSubclassOfManager() && this != Manager::class
+}
+
+/** Mutable registry state owned by one App, or by a standalone lifecycle driver. */
+internal class ManagerScope {
+    val managers = linkedMapOf<KClass<out Manager>, Manager>()
+    val resolvedCache = mutableMapOf<KClass<out Manager>, Manager>()
+    var exiting = false
+    var dispatching = false
+    var executionMode = ExecutionMode.Normal
 }
 
 /** Immediately resolves the current global registration on the game thread; missing registrations throw. */

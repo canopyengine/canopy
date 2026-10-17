@@ -5,8 +5,15 @@ import java.lang.ref.WeakReference
 import java.util.concurrent.atomic.AtomicLong
 import io.canopy.engine.core.CleanupFailures
 import io.canopy.engine.core.exceptions.*
+import io.canopy.engine.core.flows.events.Computed
+import io.canopy.engine.core.flows.events.Effect
+import io.canopy.engine.core.flows.events.NoArgEvent
+import io.canopy.engine.core.flows.events.OneArgEvent
+import io.canopy.engine.core.flows.events.Signal
+import io.canopy.engine.core.flows.events.TwoArgsEvent
 import io.canopy.engine.core.managers.SceneManager
 import io.canopy.engine.core.managers.manager
+import io.canopy.engine.graphics.DrawContext
 import io.canopy.engine.input.events.InputEvent
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
@@ -15,6 +22,8 @@ import kotlinx.coroutines.Job
  * Typed, guarded node facade preserving class-named Kotlin construction and concrete DSL receivers.
  * Engine-owned state is referenced weakly. Destruction invalidates state access, releases owned work,
  * and leaves only immutable identity/diagnostics in retained facades. All operations are game-thread confined.
+ * Reusable Canopy node components are open for subclassing; structural scopes such as Context remain final.
+ * Override lifecycle hooks to add behavior; identity, ownership and dispatch remain engine-controlled.
  * The matching Canopy compiler stores ordinary custom properties in engine state.
  * Without the plugin, custom stored values must use [nodeProperty]; runtime queries use the concrete
  * [io.canopy.engine.core.queries.NodeDependency] or [io.canopy.engine.core.queries.GlobalDependency] delegates.
@@ -278,8 +287,8 @@ abstract class Node<N : Node<N>> protected constructor(
         if (s.entered) s.owner.updateGroups(this)
     }
 
-    internal var behavior: Behavior<N>?
-        get() = state("read behavior").behavior as Behavior<N>?
+    internal var behavior: Behavior<*>?
+        get() = state("read behavior").behavior
         set(value) {
             val s = state("attach behavior")
             if (s.behavior === value) return
@@ -294,6 +303,35 @@ abstract class Node<N : Node<N>> protected constructor(
         state("create property").properties[key] = initial
         return NodeProperty.create(key)
     }
+
+    /**
+     * Creates signal state owned by this node, including when called from a subclass initializer.
+     * State survives reusable detachment and is disposed on destruction. Global factories with an
+     * explicit null owner remain available for shared state. Use on the lifecycle thread.
+     */
+    fun <T> signal(value: T): Signal<T> = Signal(value, this)
+
+    /** Creates a zero-argument event owned until this node is destroyed. Listener ownership is independent. */
+    fun event(): NoArgEvent = NoArgEvent(this)
+
+    /** Creates a one-argument event owned until this node is destroyed. Listener ownership is independent. */
+    fun <A> event(): OneArgEvent<A> = OneArgEvent(this)
+
+    /** Creates a two-argument event owned until this node is destroyed. Listener ownership is independent. */
+    fun <A, B> event(): TwoArgsEvent<A, B> = TwoArgsEvent(this)
+
+    /**
+     * Creates a calculation owned by this node and disposed on tree exit or destruction.
+     * Create it in [onEnterTree] when it must be renewed on reentry. Use on the lifecycle thread.
+     */
+    fun <T> computed(block: () -> T): Computed<T> = Computed(block, this)
+
+    /**
+     * Creates an immediately running reaction retained until this node exits or is destroyed.
+     * Create it in [onEnterTree] when it must be renewed on reentry. The reaction's later runs do not
+     * establish ambient ownership; this factory always uses its explicit node receiver.
+     */
+    fun effect(block: () -> Unit): Effect = NodeLifetime.withOwner(this) { Effect(block) }
 
     /**
      * Compiler storage ABI: reads a declaring-class-qualified slot without retaining its value on the facade.
@@ -439,16 +477,16 @@ abstract class Node<N : Node<N>> protected constructor(
         return cursor?.takeIf { it.isValid }
     }
 
-    /** Resolves typed facades through context-transparent paths; invalid receivers always fail. */
-    inline fun <reified T : Node<T>> getNode(path: String): T =
+    /** Resolves any node subclass through context-transparent paths; invalid receivers always fail. */
+    inline fun <reified T : Node<*>> getNode(path: String): T =
         lookup(path, T::class) ?: throw NodeNotFoundException(diagnostic("getNode"), path)
 
     /** Missing nodes return null; invalid receivers and incompatible requested types still fail. */
-    inline fun <reified T : Node<T>> getNodeOrNull(path: String): T? = lookup(path, T::class)
+    inline fun <reified T : Node<*>> getNodeOrNull(path: String): T? = lookup(path, T::class)
 
     @PublishedApi
     @JvmSynthetic
-    internal fun <T : Node<T>> lookup(path: String, type: KClass<T>): T? {
+    internal fun <T : Node<*>> lookup(path: String, type: KClass<T>): T? {
         val result = resolve(path) ?: return null
         if (!type.isInstance(
                 result
@@ -460,10 +498,10 @@ abstract class Node<N : Node<N>> protected constructor(
     }
 
     /** Typed indexing shorthand. */
-    inline operator fun <reified T : Node<T>> get(path: String): T = getNode(path)
+    inline operator fun <reified T : Node<*>> get(path: String): T = getNode(path)
 
     /** Applies a typed patch without exposing private engine state. */
-    inline fun <reified T : Node<T>> patch(path: String, handler: T.() -> Unit) = getNode<T>(path).apply(handler)
+    inline fun <reified T : Node<*>> patch(path: String, handler: T.() -> Unit) = getNode<T>(path).apply(handler)
 
     /** Marks this facade as a reusable prefab; skips automatic entry during attachment. */
     fun asPrefab(): N {
@@ -562,6 +600,45 @@ abstract class Node<N : Node<N>> protected constructor(
 
     /** Custom eligible input hook. Consuming the event stops remaining descendants and behavior callbacks. */
     protected open fun onInput(event: InputEvent) {}
+
+    /**
+     * Paints into the host's pending frame after updates, including while simulation is paused.
+     * Hidden or detached nodes do not draw. Inside UI, [context] uses the container's content area;
+     * ordinary descendants inherit it. The context expires when this callback returns.
+     */
+    protected open fun onDraw(context: DrawContext) {}
+
+    internal val draws: Boolean get() = NodeDefinition.draws(javaClass)
+
+    internal fun drawSelf(context: DrawContext) {
+        if (!isValid || !isInsideTree || !isVisibleInTree || !draws) return
+        val local = context.fork()
+        try {
+            callback("draw") { onDraw(local) }
+        } finally {
+            local.close()
+        }
+    }
+
+    internal fun drawSubtree(context: DrawContext, exclude: (Node<*>) -> Boolean) {
+        val pending = ArrayDeque<Pair<Node<*>, Node<*>?>>()
+        pending.addLast(this to parent)
+        while (pending.isNotEmpty()) {
+            val (node, expectedParent) = pending.removeLast()
+            if (!node.isValid ||
+                !node.isInsideTree ||
+                node.parent !== expectedParent ||
+                !node.isVisibleInTree ||
+                exclude(node)
+            ) {
+                continue
+            }
+            node.drawSelf(context)
+            if (!node.isValid || !node.isInsideTree) continue
+            val children = node.childSnapshot()
+            for (index in children.indices.reversed()) pending.addLast(children[index] to node)
+        }
+    }
 
     /** Builds and enters the class-named DSL once, then runs readiness. */
     fun buildTree() {

@@ -1,8 +1,11 @@
 package io.canopy.platforms.terminal.app
 
+import kotlin.time.Duration.Companion.milliseconds
 import java.util.concurrent.atomic.AtomicBoolean
 import com.github.ajalt.mordant.input.KeyboardEvent
-import com.github.ajalt.mordant.input.coroutines.receiveEventsFlow
+import com.github.ajalt.mordant.input.MouseEvent
+import com.github.ajalt.mordant.input.MouseTracking
+import com.github.ajalt.mordant.input.enterRawMode
 import com.github.ajalt.mordant.input.isCtrlC
 import com.github.ajalt.mordant.rendering.Size
 import com.github.ajalt.mordant.terminal.Terminal
@@ -10,30 +13,40 @@ import io.canopy.adapters.logback.LogbackLogging
 import io.canopy.adapters.mordant.input.MordantInputManager
 import io.canopy.engine.app.App
 import io.canopy.engine.app.AppConfig
+import io.canopy.engine.app.FrameSize
 import io.canopy.engine.commands.CommandPromptHost
 import io.canopy.engine.core.managers.SceneManager
 import io.canopy.engine.core.managers.manager
 import io.canopy.engine.input.InputSystem
 import io.canopy.engine.logging.EngineLogs
+import io.canopy.engine.ui.UiBackend
 import io.canopy.engine.ui.UiManager
 import io.canopy.platforms.terminal.data.assets.TerminalAssetsManager
+import io.canopy.platforms.terminal.graphics.TerminalSurface
+import io.canopy.platforms.terminal.input.TerminalLineInputBridge
+import io.canopy.platforms.terminal.runtime.runtimeTerminal
+import io.canopy.platforms.terminal.ui.TerminalCommandPresentation
+import io.canopy.platforms.terminal.ui.TerminalCommandUi
+import io.canopy.platforms.terminal.ui.TerminalUiBackend
 import io.canopy.tooling.utils.UnstableApi
 import kotlinx.coroutines.*
-import kotlinx.coroutines.flow.takeWhile
 
 /**
  * Application hosted by the terminal runtime, with queued keyboard input and a synchronous frame loop.
+ * Mouse clicks and wheels are queued separately from keyboard text. UI nodes ignore them unless they opt in.
+ * The open command prompt captures mouse events without editing its draft or activating the UI behind it.
+ * Native reads use 100 ms cancellation deadlines on an IO worker. Host shutdown closes their
+ * raw-mode scope before application shutdown callbacks and lifecycle completion.
  * Engine and game diagnostics go to `.canopy/logs` by default, leaving terminal output for the game.
  * Select `logging(LoggingPolicy.Host)` before launch to retain host-owned logging instead.
  */
 class TerminalApp internal constructor(
-    private val terminal: Terminal = Terminal(interactive = true),
+    private val terminal: Terminal = runtimeTerminal(),
     private val output: (String) -> Unit = { terminal.rawPrint(it) },
     private val viewport: () -> Size = { terminal.updateSize() },
 ) : App<AppConfig>() {
 
     private val log = EngineLogs.app
-    private var notifiedViewport: Pair<Int, Int>? = null
 
     /**
      * Maximum bottom-panel height in terminal rows, including its editor row; defaults to 8.
@@ -67,6 +80,7 @@ class TerminalApp internal constructor(
 
     @Volatile
     private var lineInputMode = false
+    private val trackMouseMovement = AtomicBoolean(false)
 
     private val lineInput = TerminalLineInputBridge(inputManager)
     private val surface = TerminalSurface(
@@ -91,6 +105,9 @@ class TerminalApp internal constructor(
      * Rows and text cells are clipped to the viewport; the final column is reserved to prevent scrolling.
      * SGR styling is preserved; cursor and other control input is sanitized.
      * Line input suppresses screen output so it cannot overwrite the blocking editor.
+     * During a terminal update, submissions coalesce into one cell-diff write at the frame boundary.
+     * Outside that update, a submission flushes immediately. Unchanged cells are never rewritten;
+     * startup, resizing and recovery from a failed write clear and repaint the drawable surface.
      */
     fun renderFrame(lines: List<String>) {
         surface.renderWorld(lines)
@@ -98,26 +115,39 @@ class TerminalApp internal constructor(
 
     override fun defaultLoggingPolicy() = LogbackLogging()
 
-    /** Native host boundary: forward geometry before entering frame dispatch, never from a manager callback. */
-    internal fun updateTerminalFrame(delta: Float) {
-        val size = if (lineInputMode) {
+    private var processedLine: CompletableDeferred<Unit>? = null
+
+    override fun beginFrame(): FrameSize? {
+        surface.beginFrame()
+        return if (lineInputMode) {
             null
         } else {
             viewport().let {
-                Size(it.width.coerceAtLeast(0), it.height.coerceAtLeast(0))
+                FrameSize(it.width.coerceAtLeast(0), it.height.coerceAtLeast(0))
             }
         }
-        if (size != null && (size.width to size.height) != notifiedViewport) {
-            engineLoop.resize(size.width, size.height)
-            // Retry unchanged geometry if a resize listener failed.
-            notifiedViewport = size.width to size.height
-        }
-        val processedLine = lineInput.processEvents()
-        engineLoop.update(delta)
-        processedLine?.complete(Unit)
     }
 
-    internal fun prepareLineInputPresentation() = lineInput.preparePresentation { lineInputMode = true }
+    override fun processFrameInput() {
+        processedLine = lineInput.processEvents()
+    }
+
+    override fun presentFrame() {
+        surface.endFrame()
+        trackMouseMovement.set(manager<UiManager>().needsMouseMovement)
+        processedLine?.complete(Unit)
+        processedLine = null
+    }
+
+    override fun abortFrame() {
+        surface.abortFrame()
+        processedLine = null
+    }
+
+    internal fun prepareLineInputPresentation() = lineInput.preparePresentation {
+        lineInputMode = true
+        surface.closeSession()
+    }
 
     override fun defaultConfig(): AppConfig = AppConfig(
         title = "Terminal Canopy App"
@@ -135,13 +165,12 @@ class TerminalApp internal constructor(
         addSystem(InputSystem())
     }
 
-    override fun afterEnter() {
-        manager<UiManager>().backend = TerminalUiBackend(terminal, surface::renderUi)
-    }
+    override fun provideUiBackend(): UiBackend = TerminalUiBackend(terminal, surface::renderUi)
 
     override fun beforeExit() {
         appScope.cancel()
         lineInput.cancel()
+        surface.closeSession()
     }
 
     override fun internalLaunch(config: AppConfig, vararg args: String) {
@@ -153,28 +182,39 @@ class TerminalApp internal constructor(
             forceClose = { running.set(false) }
         )
 
+        surface.openSession()
         engineLoop.enter()
+        trackMouseMovement.set(manager<UiManager>().needsMouseMovement)
         withLoggingContext { log.info { "Starting terminal runtime" } }
 
-        // 🔹 Start async input handling
+        // Native reads run on IO and periodically return so cancellation can close raw mode.
         val inputJob = appScope.launch {
             try {
-                terminal.receiveEventsFlow()
-                    .takeWhile { !(it is KeyboardEvent && it.isCtrlC) }
-                    .collect { event ->
-                        when (event) {
-                            is KeyboardEvent -> {
-                                withLoggingContext { log.trace("key" to event.key) { "Key: ${event.key}" } }
-
-                                // Forward into engine input system (converts to Canopy InputEvent)
-                                inputManager.enqueueMordantKeyEvent(event)
+                withContext(Dispatchers.IO) {
+                    terminal.enterRawMode(MouseTracking.Any).use { input ->
+                        var reportingMovement: Boolean? = null
+                        while (isActive && running.get()) {
+                            val movement = trackMouseMovement.get()
+                            if (reportingMovement != movement) {
+                                // Keep the raw input lease; only change terminal reporting, not native input settings.
+                                terminal.rawPrint(
+                                    "\u001b[?1000;1002;1003l" +
+                                        if (movement) "\u001b[?1003h" else "\u001b[?1000h"
+                                )
+                                reportingMovement = movement
                             }
-
-                            else -> {
-                                // Mordant only produces keyboard events
+                            val event = input.readEventOrNull(100.milliseconds) ?: continue
+                            ensureActive()
+                            if (event is KeyboardEvent) {
+                                if (event.isCtrlC) break
+                                withLoggingContext { log.trace("key" to event.key) { "Key: ${event.key}" } }
+                                inputManager.enqueueMordantKeyEvent(event)
+                            } else if (event is MouseEvent) {
+                                inputManager.enqueueMordantMouseEvent(event, trackMovement = movement)
                             }
                         }
                     }
+                }
             } catch (e: CancellationException) {
                 // Normal shutdown
             } catch (t: Throwable) {
@@ -212,7 +252,7 @@ class TerminalApp internal constructor(
                 val delta = deltaNanos / 1_000_000_000f
 
                 // Notify geometry, then drain input and process the frame before acknowledging a submitted line.
-                updateTerminalFrame(delta)
+                engineLoop.update(delta)
 
                 // Frame limiting
                 val elapsed = System.nanoTime() - now
@@ -236,7 +276,15 @@ class TerminalApp internal constructor(
             inputJob.cancel()
             appScope.cancel()
             lineInput.cancel()
-            engineLoop.exit()
+            // An idle native read must release its raw-mode lease before the caller regains the terminal.
+            // Line fallback has already left raw mode; its blocking System.in read is not joinable here.
+            val interrupted = Thread.interrupted()
+            try {
+                if (!lineInputMode) runBlocking { inputJob.join() }
+            } finally {
+                if (interrupted) Thread.currentThread().interrupt()
+                engineLoop.exit()
+            }
         }
     }
 }

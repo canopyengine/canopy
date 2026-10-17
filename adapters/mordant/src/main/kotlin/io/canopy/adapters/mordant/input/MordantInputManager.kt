@@ -1,5 +1,6 @@
 package io.canopy.adapters.mordant.input
 
+import com.github.ajalt.mordant.input.MouseEvent
 import com.github.ajalt.mordant.input.isCtrlC
 import io.canopy.engine.input.InputManager
 import io.canopy.engine.input.binds.InputBind
@@ -8,7 +9,11 @@ import io.canopy.engine.input.binds.toInputBind
 import io.canopy.engine.input.events.InputEvent
 import io.canopy.engine.input.events.InputState
 import io.canopy.engine.input.events.KeyInputEvent
+import io.canopy.engine.input.events.MouseButtonEvent
+import io.canopy.engine.input.events.MouseMoveEvent
+import io.canopy.engine.input.events.MouseScrollEvent
 import io.canopy.engine.input.events.TextInputEvent
+import io.canopy.engine.math.Vector2
 
 /**
  * Mordant-backed input manager.
@@ -19,8 +24,8 @@ import io.canopy.engine.input.events.TextInputEvent
  * - We build a per-frame "pressed" snapshot
  *
  * Limitation:
- * - Mordant has no key up/down → only press events
- * - So input behaves like "JustPressed only"
+ * - Keyboard input has no key up/down, so it behaves like "JustPressed only".
+ * - Mouse button snapshots supply press/release transitions; wheel input is dispatched as raw steps.
  */
 class MordantInputManager : InputManager() {
 
@@ -28,6 +33,10 @@ class MordantInputManager : InputManager() {
      * Frame-local pressed binds (cleared every frame).
      */
     private val pressedThisFrame = mutableSetOf<InputBind>()
+    private val heldMouse = mutableSetOf<InputBind>()
+    private val mouseLock = Any()
+    private var mouseButtons = 0
+    private var mousePosition: Vector2? = null
 
     /**
      * Called by InputManager.processEvents() for each queued event.
@@ -42,16 +51,80 @@ class MordantInputManager : InputManager() {
                 }
             }
 
-            else -> {
-                // Mordant only produces keyboard events; ignore other event types
+            is MouseButtonEvent -> {
+                val bind = InputBind.entries.firstOrNull { it.type == InputBind.Type.Mouse && it.name == event.action }
+                    ?: return
+                if (event.state == InputState.JustPressed) heldMouse += bind
+                if (event.state == InputState.JustReleased) heldMouse -= bind
             }
+
+            else -> Unit
         }
     }
 
     /**
      * Called by InputManager during action recomputation.
      */
-    override fun pollPressed(bind: InputBind): Boolean = bind in pressedThisFrame
+    override fun pollPressed(bind: InputBind): Boolean = bind in pressedThisFrame || bind in heldMouse
+
+    /**
+     * Publishes button transitions and wheel steps in zero-based terminal cells, never as keyboard text.
+     * Calls are serialized with the backend button snapshot; repeated held snapshots do not repeat clicks.
+     * [trackMovement] also publishes changed positions as typed movement events; it defaults to clicks only.
+     */
+    fun enqueueMordantMouseEvent(event: MouseEvent, trackMovement: Boolean = false) {
+        synchronized(mouseLock) {
+            val position = Vector2(event.x.toFloat(), event.y.toFloat())
+            if (trackMovement && position != mousePosition) enqueue(MouseMoveEvent(position, "MOUSE_MOVE"))
+            mousePosition = if (trackMovement) position else null
+            val horizontal = event.wheelRight.toInt() - event.wheelLeft.toInt()
+            val vertical = event.wheelDown.toInt() - event.wheelUp.toInt()
+            if (horizontal != 0 || vertical != 0) {
+                enqueue(MouseScrollEvent(position, horizontal, vertical, event.ctrl, event.alt, event.shift))
+                return
+            }
+            val buttons = listOf(
+                InputBind.LEFT_MOUSE to event.left,
+                InputBind.RIGHT_MOUSE to event.right,
+                InputBind.MIDDLE_MOUSE to event.middle,
+                InputBind.BACK_MOUSE to event.mouse4,
+                InputBind.FORWARD_MOUSE to event.mouse5
+            )
+            var next = 0
+            val events = buildList {
+                buttons.forEachIndexed { index, (bind, down) ->
+                    val bit = 1 shl index
+                    if (down) next = next or bit
+                    if (down != (mouseButtons and bit != 0)) {
+                        add(
+                            MouseButtonEvent(
+                                position,
+                                bind.name,
+                                if (down) InputState.JustPressed else InputState.JustReleased,
+                                event.ctrl,
+                                event.alt,
+                                event.shift
+                            )
+                        )
+                    }
+                }
+            }
+            mouseButtons = next
+            enqueueBatch(events)
+        }
+    }
+
+    private fun Boolean.toInt(): Int = if (this) 1 else 0
+
+    override fun onExit() {
+        synchronized(mouseLock) {
+            mouseButtons = 0
+            mousePosition = null
+        }
+        heldMouse.clear()
+        pressedThisFrame.clear()
+        super.onExit()
+    }
 
     /**
      * Override to reset frame state BEFORE processing events.

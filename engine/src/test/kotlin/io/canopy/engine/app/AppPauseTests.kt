@@ -18,6 +18,130 @@ import io.canopy.tooling.utils.UnstableApi
 class AppPauseTests {
     @OptIn(UnstableApi::class)
     @Test
+    fun `pausing in app physics finishes the running tick before changing eligibility`() {
+        // Arrange
+        val calls = mutableListOf<String>()
+        val app = object : App<AppConfig>() {
+            override fun defaultConfig() = AppConfig()
+            override fun internalLaunch(config: AppConfig, vararg args: String) = Unit
+        }
+        app.onPhysicsUpdate {
+            calls += "app"
+            pause()
+        }
+        app.onEnter {
+            manager<SceneManager>().currScene = EmptyNode("root") {
+                behavior(onPhysicsUpdate = { calls += "game" })
+                EmptyNode("menu") {
+                    processMode = ProcessMode.WhenPaused
+                    behavior(onPhysicsUpdate = { calls += "menu" })
+                }
+            }
+        }
+        app.enter()
+        try {
+            // Act
+            app.update(app.engineLoop.physicsStep * 3)
+
+            // Assert
+            assertEquals(listOf("app", "game"), calls)
+            calls.clear()
+            app.update(app.engineLoop.physicsStep)
+            assertEquals(listOf("menu"), calls)
+        } finally {
+            app.exit()
+            ManagersRegistry.exit()
+        }
+    }
+
+    @OptIn(UnstableApi::class)
+    @Test
+    fun `resuming in a paused node does not give the current tick to gameplay siblings`() {
+        // Arrange
+        val calls = mutableListOf<String>()
+        val app = object : App<AppConfig>() {
+            override fun defaultConfig() = AppConfig()
+            override fun internalLaunch(config: AppConfig, vararg args: String) = Unit
+        }
+        app.onEnter {
+            manager<SceneManager>().currScene = EmptyNode("root") {
+                EmptyNode("menu") {
+                    processMode = ProcessMode.WhenPaused
+                    behavior(onPhysicsUpdate = {
+                        calls += "menu"
+                        app.resume()
+                    })
+                }
+                EmptyNode("game") {
+                    behavior(onPhysicsUpdate = { calls += "game" })
+                }
+                EmptyNode("always") {
+                    processMode = ProcessMode.Always
+                    behavior(onPhysicsUpdate = { calls += "always" })
+                }
+            }
+        }
+        app.enter()
+        try {
+            // Act
+            app.pause()
+            app.update(app.engineLoop.physicsStep * 2)
+
+            // Assert
+            assertEquals(listOf("menu", "always"), calls)
+            calls.clear()
+            app.update(app.engineLoop.physicsStep)
+            assertEquals(listOf("game", "always"), calls)
+        } finally {
+            app.exit()
+            ManagersRegistry.exit()
+        }
+    }
+
+    @OptIn(UnstableApi::class)
+    @Test
+    fun `rapid toggles advance pausable when paused and always nodes without mixing elapsed time`() {
+        // Arrange
+        val calls = mutableListOf<String>()
+        val app = object : App<AppConfig>() {
+            override fun defaultConfig() = AppConfig()
+            override fun internalLaunch(config: AppConfig, vararg args: String) = Unit
+        }
+        app.onPhysicsUpdate { calls += "app" }
+        app.onEnter {
+            manager<SceneManager>().currScene = EmptyNode("root") {
+                behavior(onPhysicsUpdate = { calls += "game" })
+                EmptyNode("menu") {
+                    processMode = ProcessMode.WhenPaused
+                    behavior(onPhysicsUpdate = { calls += "menu" })
+                }
+                EmptyNode("always") {
+                    processMode = ProcessMode.Always
+                    behavior(onPhysicsUpdate = { calls += "always" })
+                }
+            }
+        }
+        app.enter()
+        try {
+            // Act
+            repeat(8) { frame ->
+                if (frame % 2 == 0) app.resume() else app.pause()
+                app.update(app.engineLoop.physicsStep / 4)
+            }
+
+            // Assert
+            assertEquals(
+                mapOf("app" to 1, "game" to 1, "menu" to 1, "always" to 2),
+                calls.groupingBy { it }.eachCount()
+            )
+        } finally {
+            app.exit()
+            ManagersRegistry.exit()
+        }
+    }
+
+    @OptIn(UnstableApi::class)
+    @Test
     fun `app pause preserves callback contracts and drives eligible scene nodes and input`() {
         // Arrange
         val calls = mutableListOf<String>()

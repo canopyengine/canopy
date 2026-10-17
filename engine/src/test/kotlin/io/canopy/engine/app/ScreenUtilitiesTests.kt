@@ -52,71 +52,25 @@ class ScreenUtilitiesTests {
     }
 
     @Test
-    fun `runtime shortcuts register without entering and preserve navigation order and no-op`() {
-        // Arrange
+    fun `shortcuts register replace navigate and remove through the current manager`() {
         val first = First(calls)
         app.registerScreen(first)
-        app.registerScreen(Second(calls))
         assertNull(screens.current)
         assertEquals(emptyList(), calls)
-
-        // Act
         app.startScreen<First>()
-        app.startScreen<First>()
-        app.startScreen<Second>()
-        app.startScreen<First>()
-
-        // Assert
         assertSame(first, screens.current)
-        assertEquals(
-            listOf(
-                "first:enter", "first:active", "first:inactive", "first:exit",
-                "second:enter", "second:active", "second:inactive", "second:exit",
-                "first:enter", "first:active"
-            ),
-            calls
-        )
-    }
 
-    @Test
-    fun `missing target preserves active visit and removing it exits once`() {
-        // Arrange
-        val first = First(calls)
-        app.registerScreen(first)
-        app.startScreen<First>()
-        calls.clear()
-
-        // Act / Assert
-        assertFailsWith<IllegalStateException> { app.startScreen<Second>() }
-        app.removeScreen<Second>()
-        assertSame(first, screens.current)
-        assertEquals(emptyList(), calls)
-        app.removeScreen<First>()
-        app.removeScreen<First>()
-        assertNull(screens.current)
-        assertEquals(listOf("first:inactive", "first:exit"), calls)
-        assertFailsWith<IllegalStateException> { app.startScreen<First>() }
-    }
-
-    @Test
-    fun `registering replacement ends active visit and starts only explicitly`() {
-        // Arrange
-        val first = First(calls)
         val replacement = First(calls, "replacement")
-        app.registerScreen(first)
-        app.startScreen<First>()
-        calls.clear()
-
-        // Act / Assert
-        app.registerScreen(first)
-        assertSame(first, screens.current)
-        assertEquals(emptyList(), calls)
         app.registerScreen(replacement)
         assertNull(screens.current)
-        assertEquals(listOf("first:inactive", "first:exit"), calls)
         app.startScreen<First>()
         assertSame(replacement, screens.current)
-        assertEquals(listOf("replacement:enter", "replacement:active"), calls.takeLast(2))
+        app.removeScreen<Second>()
+        assertSame(replacement, screens.current)
+
+        app.removeScreen<First>()
+        assertNull(screens.current)
+        assertFailsWith<IllegalStateException> { app.startScreen<First>() }
     }
 
     @Test

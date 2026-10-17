@@ -1,0 +1,92 @@
+name: Launcher
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  integration:
+    name: Launcher (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: '25'
+      - uses: gradle/actions/setup-gradle@v6.3.0
+      - name: Install graphical terminal fixture
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y xterm xvfb xauth
+      - name: Test the real Gradle-to-Java launcher
+        shell: bash
+        run: |
+          if [ "$RUNNER_OS" = "Linux" ]; then
+            xvfb-run -a java -Dcanopy.tests.window=true tooling/launcher/tests/LauncherTests.java .
+          elif [ "$RUNNER_OS" = "Windows" ]; then
+            java -Dcanopy.tests.window=true tooling/launcher/tests/LauncherTests.java .
+          else
+            java tooling/launcher/tests/LauncherTests.java .
+          fi
+
+  terminal:
+    name: Terminal consumer (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-java@v6
+        id: jdk17
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: actions/setup-java@v6
+        id: jdk25
+        with:
+          distribution: temurin
+          java-version: '25'
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - uses: gradle/actions/setup-gradle@v6.3.0
+      - name: Stage matching engine and compiler artifacts
+        shell: bash
+        run: >-
+          ./gradlew stageCentralPublication --max-workers=2
+          "-Dorg.gradle.java.installations.paths=${{ steps.jdk17.outputs.path }},${{ steps.jdk25.outputs.path }}"
+      - name: Verify terminal acceptance harness
+        run: python -m unittest discover -s tooling/launcher/tests -p 'test_*.py'
+      - name: Test native terminal input and restoration through the launcher
+        if: runner.os != 'Windows'
+        env:
+          TERMINAL_REPEATS: ${{ runner.os == 'macOS' && '5' || '1' }}
+        run: |
+          python -m pip install pyte==0.8.2
+          python tooling/launcher/tests/TerminalAcceptance.py --repeat "$TERMINAL_REPEATS"
+      - name: Build the external terminal fixture and verify staged artifacts
+        if: runner.os == 'Windows'
+        run: python tooling/launcher/tests/TerminalAcceptance.py --prepare "build/terminal manual" --build
+      - name: Preserve terminal acceptance evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: terminal-acceptance-${{ matrix.os }}
+          path: build/terminal-acceptance
+          if-no-files-found: warn

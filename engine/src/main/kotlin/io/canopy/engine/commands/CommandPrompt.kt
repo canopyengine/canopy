@@ -11,13 +11,16 @@ import io.canopy.engine.input.binds.Key
 import kotlinx.coroutines.CancellationException
 
 /**
- * Declarative terminal command editor. State, definitions, handlers and reusable instances are engine-owned.
+ * Extensible declarative terminal command editor. State, definitions, handlers and reusable instances are engine-owned.
  * Starts closed; opening captures terminal input without pausing gameplay. Draft and bounded transcript survive
  * closing and reusable tree exit. The terminal host supplies focus and presentation automatically.
  * All configuration, parsing and execution run synchronously on the serialized lifecycle thread.
  * Permanent destruction invalidates gameplay reads and releases command/presentation ownership.
+ * @param N Concrete node type exposed to its initialization block.
+ * @param block Runs once after nodeInit, before entry callbacks; not replayed on reentry.
  */
-class CommandPrompt(name: String, block: CommandPrompt.() -> Unit = {}) : Node<CommandPrompt>(name, block = block) {
+open class CommandPrompt<N : CommandPrompt<N>>(name: String, block: N.() -> Unit = {}) :
+    Node<N>(name, block = block) {
     private val runtime by nodeProperty(PromptState())
 
     init {

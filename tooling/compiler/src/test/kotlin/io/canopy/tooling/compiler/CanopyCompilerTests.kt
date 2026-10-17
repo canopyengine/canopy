@@ -6,14 +6,29 @@ import kotlin.test.assertTrue
 import java.io.ByteArrayOutputStream
 import java.io.PrintStream
 import java.nio.file.Files
+import java.util.concurrent.TimeUnit
 import java.util.jar.JarEntry
 import java.util.jar.JarFile
 import java.util.jar.JarOutputStream
 import org.jetbrains.kotlin.cli.common.ExitCode
 import org.jetbrains.kotlin.cli.jvm.K2JVMCompiler
+import org.junit.jupiter.api.AfterAll
+import org.junit.jupiter.api.TestInstance
 
 /** Compiles consumer declarations and provider fixtures to verify safety rules, general traversal and diagnostics. */
+@TestInstance(TestInstance.Lifecycle.PER_CLASS)
 class CanopyCompilerTests {
+    private val fixtureDirectory = Files.createTempDirectory("canopy-compiler-api").toFile()
+    private var defaultApiOutput: java.io.File? = null
+    private val standardLibrary = java.io.File(
+        kotlin.Unit::class.java.protectionDomain.codeSource.location.toURI()
+    ).path
+
+    @AfterAll
+    fun cleanupFixture() {
+        fixtureDirectory.deleteRecursively()
+    }
+
     private val api = """
         package io.canopy.engine.core.nodes
         import kotlin.reflect.KProperty
@@ -506,6 +521,58 @@ class CanopyCompilerTests {
         }
     }
 
+    private fun compileApi(directory: java.io.File, apiSource: String): java.io.File {
+        val apiFile = directory.resolve("Api.kt").apply { writeText(apiSource) }
+        val apiOutput = directory.resolve("api")
+        val bytes = ByteArrayOutputStream()
+        val compiler = K2JVMCompiler()
+        val common = arrayOf("-no-stdlib", "-no-reflect", "-classpath", standardLibrary)
+        val queryFile = directory.resolve("Queries.kt").apply {
+            writeText(
+                """
+                package io.canopy.engine.core.queries
+                import kotlin.reflect.KProperty
+                import io.canopy.engine.core.nodes.Node
+                sealed class Dependency<T>
+                class NodeDependency<T> : Dependency<T>() {
+                    operator fun getValue(owner: Node<*>, property: KProperty<*>): T = TODO()
+                }
+                class GlobalDependency<T> : Dependency<T>() {
+                    operator fun getValue(owner: Any?, property: KProperty<*>): T = TODO()
+                }
+                inline fun <reified T : Any> manager(): GlobalDependency<T> = GlobalDependency()
+                inline fun <reified T : Any> managerOrNull(): GlobalDependency<T?> = GlobalDependency()
+                inline fun <reified T : Node<*>> child(): NodeDependency<T> = NodeDependency()
+                """.trimIndent()
+            )
+        }
+        val assetFile = directory.resolve("Assets.kt").apply {
+            writeText(
+                """
+                package io.canopy.engine.data.assets
+                import kotlin.reflect.KProperty
+                import io.canopy.engine.core.nodes.Node
+                interface CanopyAsset : AutoCloseable
+                class AssetDelegate<T : CanopyAsset> {
+                    operator fun getValue(owner: Node<*>, property: KProperty<*>): T = TODO()
+                }
+                inline fun <reified T : CanopyAsset> asset(path: String): AssetDelegate<T> = AssetDelegate()
+                """.trimIndent()
+            )
+        }
+        val apiCode = compiler.exec(
+            PrintStream(bytes),
+            *common,
+            "-d",
+            apiOutput.path,
+            apiFile.path,
+            queryFile.path,
+            assetFile.path
+        )
+        assertEquals(ExitCode.OK, apiCode, bytes.toString())
+        return apiOutput
+    }
+
     private fun compileConsumer(
         source: String,
         additionalPlugin: String? = null,
@@ -516,58 +583,13 @@ class CanopyCompilerTests {
     ) {
         val directory = Files.createTempDirectory("canopy-consumer-compiler").toFile()
         try {
-            val apiFile = directory.resolve("Api.kt").apply { writeText(apiSource) }
-            val apiOutput = directory.resolve("api")
-            val standardLibrary = java.io.File(
-                kotlin.Unit::class.java.protectionDomain.codeSource.location.toURI()
-            ).path
+            val apiOutput = if (apiSource == api) {
+                defaultApiOutput ?: compileApi(fixtureDirectory, apiSource).also { defaultApiOutput = it }
+            } else {
+                compileApi(directory, apiSource)
+            }
             val bytes = ByteArrayOutputStream()
             val compiler = K2JVMCompiler()
-            val common = arrayOf("-no-stdlib", "-no-reflect", "-classpath", standardLibrary)
-            val queryFile = directory.resolve("Queries.kt").apply {
-                writeText(
-                    """
-                    package io.canopy.engine.core.queries
-                    import kotlin.reflect.KProperty
-                    import io.canopy.engine.core.nodes.Node
-                    sealed class Dependency<T>
-                    class NodeDependency<T> : Dependency<T>() {
-                        operator fun getValue(owner: Node<*>, property: KProperty<*>): T = TODO()
-                    }
-                    class GlobalDependency<T> : Dependency<T>() {
-                        operator fun getValue(owner: Any?, property: KProperty<*>): T = TODO()
-                    }
-                    inline fun <reified T : Any> manager(): GlobalDependency<T> = GlobalDependency()
-                    inline fun <reified T : Any> managerOrNull(): GlobalDependency<T?> = GlobalDependency()
-                    inline fun <reified T : Node<*>> child(): NodeDependency<T> = NodeDependency()
-                    """.trimIndent()
-                )
-            }
-            val assetFile = directory.resolve("Assets.kt").apply {
-                writeText(
-                    """
-                    package io.canopy.engine.data.assets
-                    import kotlin.reflect.KProperty
-                    import io.canopy.engine.core.nodes.Node
-                    interface CanopyAsset : AutoCloseable
-                    class AssetDelegate<T : CanopyAsset> {
-                        operator fun getValue(owner: Node<*>, property: KProperty<*>): T = TODO()
-                    }
-                    inline fun <reified T : CanopyAsset> asset(path: String): AssetDelegate<T> = AssetDelegate()
-                    """.trimIndent()
-                )
-            }
-            val apiCode = compiler.exec(
-                PrintStream(bytes),
-                *common,
-                "-d",
-                apiOutput.path,
-                apiFile.path,
-                queryFile.path,
-                assetFile.path
-            )
-            assertEquals(ExitCode.OK, apiCode, bytes.toString())
-            bytes.reset()
             val game = directory.resolve("Game.kt").apply {
                 writeText("import io.canopy.engine.core.nodes.*\n" + source)
             }
@@ -588,6 +610,7 @@ class CanopyCompilerTests {
                 // Isolate plugin loading from the test worker, which already loads our main classes.
                 val executable = if (System.getProperty("os.name").startsWith("Windows")) "java.exe" else "java"
                 val java = java.io.File(System.getProperty("java.home"), "bin/$executable").path
+                val output = directory.resolve("compiler-output.txt")
                 val process = ProcessBuilder(
                     listOf(
                         java,
@@ -595,10 +618,17 @@ class CanopyCompilerTests {
                         System.getProperty("canopy.compiler.runtime"),
                         "org.jetbrains.kotlin.cli.jvm.K2JVMCompiler"
                     ) + arguments
-                ).redirectErrorStream(true).start()
-                process.inputStream.use { it.copyTo(bytes) }
-                val result = process.waitFor()
-                ExitCode.entries.first { it.code == result }
+                ).redirectErrorStream(true).redirectOutput(output).start()
+                try {
+                    assertTrue(process.waitFor(60, TimeUnit.SECONDS), "Compiler provider process timed out")
+                    bytes.write(output.readBytes())
+                    ExitCode.entries.first { it.code == process.exitValue() }
+                } finally {
+                    if (process.isAlive) {
+                        process.destroyForcibly()
+                        assertTrue(process.waitFor(5, TimeUnit.SECONDS), "Compiler process did not stop")
+                    }
+                }
             }
             assertResult(code, bytes.toString())
             if (code == ExitCode.OK) inspectOutput?.invoke(directory.resolve("game"), apiOutput)

@@ -5,7 +5,7 @@ import io.canopy.engine.graphics.nodes.visual.AnimatedSprite2D
 
 /** Animation track assigning interpolated texture-region values to a sprite frame. */
 class SpriteTrack<T : TextureRegion>(
-    val sprite: AnimatedSprite2D<T>,
+    val sprite: AnimatedSprite2D<*, T>,
     val frames: Array<T>,
     block: SpriteTrack<T>.() -> Unit = {},
 ) : io.canopy.platforms.desktop.graphics.nodes.animation.tracks.Track<T>() {

@@ -1,0 +1,417 @@
+"""Create an external terminal fixture, or run Unix PTY acceptance against it.
+
+Preparation needs Python 3.10+ and the project's configured JDKs on any OS.
+Unix automation additionally uses pyte 0.8.2 to check output in a real PTY.
+"""
+
+import argparse
+import codecs
+import hashlib
+import json
+import os
+from pathlib import Path
+import re
+import shutil
+import shlex
+import subprocess
+import tempfile
+import time
+
+if os.name == "posix":
+    import fcntl
+    import pty
+    import select
+    import signal
+    import struct
+    import termios
+
+
+class Session:
+    def __init__(self, name, repo, project, output, java, offline):
+        self.name = name
+        self.output = output
+        self.project = project
+        self.screen = pyte.Screen(80, 24)
+        # Model reporting inherited from an earlier application, not just default-off terminals.
+        self.screen.set_mode(9, 1000, 1002, 1003, 1005, 1006, 1015, private=True)
+        self.stream = pyte.Stream(self.screen)
+        self.decoder = codecs.getincrementaldecoder("utf-8")("replace")
+        self.raw = bytearray()
+        self.checks = []
+        self.master, slave = pty.openpty()
+        fcntl.ioctl(slave, termios.TIOCSWINSZ, struct.pack("HHHH", 24, 80, 0, 0))
+        self.original = termios.tcgetattr(slave)
+
+        def controlling_terminal():
+            os.setsid()
+            fcntl.ioctl(slave, termios.TIOCSCTTY, 0)
+
+        command = [
+            java, str(repo / "tooling/launcher/CanopyLaunch.java"), "-p", str(project),
+            "--current-terminal",
+            "--gradle-arg", "--max-workers=2",
+        ]
+        if offline:
+            command += ["--gradle-arg", "--offline"]
+        try:
+            self.child = subprocess.Popen(
+                command, stdin=slave, stdout=slave, stderr=slave,
+                env=dict(os.environ, TERM="xterm-256color", COLORTERM="truecolor"),
+                preexec_fn=controlling_terminal,
+            )
+        except BaseException:
+            os.close(self.master)
+            raise
+        finally:
+            os.close(slave)
+
+    def pump(self, seconds=0.2):
+        deadline = time.monotonic() + seconds
+        while time.monotonic() < deadline:
+            delay = min(0.1, max(0, deadline - time.monotonic()))
+            if select.select([self.master], [], [], delay)[0]:
+                try:
+                    data = os.read(self.master, 65536)
+                except OSError:
+                    break
+                if not data:
+                    break
+                self.raw.extend(data)
+                self.stream.feed(self.decoder.decode(data))
+                (self.output / f"{self.name}.bin").write_bytes(self.raw)
+
+    def text(self):
+        return "\n".join(self.screen.display)
+
+    def wait(self, label, predicate, timeout=10):
+        deadline = time.monotonic() + timeout
+        while time.monotonic() < deadline:
+            self.pump()
+            exited = self.child.poll() is not None
+            if predicate():
+                self.checks.append(label)
+                print(f"PASS: {label}", flush=True)
+                return
+            if exited:
+                break
+        self.save("failure")
+        raise AssertionError(
+            f"{label}; game exit={self.child.poll()}\n{self.text()}\n"
+            f"See {self.output / (self.name + '.bin')}"
+        )
+
+    def send(self, value):
+        os.write(self.master, value if isinstance(value, bytes) else value.encode())
+
+    def ticks(self):
+        found = re.search(r"Ticks: (\d+)", self.text())
+        return int(found[1]) if found else -1
+
+    def focused(self, text):
+        for y, row in enumerate(self.screen.display):
+            start = row.find(text)
+            if start >= 0:
+                return self.screen.buffer[y][start].reverse
+        return False
+
+    def colors(self):
+        chars = [cell for row in self.screen.buffer.values() for cell in row.values()]
+        rabbit = any(cell.data == "r" and cell.fg == "78f078" for cell in chars)
+        fox = any(cell.data == "f" and cell.fg == "ff8c46" for cell in chars)
+        return rabbit and fox
+
+    def mouse_reporting(self):
+        return any(mode << 5 in self.screen.mode for mode in [9, 1000, 1002, 1003, 1005, 1006, 1015])
+
+    def click_reporting(self):
+        return 1000 << 5 in self.screen.mode and not any(
+            mode << 5 in self.screen.mode for mode in [9, 1002, 1003, 1015]
+        )
+
+    def motion_reporting(self):
+        return 1003 << 5 in self.screen.mode and not any(
+            mode << 5 in self.screen.mode for mode in [9, 1000, 1002, 1015]
+        )
+
+    def hovered(self, label):
+        x, y = self.pointer_position(label)
+        return self.screen.buffer[y - 1][x - 1].underscore
+
+    def move(self, label):
+        x, y = self.pointer_position(label)
+        self.send(f"\x1b[<35;{x};{y}M")
+
+    def pointer_position(self, label):
+        for y, row in enumerate(self.screen.display):
+            x = row.find(label)
+            if x >= 0:
+                return x + 1, y + 1  # SGR reports are one-based; the backend normalizes to viewport cells.
+        raise AssertionError(f"Pointer target missing: {label}")
+
+    def click(self, label):
+        x, y = self.pointer_position(label)
+        self.send(f"\x1b[<0;{x};{y}M")
+        self.pump()
+        self.send(f"\x1b[<0;{x};{y}m")
+        self.pump()
+
+    def scroll(self, label):
+        x, y = self.pointer_position(label)
+        self.send(f"\x1b[<65;{x};{y}M")
+        self.pump()
+
+    def resize(self, columns, rows):
+        self.screen.resize(lines=rows, columns=columns)
+        fcntl.ioctl(self.master, termios.TIOCSWINSZ, struct.pack("HHHH", rows, columns, 0, 0))
+        self.pump(0.5)
+
+    def save(self, label):
+        (self.output / f"{self.name}-{label}.txt").write_text(self.text())
+        cells = [
+            dict(x=x, y=y, text=cell.data, fg=cell.fg, bg=cell.bg,
+                 bold=cell.bold, inverse=cell.reverse)
+            for y, row in self.screen.buffer.items() for x, cell in row.items()
+            if cell.data.strip() or cell.bg != "default" or cell.reverse
+        ]
+        (self.output / f"{self.name}-{label}.json").write_text(json.dumps(cells, indent=2))
+
+    def stopped(self):
+        self.wait("clean process exit", lambda: self.child.poll() is not None, timeout=15)
+        assert self.child.returncode == 0, f"Game exit code: {self.child.returncode}"
+        assert b"\x1b[?1049l" in self.raw, "Alternate screen not restored"
+        assert termios.tcgetattr(self.master)[:4] == self.original[:4], "Terminal flags not restored"
+        assert not self.mouse_reporting(), "Mouse modes not restored"
+        self.checks.append("alternate screen and native terminal flags restored")
+        result = dict(exit=self.child.returncode, checks=self.checks, bytes=len(self.raw))
+        (self.output / f"{self.name}-result.json").write_text(json.dumps(result, indent=2))
+
+    def close(self):
+        if self.child.poll() is None:
+            os.killpg(self.child.pid, signal.SIGKILL)
+            self.child.wait()
+        os.close(self.master)
+        logs = self.project / ".canopy/logs"
+        if logs.exists():
+            shutil.copytree(logs, self.output / f"{self.name}-logs", dirs_exist_ok=True)
+        for crash in self.project.glob("hs_err_pid*.log"):
+            shutil.copy(crash, self.output / f"{self.name}-{crash.name}")
+
+
+def exercise(session):
+    session.wait(
+        "styled moving map rendered",
+        lambda: "Canopy terminal acceptance" in session.text() and session.colors(), timeout=150,
+    )
+    first = session.ticks()
+    session.wait("startup enables movement for participating UI", session.motion_reporting)
+    session.move("Add rabbit")
+    session.wait("movement underlines button without focusing or activating", lambda:
+                 session.hovered("Add rabbit") and not session.focused("Add rabbit") and
+                 "Population: 3" in session.text())
+    session.move("Canopy terminal acceptance")
+    session.wait("moving away clears hover", lambda: not session.hovered("Add rabbit"))
+    session.wait("normal node updates animate map", lambda: session.ticks() > first + 2)
+    session.save("initial")
+    session.send(b"\x1b[B")
+    session.wait("Down focuses Add rabbit", lambda: session.focused("Add rabbit"))
+    session.send("\r")
+    session.wait("Enter activates Add rabbit", lambda: "Population: 4" in session.text())
+    session.click("Add rabbit")
+    session.wait("mouse click activates the button once", lambda: "Population: 5" in session.text())
+    session.scroll("Scroll: 0")
+    session.wait("wheel reaches an opted-in custom component", lambda: "Scroll: 1" in session.text())
+    session.send(b"\x1b[B")
+    session.wait("Down focuses Toggle details", lambda: session.focused("Toggle details"))
+    session.send("\r")
+    session.wait("conditional details clear without stale text", lambda: "Details visible" not in session.text())
+    session.save("focused")
+
+    # The prompt owns Escape and retains the underlying button selection.
+    session.send(b"\x1b")
+    session.wait("Escape opens command editor", lambda: session.screen.display[-1].startswith("> "))
+    session.wait("command editor disables movement reporting", session.click_reporting)
+    session.move("Add rabbit")
+    session.click("Add rabbit")
+    session.scroll("Scroll: 1")
+    session.wait("commands block mouse actions without editing the draft", lambda:
+                 session.screen.display[-1].rstrip() == ">" and
+                 "Population: 5" in session.text() and "Scroll: 1" in session.text())
+    before = session.ticks()
+    session.wait("opening commands preserves simulation updates", lambda: session.ticks() > before + 2)
+    session.send("pause\r")
+    session.wait("pause command accepted", lambda: "Simulation paused" in session.text())
+    session.pump(0.3)
+    frozen = session.ticks()
+    assert frozen >= 0
+    session.pump(0.6)
+    assert session.ticks() == frozen, "Paused scene still updating"
+    session.checks.append("pause stops scene updates")
+    session.save("paused")
+    session.send(b"\x1b")
+    session.wait("closing prompt restores world", lambda: not session.screen.display[-1].startswith("> "))
+    session.pump(0.5)
+    assert session.ticks() == frozen, "Closing prompt resumed explicitly paused app"
+    session.checks.append("closing prompt preserves explicit pause")
+    session.send(b"\x1b[B")
+    session.wait("focus remains responsive while paused", lambda: session.focused("Add rabbit"))
+    session.send("\r")
+    session.wait("button action remains responsive while paused", lambda: "Population: 6" in session.text())
+
+    session.send(b"\x1b")
+    session.wait("reopen paused command editor", lambda: session.screen.display[-1].startswith("> "))
+    session.send("res")
+    session.wait("editor draft captured", lambda: session.screen.display[-1].startswith("> res"))
+    for columns, rows, label in [(32, 10, "narrow"), (100, 30, "wide")]:
+        session.resize(columns, rows)
+        session.wait(
+            f"{label} resize preserves editor draft",
+            lambda: session.screen.display[-1].startswith("> res") and session.colors(),
+        )
+        assert session.ticks() == frozen, "Resize resumed paused scene"
+        session.save(label)
+    session.send("ume\r")
+    session.wait(
+        "partial draft resumes simulation after resize",
+        lambda: "Simulation resumed" in session.text() and session.ticks() > frozen + 2,
+    )
+    session.save("resumed")
+    session.send("quit\r")
+    session.stopped()
+
+
+def create_project(repo, project, version, kotlin_version):
+    repository = (repo / "build/central-repository").as_uri()
+    shutil.copytree(repo / "gradle/wrapper", project / "gradle/wrapper")
+    (project / "settings.gradle.kts").write_text(f'''
+pluginManagement {{ repositories {{ maven {{ url = uri("{repository}") }}; gradlePluginPortal(); mavenCentral() }} }}
+rootProject.name = "terminal-acceptance"
+''')
+    (project / "build.gradle.kts").write_text(f'''
+plugins {{
+    kotlin("jvm") version "{kotlin_version}"
+    id("io.github.canopyengine.compiler") version "{version}"
+    application
+}}
+repositories {{ maven {{ url = uri("{repository}") }}; mavenCentral() }}
+dependencies {{
+    implementation("io.github.canopyengine:engine:{version}")
+    implementation("io.github.canopyengine:platforms-terminal:{version}")
+}}
+kotlin {{ jvmToolchain(25) }}
+application {{ mainClass.set("TerminalAcceptanceKt") }}
+tasks.named<JavaExec>("run") {{ jvmArgs("--enable-native-access=ALL-UNNAMED") }}
+''')
+    sources = project / "src/main/kotlin"
+    sources.mkdir(parents=True)
+    shutil.copy(repo / "tooling/launcher/tests/fixtures/TerminalAcceptance.kt", sources)
+
+
+def verify_artifacts(repository, project, version, output):
+    hashes = {}
+    for module in ["engine", "platforms-terminal"]:
+        staged = repository / module / version / f"{module}-{version}.jar"
+        installed = project / "build/install/terminal-acceptance/lib" / staged.name
+        digest = hashlib.sha256(staged.read_bytes()).hexdigest()
+        assert digest == hashlib.sha256(installed.read_bytes()).hexdigest(), f"Stale {module} artifact"
+        hashes[module] = digest
+    (output / "artifact-hashes.json").write_text(json.dumps(hashes, indent=2))
+
+
+def prepare(repo, project, version, kotlin_version, repository, output, java, offline, build):
+    # Refuse an existing directory so preparation never replaces a user's project.
+    project.mkdir(parents=True, exist_ok=False)
+    create_project(repo, project, version, kotlin_version)
+    command = [java, str(repo / "tooling/launcher/CanopyLaunch.java"), "-p", str(project),
+               "--gradle-arg", "--max-workers=2"]
+    if offline:
+        command += ["--gradle-arg", "--offline"]
+    if os.name == "nt":
+        launch = "& " + " ".join("'" + part.replace("'", "''") + "'" for part in command)
+    else:
+        launch = shlex.join(command)
+    (project / "LAUNCH.txt").write_text(launch + "\n", encoding="utf-8")
+    (output / "prepared-project.json").write_text(json.dumps(
+        dict(project=str(project), version=version, command=command, built=False), indent=2,
+    ))
+    if build:
+        wrapper = project / "gradle/wrapper/gradle-wrapper.jar"
+        build_command = [java, "-classpath", str(wrapper), "org.gradle.wrapper.GradleWrapperMain",
+                         "installDist", "--max-workers=2", "--console=plain"]
+        if offline:
+            build_command.append("--offline")
+        with (output / "prepared-build.log").open("wb") as log:
+            subprocess.run(build_command, cwd=project, stdout=log, stderr=subprocess.STDOUT, check=True)
+        verify_artifacts(repository, project, version, output)
+        (output / "prepared-project.json").write_text(json.dumps(
+            dict(project=str(project), version=version, command=command, built=True), indent=2,
+        ))
+    print(f"Prepared {project}\nLaunch in your terminal:\n{launch}\n"
+          f"Manual checks: {repo / 'tooling/launcher/tests/WindowsTerminalAcceptance.md'}", flush=True)
+
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--repo", type=Path, default=Path(__file__).resolve().parents[3])
+    parser.add_argument("--output", type=Path)
+    parser.add_argument("--java", default=str(Path(os.environ["JAVA_HOME"]) / "bin" /
+                                             ("java.exe" if os.name == "nt" else "java"))
+                        if "JAVA_HOME" in os.environ else "java")
+    parser.add_argument("--offline", action="store_true")
+    parser.add_argument("--repeat", type=int, default=1, help="Repeat both native launches to expose startup failures")
+    parser.add_argument("--prepare", type=Path, help="Create a persistent fixture on any OS; no pyte needed")
+    parser.add_argument("--build", action="store_true", help="Also build --prepare's distribution and verify JAR hashes")
+    args = parser.parse_args()
+    if args.repeat < 1:
+        parser.error("--repeat must be positive")
+    if args.build and not args.prepare:
+        parser.error("--build requires --prepare")
+    if not args.prepare and os.name != "posix":
+        parser.error("Windows native checks are manual; use --prepare PATH --build")
+    repo = args.repo.resolve()
+    output = (args.output or repo / "build/terminal-acceptance").resolve()
+    output.mkdir(parents=True, exist_ok=True)
+    version = re.search(r"(?m)^canopyVersion\s*=\s*(\S+)", (repo / "gradle.properties").read_text())[1]
+    kotlin_version = re.search(r'(?m)^kotlin = "([^"]+)"', (repo / "gradle/libs.versions.toml").read_text())[1]
+    repository = repo / "build/central-repository/io/github/canopyengine"
+    for module in ["engine", "platforms-terminal"]:
+        if not (repository / module / version / f"{module}-{version}.jar").exists():
+            raise SystemExit("Stage the artifacts first: ./gradlew stageCentralPublication")
+
+    if args.prepare:
+        prepare(repo, args.prepare.resolve(), version, kotlin_version, repository, output,
+                args.java, args.offline, args.build)
+        return
+
+    global pyte
+    try:
+        import pyte
+    except ImportError:
+        raise SystemExit("Install the test dependency: python3 -m pip install pyte==0.8.2")
+
+    with tempfile.TemporaryDirectory(prefix="canopy terminal acceptance ") as scratch:
+        project = Path(scratch)
+        create_project(repo, project, version, kotlin_version)
+        for iteration in range(args.repeat):
+            suffix = "" if iteration == 0 else f"-{iteration + 1}"
+            session = Session(f"input{suffix}", repo, project, output, args.java, args.offline)
+            try:
+                exercise(session)
+            finally:
+                session.close()
+            # Verify the installed distribution actually used these staged artifacts.
+            verify_artifacts(repository, project, version, output)
+            session = Session(f"ctrl-c{suffix}", repo, project, output, args.java, args.offline)
+            try:
+                session.wait(
+                    "second fresh terminal launch renders",
+                    lambda: "Canopy terminal acceptance" in session.text() and session.colors(), timeout=150,
+                )
+                session.send(b"\x03")
+                session.stopped()
+            finally:
+                session.close()
+    print(f"All terminal acceptance checks passed. Evidence: {output}", flush=True)
+
+
+if __name__ == "__main__":
+    main()
