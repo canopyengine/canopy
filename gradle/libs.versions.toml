@@ -31,7 +31,7 @@ logstash="9.0"
 tomlkt = "0.6.1"
 
 # Mordant
-mordant = "3.1.0"
+mordant = "3.1.1"
 
 # Misc
 graalHelper = "2.0.1"
