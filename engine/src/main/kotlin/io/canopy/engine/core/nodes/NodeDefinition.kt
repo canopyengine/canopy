@@ -3,6 +3,8 @@ package io.canopy.engine.core.nodes
 import java.lang.reflect.Modifier
 import java.util.Collections
 import io.canopy.engine.core.exceptions.InvalidNodeDefinitionException
+import io.canopy.engine.core.flows.events.ComputedProperty
+import io.canopy.engine.core.flows.events.SignalProperty
 import io.canopy.engine.core.queries.GlobalDependency
 import io.canopy.engine.core.queries.NodeDependency
 import io.canopy.engine.data.assets.AssetDelegate
@@ -36,6 +38,8 @@ internal object NodeDefinition {
                 for (field in current.declaredFields) {
                     if (!Modifier.isStatic(field.modifiers) &&
                         field.type != NodeProperty::class.java &&
+                        field.type != SignalProperty::class.java &&
+                        field.type != ComputedProperty::class.java &&
                         field.type != GlobalDependency::class.java &&
                         field.type != NodeDependency::class.java &&
                         field.type != AssetDelegate::class.java

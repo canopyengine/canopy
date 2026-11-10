@@ -1,5 +1,6 @@
 package io.canopy.engine.core.flows.events
 
+import kotlin.reflect.KProperty
 import io.canopy.engine.core.nodes.Node
 import io.canopy.engine.core.nodes.NodeLifetime
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -9,6 +10,13 @@ import kotlinx.coroutines.flow.asSharedFlow
 
 /**
  * A reactive value container that notifies observers when it changes.
+ *
+ * Declare gameplay state with `var hunger by signal(100)`, read `hunger`, and assign `hunger = 80`.
+ * Node delegates keep their source in guarded engine storage. Values survive reusable detachment;
+ * callbacks and Flow publication disconnect on exit and must be renewed after entry. Flow collector
+ * jobs remain owned by their caller; register cancellation with the appropriate Node.
+ * Initial construction may prepare dormant bindings; updates publish only while the owner is entered.
+ * Explicit Signal objects retain invoke/update/connect/flow access for low-level integrations.
  *
  * ## Reading
  *
@@ -62,6 +70,7 @@ class Signal<T>(initial: T, owner: Node<*>? = NodeLifetime.current()) {
     /** Read-only stream; owned collectors must register their job for cancellation. */
     val flow get() = synchronized(flowLock) {
         lifetime.check("read signal flow")
+        check(lifetime.canObserve) { "Enter the owning Node before observing its signal flow" }
         val stream = changes ?: MutableSharedFlow<T>(
             replay = 1,
             extraBufferCapacity = 64,
@@ -77,7 +86,36 @@ class Signal<T>(initial: T, owner: Node<*>? = NodeLifetime.current()) {
     @Volatile private var value: Any? = initial
 
     init {
-        lifetime.bind(::dispose)
+        lifetime.bind(::dispose, ::suspendObservation, ::resumeObservation)
+    }
+
+    /** Installs a Node property without retaining its source on the Node facade. */
+    operator fun provideDelegate(thisRef: Node<*>, property: KProperty<*>): SignalProperty<T> =
+        SignalProperty(thisRef.reactiveSlot(this))
+
+    /** Native delegation outside Nodes retains the caller's explicitly chosen source lifetime. */
+    operator fun getValue(thisRef: Any?, property: KProperty<*>): T = invoke()
+
+    /** Native assignment outside Nodes uses the same equality and notification behavior. */
+    operator fun setValue(thisRef: Any?, property: KProperty<*>, value: T) = update { value }
+
+    private fun resumeObservation() {
+        @Suppress("UNCHECKED_CAST")
+        val current = value as T
+        valueChanged.emit(current)
+        synchronized(flowLock) {
+            flowReplay = current
+            changes?.tryEmit(current)
+        }
+    }
+
+    private fun suspendObservation() {
+        valueChanged.clear()
+        synchronized(flowLock) {
+            changes?.resetReplayCache()
+            changes = null
+            flowReplay = value
+        }
     }
 
     /**
@@ -89,7 +127,7 @@ class Signal<T>(initial: T, owner: Node<*>? = NodeLifetime.current()) {
      */
     operator fun invoke(): T {
         lifetime.check("read signal")
-        TrackingContext.register(this)
+        if (lifetime.canObserve) TrackingContext.register(this)
         @Suppress("UNCHECKED_CAST")
         return value as T
     }
@@ -112,6 +150,10 @@ class Signal<T>(initial: T, owner: Node<*>? = NodeLifetime.current()) {
         val old = value
         if (old != new) {
             value = new
+            if (!lifetime.active) {
+                flowReplay = new
+                return
+            }
             valueChanged.emit(new)
             synchronized(flowLock) {
                 if (!lifetime.disposed) {
@@ -125,12 +167,14 @@ class Signal<T>(initial: T, owner: Node<*>? = NodeLifetime.current()) {
     /** Subscribes a listener to value changes (weak reference). */
     infix fun connect(listener: (T) -> Unit): EventDisconnectHandler {
         lifetime.check("connect signal")
+        check(lifetime.canObserve) { "Enter the owning Node before connecting to its signal" }
         return valueChanged connect listener
     }
 
     /** Subscribes with automatic disconnection when [owner] exits or is removed. */
     fun connect(owner: Node<*>?, listener: (T) -> Unit): EventDisconnectHandler {
         lifetime.check("connect signal")
+        check(lifetime.canObserve) { "Enter the owning Node before connecting to its signal" }
         return valueChanged.connect(owner, listener)
     }
 

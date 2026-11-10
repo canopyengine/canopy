@@ -4,6 +4,7 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import io.canopy.engine.core.exceptions.NodeDestroyedException
+import io.canopy.engine.core.flows.events.Computed
 import io.canopy.engine.core.flows.events.Signal
 import io.canopy.engine.core.flows.events.computed
 import io.canopy.engine.core.flows.events.effect
@@ -19,12 +20,12 @@ class NodeSourceOwnershipTests {
     private lateinit var scenes: SceneManager
 
     private class StateNode : Node<StateNode>("child") {
-        val count = signal(1)
-        val shared = signal(owner = null, 2)
+        val count = Signal(1, owner = this)
+        val shared = Signal(2, owner = null)
         val changed = event()
         val valueChanged = event<Int>()
         val pairChanged = event<Int, Int>()
-        val derived = computed { count() * 2 }
+        val derived = Computed({ count() * 2 }, owner = this)
         val observed = mutableListOf<Int>()
         val reaction = effect { observed += count() + shared() }
     }

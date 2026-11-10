@@ -521,7 +521,8 @@ internal class UiObserver(private val owner: Node<*>, private var action: (() ->
         if (!disposed && suspended) {
             suspended = false
             cancelRemoval = owner.onRemoval(::suspend)
-            run()
+            // Presentation runs after tree entry, so descendant reactive state is active.
+            manager<UiManager>().enqueue(this)
         }
     }
     fun dispose() {

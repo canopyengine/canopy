@@ -15,6 +15,7 @@ internal class NodeState(val owner: SceneManager, var name: String, var builder:
     val properties = mutableMapOf<Any, Any?>()
     val lifetimeSlots = linkedMapOf<Any, AutoCloseable>()
     var entryGeneration = 0L
+    val activity = linkedSetOf<NodeActivity>()
     val removal = linkedSetOf<CleanupRegistration>()
     val destruction = linkedSetOf<CleanupRegistration>()
     var behavior: Behavior<*>? = null
@@ -47,3 +48,11 @@ internal class CleanupRegistration(private var callback: (() -> Unit)?) {
 
 /** Immutable information available to exit hooks, including after gameplay access is invalidated. */
 data class NodeExitMetadata(val nodeId: Long, val name: String, val path: String, val destroying: Boolean)
+
+/** Internal persistent entry hooks, cancelled when their source is destroyed. */
+internal class NodeActivity(var enter: (() -> Unit)?, var exit: (() -> Unit)?) {
+    fun clear() {
+        enter = null
+        exit = null
+    }
+}

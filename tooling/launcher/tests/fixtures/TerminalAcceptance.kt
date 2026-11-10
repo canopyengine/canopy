@@ -32,7 +32,7 @@ fun main() {
                         appearance = UiAppearance(foreground = UiColor.Rgb(120, 220, 160), bold = true)
                     )
                     val map = AcceptanceMap()
-                    Text("Ticks: ${map.ticks()}")
+                    Text("Ticks: ${map.displayedTicks}")
                     Divider()
                     Text("Population: ${population()}")
                     ScrollProbe()
@@ -64,18 +64,18 @@ fun main() {
 
 /** A custom component opts in; its Text child keeps the default Ignore filter. */
 private class ScrollProbe : UiNode<ScrollProbe>("Scroll") {
-    private val steps = signal(0)
+    private var steps by signal(0)
 
     init {
         mouseFilter = UiMouseFilter.Stop
     }
 
     override fun nodeInit() {
-        ui { Text("Scroll: ${steps()}") }
+        ui { Text("Scroll: ${steps}") }
     }
 
     override fun onMouseInput(event: InputEvent) {
-        if (event is MouseScrollEvent) steps.update { it + event.vertical }
+        if (event is MouseScrollEvent) steps += event.vertical
     }
 }
 
@@ -84,7 +84,8 @@ private class AcceptanceMap : UiNode<AcceptanceMap>(
     "Map",
     UiStyle(width = UiLength.Fill, height = UiLength.Fixed(4.0), border = UiBorder.Rounded)
 ) {
-    val ticks = signal(0)
+    var ticks by signal(0)
+    val displayedTicks by computed { ticks }
     private var elapsed = 0f
     private var map: GridNode<*>? = null
 
@@ -101,7 +102,7 @@ private class AcceptanceMap : UiNode<AcceptanceMap>(
 
     override fun onUpdate(delta: Float) {
         elapsed += delta
-        ticks.update { it + 1 }
+        ticks += 1
         val grid = map ?: return
         val column = (elapsed * 3).toInt().mod(grid.columns)
         grid.clear()

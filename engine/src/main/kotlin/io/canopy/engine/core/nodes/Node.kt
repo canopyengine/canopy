@@ -89,6 +89,9 @@ abstract class Node<N : Node<N>> protected constructor(
         lifecycle != Lifecycle.Destroyed &&
         reference.get() != null
 
+    /** Internal distinction between initial construction and reusable detachment. */
+    internal val hasEnteredTree: Boolean get() = state("read entry history").entryGeneration > 0
+
     /** True after permanent destruction starts. */
     val isFreed: Boolean get() = lifecycle == Lifecycle.Destroying || lifecycle == Lifecycle.Destroyed
 
@@ -304,9 +307,25 @@ abstract class Node<N : Node<N>> protected constructor(
         return NodeProperty.create(key)
     }
 
+    /** Internal state slot used by native reactive delegates; no payload is retained by their facades. */
+    internal fun <T> reactiveSlot(value: T): NodeProperty<T> = nodeProperty(value)
+
+    /** Persistent source lifecycle hooks; resources themselves remain owned by engine state. */
+    internal fun observeActivity(enter: () -> Unit, exit: () -> Unit): () -> Unit {
+        val s = state("observe activity")
+        val entry = NodeActivity(enter, exit)
+        s.activity += entry
+        val weak = WeakReference(s)
+        return {
+            entry.clear()
+            weak.get()?.activity?.remove(entry)
+        }
+    }
+
     /**
      * Creates signal state owned by this node, including when called from a subclass initializer.
-     * State survives reusable detachment and is disposed on destruction. Global factories with an
+     * State survives reusable detachment; observation disconnects on exit. Destruction releases the state.
+     * Global factories with an
      * explicit null owner remain available for shared state. Use on the lifecycle thread.
      */
     fun <T> signal(value: T): Signal<T> = Signal(value, this)
@@ -321,8 +340,8 @@ abstract class Node<N : Node<N>> protected constructor(
     fun <A, B> event(): TwoArgsEvent<A, B> = TwoArgsEvent(this)
 
     /**
-     * Creates a calculation owned by this node and disposed on tree exit or destruction.
-     * Create it in [onEnterTree] when it must be renewed on reentry. Use on the lifecycle thread.
+     * Creates derived state owned by this node. Observation stops on exit and resumes on later reads after entry.
+     * Stored calculations are released on destruction. Use on the lifecycle thread.
      */
     fun <T> computed(block: () -> T): Computed<T> = Computed(block, this)
 
@@ -673,6 +692,7 @@ abstract class Node<N : Node<N>> protected constructor(
         }
         s.owner.registerSubtree(this)
         s.groups.forEach { s.owner.addToGroup(it, this) }
+        for (entry in s.activity.toList()) callback("activate source") { entry.enter?.invoke() }
         callback("enter") {
             onEnterTree()
             s.behavior?.onEnterTree()
@@ -709,6 +729,9 @@ abstract class Node<N : Node<N>> protected constructor(
             s.entered = false
             if (!isFreed) lifecycle = Lifecycle.Detached
             if (wasEntered) {
+                s.activity.toList().forEach { entry ->
+                    failures.attempt { cleanup("suspend source") { entry.exit?.invoke() } }
+                }
                 failures.attempt { cleanup("exit hook") { onExitTree() } }
                 failures.attempt { cleanup("behavior exit") { s.behavior?.onExitTree() } }
             }
@@ -761,6 +784,8 @@ abstract class Node<N : Node<N>> protected constructor(
         val failures = CleanupFailures()
         drainSlots(s, failures)
         drain(s.destruction, failures)
+        s.activity.forEach { it.clear() }
+        s.activity.clear()
         s.children.clear()
         s.changed()
         s.groups.clear()

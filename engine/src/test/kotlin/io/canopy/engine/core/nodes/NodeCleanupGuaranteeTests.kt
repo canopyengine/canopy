@@ -70,6 +70,15 @@ class NodeCleanupGuaranteeTests {
         assertEquals(1, ownedRuns)
         assertEquals(2, sharedRuns)
         assertEquals(6, shared())
+        assertEquals(4, owned())
+        source.update { 3 }
+        assertEquals(2, ownedRuns) // A detached read must not reconnect to the shared input.
+        scenes.currScene = root
+        assertEquals(6, owned())
+        source.update { 4 }
+        assertEquals(8, owned())
+        root.queueFree()
+        scenes.onUpdate(0f)
         assertFailsWith<CanopyException> { owned() }
         owned.dispose()
         shared.dispose()

@@ -15,7 +15,7 @@ import org.junit.jupiter.api.BeforeEach
 
 class UiCompilerIntegrationTests {
     private class CounterCard(name: String, initial: Int, created: () -> Unit) : UiNode<CounterCard>(name) {
-        val count = signal(initial)
+        var count by signal(initial)
         var increment: Button<*>? = null
         init {
             created()
@@ -23,8 +23,8 @@ class UiCompilerIntegrationTests {
         override fun nodeInit() {
             ui {
                 Column {
-                    Text("Count: ${count()}")
-                    increment = Button("Add") { count.update { it + 1 } }
+                    Text("Count: $count")
+                    increment = Button("Add") { count += 1 }
                     MapMarker()
                 }
             }
@@ -52,13 +52,21 @@ class UiCompilerIntegrationTests {
 
     private class Group(block: Group.() -> Unit) : Node<Group>("Group", block = block)
 
+    private class ReadyRoot(content: UiScope.() -> Unit) : UiRoot<ReadyRoot>(content = content) {
+        var readyCount = 0
+        override fun onReady() {
+            // Engine-owned observer renewal must not depend on calling super from a user hook.
+            readyCount++
+        }
+    }
+
     private class CounterNode(created: () -> Unit) : Node<CounterNode>("Counter") {
-        val count = signal(0)
+        var count by signal(0)
         init {
             created()
         }
         override fun onDraw(context: DrawContext) {
-            context.text("Count: ${count()}")
+            context.text("Count: $count")
         }
     }
 
@@ -136,7 +144,7 @@ class UiCompilerIntegrationTests {
         // Arrange
         lateinit var card: CounterCard
         var creations = 0
-        val root = UiRoot {
+        val root = ReadyRoot {
             Group { CounterCard("wrapped", 0) { creations++ }.also { card = it } }
         }
         scenes.currScene = root
@@ -144,14 +152,15 @@ class UiCompilerIntegrationTests {
 
         // Act
         root.nodeExitTree()
-        card.count.update { 7 }
+        card.count = 7
         root.buildTree()
         ui.updateFrame()
 
         // Assert
+        assertEquals(2, root.readyCount)
         assertEquals(1, creations)
         assertEquals("Count: 7", backend.draws.first().text)
-        card.count.update { 8 }
+        card.count = 8
         ui.updateFrame()
         assertEquals("Count: 8", backend.draws.first().text)
         root.queueFree()
@@ -278,7 +287,7 @@ class UiCompilerIntegrationTests {
         ui.updateFrame()
         assertEquals(3, creations)
         assertNotSame(first, cards["a"])
-        assertEquals(9, cards.getValue("a").count())
+        assertEquals(9, cards.getValue("a").count)
         ids.dispose()
         initial.dispose()
     }
@@ -324,7 +333,7 @@ class UiCompilerIntegrationTests {
         val first = counter
 
         // Act / Assert
-        counter.count.update { 4 }
+        counter.count = 4
         ui.updateFrame()
         assertEquals("Count: 4", backend.draws.single().text)
         assertEquals(1, creations)

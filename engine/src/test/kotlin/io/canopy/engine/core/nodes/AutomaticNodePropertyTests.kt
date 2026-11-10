@@ -85,7 +85,7 @@ class AutomaticNodePropertyTests {
 
     private class Reactive(shared: Signal<Int>, observations: MutableList<Int>) : Node<Reactive>("reactive") {
         val shared = shared
-        val owned = signal(this, 1)
+        val owned = Signal(1, owner = this)
         val reaction = effect(null) { observations += shared() }
     }
 

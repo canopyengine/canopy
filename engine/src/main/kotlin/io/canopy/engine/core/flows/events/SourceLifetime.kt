@@ -10,11 +10,26 @@ internal class SourceLifetime(owner: Node<*>?) {
     var disposed = false
         private set
     private var cancel: (() -> Unit)? = null
+    private var cancelActivity: (() -> Unit)? = null
+    val active: Boolean get() = owner == null || owner.get()?.isInsideTree == true
+
+    // Declarative construction may establish dormant bindings before the first entry.
+    val canObserve: Boolean get() = active || owner?.get()?.let { it.isValid && !it.hasEnteredTree } == true
     init {
         owner?.requireValid("create reactive source")
     }
-    fun bind(dispose: () -> Unit) {
+    fun bind(dispose: () -> Unit, suspend: () -> Unit = {}, resume: () -> Unit = {}) {
         cancel = owner?.get()?.onDestroy(dispose)
+        var needsResume = !active
+        cancelActivity = owner?.get()?.observeActivity({
+            if (needsResume) {
+                needsResume = false
+                resume()
+            }
+        }, {
+            needsResume = true
+            suspend()
+        })
     }
     fun check(operation: String) {
         owner?.get()?.requireValid(operation)
@@ -25,6 +40,8 @@ internal class SourceLifetime(owner: Node<*>?) {
         disposed = true
         cancel?.invoke()
         cancel = null
+        cancelActivity?.invoke()
+        cancelActivity = null
         return true
     }
 }
