@@ -28,8 +28,8 @@ and **25** for engine/game compilation. Docs use Node **22.12+**, Astro
 
 ## Evidence and outstanding validation
 
-Results below belong to their pinned October revisions; checking their status
-today is not a fresh execution.
+The table records historical October results. Fresh November checks are listed
+separately below; the full refreshed acceptance gate remains open.
 
 | Check | Recorded result | Evidence |
 | --- | --- | --- |
@@ -38,7 +38,9 @@ today is not a fresh execution.
 | Standalone Java launcher | Passed on Linux, Windows and macOS | [Launcher run](https://github.com/canopyengine/canopy/actions/runs/39041077707) |
 | External terminal consumer | Failed on all three hosts before fixture correction | Same Launcher run; **new pin requires verification** |
 | Docs quality/build/browser checks and published starter | Passed at `4001f00` | [Documentation run](https://github.com/canopyengine/canopy-docs/actions/runs/39041075072) |
-| Demo build/CodeQL | Passed at previous pin `d163a8f` | [Build](https://github.com/canopyengine/canopy-demos/actions/runs/38991350247), [CodeQL](https://github.com/canopyengine/canopy-demos/actions/runs/38991350257); refreshed pin requires verification |
+| Demo build/CodeQL | Passed at previous pin `d163a8f` | [Build](https://github.com/canopyengine/canopy-demos/actions/runs/38991350247), [CodeQL](https://github.com/canopyengine/canopy-demos/actions/runs/38991350257); fresh results below |
+
+Fresh checks observed during the refresh: engine [CodeQL](https://github.com/canopyengine/canopy/actions/runs/42856723047) passes at `783eee9`. In [Launcher](https://github.com/canopyengine/canopy/actions/runs/42856722770), standalone launcher jobs pass on all three hosts, Linux native terminal acceptance passes, and the Windows external fixture build/artifact verification step passes; macOS consumer acceptance remains pending. [Build](https://github.com/canopyengine/canopy/actions/runs/42856722854) has a passing Windows-filesystem job and pending Gradle job. Refreshed demo [Build](https://github.com/canopyengine/canopy-demos/actions/runs/42856833508) passes at `31f02a0`; [CodeQL](https://github.com/canopyengine/canopy-demos/actions/runs/42856833626) remains pending. Windows native terminal interaction is deliberately skipped in CI and still needs physical acceptance. These are observed job/step results, not a declaration that all workflows have completed.
 
 Last local full gate, recorded 2026-10-17: **605 JVM methods discovered, 604
 passed, one Windows-native skip, no failures/errors; 6920/7638 covered lines
@@ -49,8 +51,8 @@ reuse preserved the distinct lifecycle, ownership, compiler and native boundarie
 The failing external fixture still declared a raw `GridNode?` after the node
 became self-typed. Commit `783eee9` changes it to `GridNode<*>?`. Linux/macOS
 logs show consumer compilation failed before a usable frame; Windows
-`installDist` also failed. This source correction is not yet a passing native
-acceptance result. Keep PR #226 draft and the terminal acceptance gate open.
+`installDist` also failed. Linux native acceptance now passes with the correction; all-host acceptance
+is still incomplete. Keep PR #226 draft and the terminal acceptance gate open.
 
 The managed execution environment failed to initialize during this refresh.
 No fresh local Gradle, native terminal or site run is claimed. Verify Actions
