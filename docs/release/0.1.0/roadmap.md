@@ -1,6 +1,10 @@
 # Canopy 0.1.0 release roadmap
 
-Planning snapshot: current foundation integration `f80d2d6`, docs `45d09c3`, runtime version `0.1.0-alpha.2`. This is a proposed release plan; it does not change GitHub scope, merge branches, implement features or authorize publication.
+Baseline refresh: **2026-11-10**. Engine runtime/tests `42515a1`, acceptance
+fixture correction `783eee9`, docs `4001f00`, and demos `31f02a0`;
+source version **0.1.0-dev4**. See the [release baseline](README.md) for exact
+pins, CI links and validation limits. This plan does not authorize merges,
+publication, a version bump or changes to maintainer-owned milestone wording.
 
 ## Release definition
 
@@ -23,24 +27,41 @@ The aquarium is the short onboarding project; the ecosystem is the larger refere
 
 ## Current evidence and gaps
 
-- Latest integration build and launcher CI pass, including Windows build/native console assertions and Linux/macOS launcher/PTY checks.
-- Latest recorded engine gate: 592 tests, zero failures/errors/skips, 90.5% line coverage. Acceptance tooling checks five launcher groups, 31 native terminal checks and 11 standalone Python tests.
-- UI, grids, dividers, compact buttons, styling, mouse hover, command capture and cell-diff output are implemented on the side branch.
-- Aquarium GIFs are concepts; neither aquarium game nor tutorial/starter exists yet.
-- Ecosystem remains a configuration-loading scaffold.
-- Existing docs site is Astro/Starlight generated from Markdown; site enhancement and deployment remain work.
-- Review inventory: 23 engine Markdown documents, 67 docs-repository documents, six demo documents: 96 documents and 12,331 lines. The docs repository's main Markdown tree contains 60 pages; the 67 count includes repository/site supporting documents. New tutorial pages will increase the inventory.
-- Current milestone has 45 closed issues and one open (#219). Distribution issue #213 is open outside that milestone. The milestone description contains obsolete version/PR status text.
+- Foundation implementation includes engine-owned frames, one-App ownership,
+  self-typed extensible nodes, shared styled UI, grids/dividers, hover, command
+  capture and changed-cell terminal output.
+- The 2026-10-17 local gate records 605 JVM methods: 604 passing, one Windows
+  skip, 90.6% coverage; 11 separate Python checks and 11 staged publications
+  validated. These are historical results, not fresh November executions.
+- Current recorded Build, Windows filesystem and CodeQL checks pass. Standalone
+  Java launcher jobs pass on three hosts, but the external terminal consumer
+  fails before launch. Its raw GridNode type is corrected in `783eee9`;
+  acceptance remains pending until CI verifies the corrected pin.
+- The managed environment failed during this refresh. Fresh local/native checks
+  are blocked; the release checklist does not claim all-green acceptance.
+- The learning site now has Ink colors/Forest navigation, Nunito typography,
+  interactive practice, answer feedback and code-diff highlights. Docs CI passes
+  at `4001f00` (64 generated pages). Writing review and deployment remain.
+- Aquarium GIFs remain concepts. The Gradle/project skeleton exists with an empty
+  Main.kt; the playable game, teaching starter and tutorial are not complete.
+- Ecosystem remains a configuration-loading scaffold. Demo CI/build instructions
+  now pin engine `783eee9`; the refreshed pin needs consumer verification.
+- The review inventory now covers 105 Markdown documents across all three
+  repositories: 29 engine, 69 docs and seven demos. All await final freeze/review;
+  no human sign-off was generated.
+- Phase-1 tracking and the maintainer's milestone wording update are complete.
+  Distribution #213 and repaint #219 remain open release gates. Preserve the
+  accepted ecosystem scope and keep #224 on 0.2.0.
 
 ## Ordered work
 
-### 1. Establish release tracking and freeze the starting point
+### 1. Refresh acceptance and confirm the starting point
 
-Record engine/docs/demo commits and supported toolchains. Consolidate a release checklist with each gate, owner, evidence and status. Reconcile stale milestone text, actual branch/PR coverage, release version references and historical-versus-current documents.
+The baseline, toolchains, work items and draft PRs are recorded. First verify the corrected external terminal fixture and refreshed demo pin in CI, then run a short live input/color/resize/pause/shutdown pass. Update evidence by tested revision; historical green runs do not satisfy a changed candidate. The live milestone wording was already updated by the maintainer.
 
-Add #213 to 0.1.0 tracking. Verify #219 against changed-cell/frame batching acceptance; defer more elaborate partial in-memory painting only after demo profiling supports it. Review overlapping terminal PR #220 against the real foundation branch before selecting merge order; avoid duplicating changes or presenting a stale PR as the complete integration.
+Keep #213 in 0.1.0 tracking. Verify #219 against changed-cell/frame batching acceptance; defer more elaborate partial in-memory painting only after demo profiling supports it. Review overlapping terminal PR #220 against the real foundation branch before selecting merge order; avoid duplicating changes or presenting a stale PR as the complete integration.
 
-Create four focused work items if they are not already represented: documentation site/visual components, aquarium onboarding, ecosystem demo, and release acceptance/human review. Keep these distinct from the existing distribution and repaint issues. Keep #224 on 0.2.0; classify remaining proposals by actual shipped/deferred state. Administrative automation such as #221 does not become a release blocker by default.
+Use the existing focused work items: docs #55 for the learning site, demos #8 for Aquarium, demos #9 for the ecosystem and engine #225 for release acceptance/human review. Keep these distinct from the existing distribution and repaint issues. Keep #224 on 0.2.0; classify remaining proposals by actual shipped/deferred state. Administrative automation such as #221 does not become a release blocker by default.
 
 Exit: one accurate checklist, known candidate commits and explicit scope. No unrelated dependency or architecture changes enter the release silently.
 
@@ -48,7 +69,7 @@ Exit: one accurate checklist, known candidate commits and explicit scope. No unr
 
 Your first study pass follows App/EngineLoop, Nodes/SceneManager, Signals/events/ownership, UiNode/UiManager/layout, InputFocus/commands, terminal backend/cell output, assets/logging, compiler and distribution. Trace a frame, button action and removed node through code and tests. Compiler internals receive a separate deeper pass as needed.
 
-In parallel work on the existing site's navigation, version labels, mobile readability, search, code blocks/copy controls and deploy configuration. Define reusable diagrams and animated figures with captions, static fallback, playback controls and reduced-motion behavior. Establish one visual page template before changing all pages.
+The site's initial design, navigation/search and interactive feedback are implemented. In parallel with study, review that foundation and complete version labels, lesson content and deployment configuration. Use reusable diagrams and animated figures with captions, static fallback, playback controls and reduced-motion behavior. Avoid redesigning the site before testing its first complete lesson.
 
 Exit: you can explain the major ownership/frame flows; the site can present one complete lesson cleanly.
 
@@ -56,7 +77,7 @@ Exit: you can explain the major ownership/frame flows; the site can present one 
 
 Implement three fish, different movement speeds, aiming controls, falling pellets, six-pellet budget, catch/removal rules, counters, accuracy rating, pause and retry. Already-fed fish do not consume more food. Wait for the final active pellet to resolve before declaring an exhausted-budget loss. Keep collision logic based on grid cells and use node lifecycle cleanup.
 
-The starter supplies App/scene setup, tank presentation and basic theme. Learners implement Fish/FoodPellet behavior, catches, Signals, controls and game completion. Keep full solution separate. Store starter/completed projects in canopy-demos and chapters in canopy-docs, pinned to matching artifacts/commits.
+The current empty skeleton is the starting point. Extract a teaching starter from the working solution that supplies App/scene setup, tank presentation and basic theme. Learners implement Fish/FoodPellet behavior, catches, Signals, controls and game completion. Keep full solution separate. Store starter/completed projects in canopy-demos and chapters in canopy-docs, pinned to matching artifacts/commits.
 
 Write lessons from the working solution, with runnable checkpoints and real output captures. Test the 45–60 minute learner target with someone new to Canopy and comfortable with the stated Kotlin prerequisites. Record installation/download time separately. Make one independent modification part of the exercise.
 
@@ -117,9 +138,9 @@ Deliver the first small set with the visual-documentation phase, prioritizing fr
 
 Assume Kotlin/Gradle prerequisites. These are engineering planning ranges, not measured completion times or guarantees of unattended progress.
 
-- Assisted implementation/editing/checks: approximately 85–150 focused hours across site/onboarding, full ecosystem, documentation enrichment, housekeeping and release validation; bugs may add time.
+- Assisted implementation/editing/checks: original planning allowance of approximately 85–150 focused hours across site/onboarding, full ecosystem, documentation enrichment, housekeeping and release validation; bugs may add time.
 - Your codebase study: reserve 24–40 hours, with more time if compiler IR/toolchain internals are unfamiliar. This establishes practical maintenance understanding, not mastery of every line.
-- Your manual writing review: reserve 24–40 hours for the current 96-document inventory, plus time for new chapters and rework. Prioritize public instructions but finish the complete manifest.
+- Your manual writing review: reserve 24–40 hours as an original planning allowance; re-estimate against the now 105-document inventory, new chapters and rework before content freeze. Prioritize public instructions but finish the complete manifest.
 - Your live acceptance and final release review: reserve 4–8 hours.
 
 Human study/review/acceptance therefore needs roughly 52–88 hours. Do not add overlapping reading activities twice. At two hours per review day this is 26–44 sessions; at four hours it is 13–22 sessions. Implementation can overlap with study and review of separate frozen batches. Reserve one additional iteration after the newcomer onboarding attempt and live demo testing.
