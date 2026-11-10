@@ -86,7 +86,7 @@ private class AcceptanceMap : UiNode<AcceptanceMap>(
 ) {
     val ticks = signal(0)
     private var elapsed = 0f
-    private var map: GridNode? = null
+    private var map: GridNode<*>? = null
 
     override fun nodeInit() {
         super.nodeInit()
