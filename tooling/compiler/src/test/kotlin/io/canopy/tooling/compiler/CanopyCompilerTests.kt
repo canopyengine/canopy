@@ -40,6 +40,8 @@ class CanopyCompilerTests {
             try { return factory() } finally { constructionDepth-- }
         }
         abstract class Node<N : Node<N>> {
+            var parent: Node<*>? = null
+            var valid = true
             private val slots = mutableMapOf<String, Any?>()
             @Suppress("UNCHECKED_CAST")
             protected fun <T> compilerPropertyGet(key: String, default: T): T =
@@ -206,6 +208,88 @@ class CanopyCompilerTests {
             }
             """.trimIndent()
         ) { code, output -> assertEquals(ExitCode.OK, code, output) }
+    }
+
+    @Test
+    fun `reference initializer infers node type and resolves every read without construction lookup or fields`() {
+        // Arrange / Act / Assert: Kotlin checks aquarium.label before the IR plugin runs.
+        compileConsumer(
+            """
+            import io.canopy.engine.core.queries.experimental.ancestor
+            class Aquarium(val label: String) : Node<Aquarium>()
+            class Fish : Node<Fish>() {
+                val aquarium = ancestor<Aquarium>()
+                fun label(): String = aquarium.label
+            }
+            fun verify(): Boolean {
+                val fish = Fish()
+                check(runCatching { fish.label() }.exceptionOrNull() is NoSuchElementException)
+                val first = Aquarium("first")
+                val second = Aquarium("second")
+                fish.parent = first
+                val captured = fish.aquarium
+                check(fish.label() == "first")
+                fish.parent = second
+                check(fish.label() == "second" && captured === first)
+                fish.valid = false
+                check(runCatching { fish.label() }.exceptionOrNull() is IllegalStateException)
+                return Fish::class.java.declaredFields.none { !java.lang.reflect.Modifier.isStatic(it.modifiers) }
+            }
+            """.trimIndent(),
+            execute = { loader -> assertEquals(true, loader.loadClass("GameKt").getMethod("verify").invoke(null)) }
+        ) { code, output -> assertEquals(ExitCode.OK, code, output) }
+    }
+
+    @Test
+    fun `reference initializer rejects unsupported placements instead of performing an eager lookup`() {
+        listOf(
+            "class Fish : Node<Fish>() { var target = ancestor<Fish>() }",
+            "class Fish : Node<Fish>(); val target = ancestor<Fish>()",
+            "class Fish : Node<Fish>() { fun target() = ancestor<Fish>() }",
+            "class Fish : Node<Fish>() { val target = run { ancestor<Fish>() } }",
+            "class Fish : Node<Fish>() { val target: Fish? = ancestor<Fish>() }"
+        ).forEach { source ->
+            compileConsumer("import io.canopy.engine.core.queries.experimental.ancestor\n" + source) { code, output ->
+                assertEquals(ExitCode.COMPILATION_ERROR, code, output)
+                assertTrue("CANOPY_REFERENCE_INITIALIZER" in output, output)
+            }
+        }
+    }
+
+    @Test
+    fun `reference initializer leaves unrelated functions with the same name unchanged`() {
+        compileConsumer(
+            """
+            fun ancestor(): Int = 7
+            class Fish : Node<Fish>() { val number = ancestor() }
+            fun verify(): Boolean = Fish().number == 7
+            """.trimIndent(),
+            execute = { loader -> assertEquals(true, loader.loadClass("GameKt").getMethod("verify").invoke(null)) }
+        ) { code, output -> assertEquals(ExitCode.OK, code, output) }
+    }
+
+    @Test
+    fun `live reference smart casts fail with guidance to capture a local snapshot`() {
+        compileConsumer(
+            """
+            import io.canopy.engine.core.queries.experimental.ancestor
+            open class Aquarium<N : Aquarium<N>> : Node<N>()
+            class SpecialAquarium : Aquarium<SpecialAquarium>() { fun special() = 7 }
+            class Fish : Node<Fish>() {
+                val aquarium = ancestor<Aquarium<*>>()
+                fun unsafe(next: Aquarium<*>): Int {
+                    if (aquarium is SpecialAquarium) {
+                        parent = next
+                        return aquarium.special()
+                    }
+                    return 0
+                }
+            }
+            """.trimIndent()
+        ) { code, output ->
+            assertEquals(ExitCode.COMPILATION_ERROR, code, output)
+            assertTrue("CANOPY_REFERENCE_SMART_CAST" in output, output)
+        }
     }
 
     @Test
@@ -560,6 +644,32 @@ class CanopyCompilerTests {
                 """.trimIndent()
             )
         }
+        val referenceFile = directory.resolve("ReferenceInitializers.kt").apply {
+            writeText(
+                if (apiSource == api) {
+                    """
+                package io.canopy.engine.core.queries.experimental
+                import kotlin.reflect.KClass
+                import io.canopy.engine.core.nodes.Node
+                inline fun <reified T : Node<*>> ancestor(): T = error("initializer was not transformed")
+                fun <T : Node<*>> resolveAncestor(owner: Node<*>, type: KClass<T>, property: String): T {
+                    check(owner.valid)
+                    var current = owner.parent
+                    while (current != null) {
+                        if (type.isInstance(current)) {
+                            @Suppress("UNCHECKED_CAST")
+                            return current as T
+                        }
+                        current = current.parent
+                    }
+                    throw NoSuchElementException(property)
+                }
+                    """.trimIndent()
+                } else {
+                    ""
+                }
+            )
+        }
         val apiCode = compiler.exec(
             PrintStream(bytes),
             *common,
@@ -567,7 +677,8 @@ class CanopyCompilerTests {
             apiOutput.path,
             apiFile.path,
             queryFile.path,
-            assetFile.path
+            assetFile.path,
+            referenceFile.path
         )
         assertEquals(ExitCode.OK, apiCode, bytes.toString())
         return apiOutput

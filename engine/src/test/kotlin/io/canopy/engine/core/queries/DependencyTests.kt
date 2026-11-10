@@ -12,6 +12,8 @@ import io.canopy.engine.core.managers.manager as directManager
 import io.canopy.engine.core.nodes.Behavior
 import io.canopy.engine.core.nodes.Node
 import io.canopy.engine.core.nodes.types.empty.EmptyNode
+import io.canopy.engine.core.queries.experimental.ExperimentalReferenceInitializers
+import io.canopy.engine.core.queries.experimental.ancestor as referenceAncestor
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.BeforeEach
 
@@ -32,6 +34,43 @@ class DependencyTests {
     }
 
     private class Target(name: String) : Node<Target>(name)
+
+    @OptIn(ExperimentalReferenceInitializers::class)
+    private class PrototypeConsumer : Node<PrototypeConsumer>("prototype") {
+        val target = referenceAncestor<Target>()
+    }
+
+    @Test
+    fun `experimental initializer follows real hierarchy moves and rejects disposed owners`() {
+        // Arrange: creating the consumer must not resolve an ancestor before attachment.
+        val consumer = PrototypeConsumer()
+        assertFailsWith<NoSuchElementException> { consumer.target }
+        val root = EmptyNode("root")
+        val first = Target("first")
+        val second = Target("second")
+        val bridge = EmptyNode("bridge")
+        root.addChild(first)
+        root.addChild(second)
+        first.addChild(bridge)
+        bridge.addChild(consumer)
+        scenes.currScene = root
+        val captured = consumer.target
+
+        // Act
+        bridge.reparent(consumer, second)
+
+        // Assert: only an ordinary local assignment captures a snapshot.
+        assertSame(first, captured)
+        assertSame(second, consumer.target)
+        second.removeChild(consumer)
+        assertFailsWith<NoSuchElementException> { consumer.target }
+        second.addChild(consumer)
+        assertSame(second, consumer.target)
+        consumer.queueFree()
+        scenes.onUpdate(0f)
+        assertFailsWith<NodeDestroyedException> { consumer.target }
+    }
+
     private data class Rules(val score: Int)
     private interface Service : Manager
     private class FirstService : Service
