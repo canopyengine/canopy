@@ -2,7 +2,7 @@ name: Launcher
 
 on:
   pull_request:
-    branches: [main]
+    branches: [main, codex/agent/refactor/foundation-integration]
   push:
     branches: [main]
   workflow_dispatch:

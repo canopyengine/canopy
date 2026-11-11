@@ -42,24 +42,6 @@ internal class NodePropertyTransform(private val messages: MessageCollector) : I
             owner.declarations.filterIsInstance<IrProperty>().forEach propertyLoop@{ property ->
                 val field = property.backingField ?: return@propertyLoop
                 if (field.isStatic || property.isDelegated) return@propertyLoop
-                val unsupported = when {
-                    property.isLateinit -> "lateinit is not supported; use nullable automatic state or nodeProperty"
-                    field.annotations.isNotEmpty() ||
-                        property.hasAnnotation(
-                            FqName("kotlin.jvm.JvmField")
-                        ) -> "field annotations and @JvmField require a physical field; use nodeProperty"
-                    field.type.classOrNull?.owner?.isValue == true ->
-                        "value-class storage is not supported; use nodeProperty"
-                    else -> null
-                }
-                if (unsupported != null) {
-                    context.report(
-                        "CANOPY_UNSUPPORTED_NODE_PROPERTY",
-                        property,
-                        "${owner.name}.${property.name}: $unsupported"
-                    )
-                    return@propertyLoop
-                }
                 val ownerKey = owner.fqNameWhenAvailable?.asString()
                     ?: "${owner.file.fileEntry.name}:${owner.startOffset}:${owner.name}"
                 fields[field.symbol] =
@@ -100,15 +82,11 @@ internal class NodePropertyTransform(private val messages: MessageCollector) : I
         val get = node.functions.singleOrNull { compatible(it, "compilerPropertyGet", true) }
         val set = node.functions.singleOrNull { compatible(it, "compilerPropertySet", false) }
         if (get == null || set == null) {
-            fields.values.forEach { slot ->
-                context.report(
-                    "CANOPY_NODE_PROPERTY_ABI",
-                    slot.property,
-                    "Automatic storage requires the matching Canopy runtime with " +
-                        "compilerPropertyGet/compilerPropertySet; " +
-                        "update the runtime and compiler together or use explicit nodeProperty"
-                )
-            }
+            context.report(
+                "CANOPY_NODE_PROPERTY_ABI",
+                fields.values.first().property,
+                "Automatic storage requires matching compilerPropertyGet/compilerPropertySet runtime helpers."
+            )
             return
         }
         // Initializers keep their declaration positions; constructor parameter values remain available.
@@ -146,6 +124,8 @@ internal class NodePropertyTransform(private val messages: MessageCollector) : I
                                     arguments[2] = initializer.expression
                                 }
                             }
+                            // The initializer moved out of a backing field; nested lambdas need the new owner.
+                            block.patchDeclarationParents(owner)
                             rewritten += block
                         }
                     }

@@ -1,6 +1,7 @@
 package io.canopy.tooling.compiler.gradle
 
 import kotlin.test.Test
+import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 import java.nio.file.Files
 import org.gradle.testkit.runner.GradleRunner
@@ -51,12 +52,16 @@ class ConsumerGradleTests {
                         if (slots.containsKey(key)) slots[key] as T else default
                     protected fun <T> compilerPropertySet(key: String, value: T) { slots[key] = value }
                     protected fun <T> nodeProperty(value: T): NodeProperty<T> = NodeProperty(value)
+                    fun <T> computed(block: () -> T) = io.canopy.engine.core.flows.events.Computed(block)
                 }
                 class NodeProperty<T>(private var value: T) {
                     operator fun getValue(node: Node<*>, property: KProperty<*>): T = value
                     operator fun setValue(node: Node<*>, property: KProperty<*>, value: T) { this.value = value }
                 }
                 """.trimIndent()
+            )
+            sources.resolve("Reactive.kt").writeText(
+                "package io.canopy.engine.core.flows.events; class Computed<T>(val block: () -> T)"
             )
             val game = sources.resolve("EnemyNode.kt")
             game.writeText(
@@ -66,6 +71,7 @@ class ConsumerGradleTests {
                 """.trimIndent()
             )
             val runner = GradleRunner.create().withProjectDir(directory)
+                .withEnvironment(System.getenv().filterKeys { it != "NO_COLOR" } + ("CI" to "false"))
             val unsafeMain = runner.withArguments(
                 "compileKotlin",
                 "--offline",
@@ -73,7 +79,51 @@ class ConsumerGradleTests {
                 "--gradle-user-home",
                 System.getProperty("canopy.gradle.home")
             ).buildAndFail()
-            assertTrue("CANOPY_UNMANAGED_NODE_STATE" in unsafeMain.output, unsafeMain.output)
+            assertTrue("CANOPY_UNSUPPORTED_NODE_PROPERTY" in unsafeMain.output, unsafeMain.output)
+            assertTrue("help:" in unsafeMain.output, unsafeMain.output)
+            val unsafeSource = game.readText()
+            game.writeText(
+                "import io.canopy.engine.core.nodes.Node\n" +
+                    "class EnemyNode : Node<EnemyNode>() { val fishNum = computed { 1 } }"
+            )
+            val rich = runner.withArguments(
+                "compileKotlin",
+                "--offline",
+                "--rerun-tasks",
+                "--console=rich",
+                "-Pcanopy.diagnostics.color=always",
+                "--gradle-user-home",
+                System.getProperty("canopy.gradle.home")
+            ).buildAndFail()
+            assertTrue("\u001B[36mhelp" in rich.output, rich.output)
+            assertTrue("\u001B[32m2 +" in rich.output, rich.output)
+            val plain = runner.withArguments(
+                "compileKotlin",
+                "--offline",
+                "--rerun-tasks",
+                "--console=plain",
+                "-Pcanopy.diagnostics.color=always",
+                "--gradle-user-home",
+                System.getProperty("canopy.gradle.home")
+            ).buildAndFail()
+            assertFalse('\u001B' in plain.output, plain.output)
+            val ide = runner.withArguments(
+                "compileKotlin",
+                "--offline",
+                "--rerun-tasks",
+                "--console=rich",
+                "-Didea.active=true",
+                "-Pcanopy.diagnostics.color=always",
+                "--gradle-user-home",
+                System.getProperty("canopy.gradle.home")
+            ).buildAndFail()
+            assertFalse("\u001B[36mhelp" in ide.output, ide.output)
+            val previews = java.io.File(System.getProperty("canopy.verification.repository"))
+                .parentFile.resolve("diagnostic-preview").apply { mkdirs() }
+            previews.resolve("rich.txt").writeText(rich.output)
+            previews.resolve("plain.txt").writeText(plain.output)
+            previews.resolve("ide.txt").writeText(ide.output)
+            game.writeText(unsafeSource)
 
             game.writeText(
                 game.readText().replace("@JvmField var health = 100", "var health = 100") +
@@ -128,7 +178,7 @@ class ConsumerGradleTests {
                 "--gradle-user-home",
                 System.getProperty("canopy.gradle.home")
             ).buildAndFail()
-            assertTrue("CANOPY_UNMANAGED_NODE_STATE" in unsafeTest.output, unsafeTest.output)
+            assertTrue("CANOPY_UNSUPPORTED_NODE_PROPERTY" in unsafeTest.output, unsafeTest.output)
             tests.resolve("UnsafeTestNode.kt").delete()
             tests.resolve("SafeTestNode.kt").writeText(
                 """
