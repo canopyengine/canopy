@@ -70,6 +70,46 @@ class UiCompilerIntegrationTests {
         }
     }
 
+    private class WatchingPanel(
+        private val input: Signal<Int>,
+        private val shown: Signal<Boolean>,
+        private val observed: MutableList<Int>,
+    ) : UiNode<WatchingPanel>("WatchingPanel") {
+        override fun nodeInit() {
+            ui {
+                if (shown()) {
+                    io.canopy.engine.ui.components.Text("Watching") {
+                        this@WatchingPanel.input.connect { this@WatchingPanel.observed += it }
+                    }
+                }
+            }
+        }
+    }
+
+    @Test
+    fun `conditional UI subscriptions belong to the retained region rather than the outer component`() {
+        // Arrange
+        val input = signal(owner = null, value = 0)
+        val shown = signal(owner = null, value = true)
+        val observed = mutableListOf<Int>()
+        scenes.currScene = UiRoot { WatchingPanel(input, shown, observed) }
+        ui.updateFrame()
+
+        // Act
+        input.update { 1 }
+        shown.update { false }
+        ui.updateFrame()
+        input.update { 2 }
+        shown.update { true }
+        ui.updateFrame()
+        input.update { 3 }
+
+        // Assert
+        assertEquals(listOf(1, 3), observed)
+        input.dispose()
+        shown.dispose()
+    }
+
     private lateinit var scenes: SceneManager
     private lateinit var ui: UiManager
     private lateinit var backend: RecordingBackend

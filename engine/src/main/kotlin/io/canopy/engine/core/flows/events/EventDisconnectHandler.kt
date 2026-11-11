@@ -7,6 +7,7 @@ class EventDisconnectHandler(disconnectHandler: () -> Unit, listener: Any? = nul
     private var disconnectHandler: (() -> Unit)? = disconnectHandler
     private var listener: Any? = listener
     private var cancelOwnership: (() -> Unit)? = null
+    internal var onDisconnected: (() -> Unit)? = null
     internal fun owned(): EventDisconnectHandler {
         try {
             cancelOwnership = NodeLifetime.own(::disconnect)
@@ -22,11 +23,17 @@ class EventDisconnectHandler(disconnectHandler: () -> Unit, listener: Any? = nul
         val action = disconnectHandler ?: return
         disconnectHandler = null
         listener = null
+        val notification = onDisconnected
+        onDisconnected = null
         try {
             action()
         } finally {
-            cancelOwnership?.invoke()
-            cancelOwnership = null
+            try {
+                cancelOwnership?.invoke()
+            } finally {
+                cancelOwnership = null
+                notification?.invoke()
+            }
         }
     }
 }

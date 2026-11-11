@@ -223,7 +223,7 @@ class Signal<T> internal constructor(
         }
     }
 
-    /** Subscribes a listener to value changes (weak reference). */
+    /** Subscribes to changes; the matching compiler infers the listening Node inside Node methods/callbacks. */
     infix fun connect(listener: (T) -> Unit): EventDisconnectHandler {
         lifetime.check("connect signal")
         check(lifetime.canObserve) { "Enter the owning Node before connecting to its signal" }

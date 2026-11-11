@@ -46,6 +46,7 @@ class CanopyCompilerTests {
                 if (slots.containsKey(key)) slots[key] as T else default
             protected fun <T> compilerPropertySet(key: String, value: T) { slots[key] = value }
             protected fun <T> nodeProperty(initial: T): NodeProperty<T> = NodeProperty.create(initial)
+            protected inline fun <T> compilerOwned(block: () -> T): T = block()
             fun <T> signal(initial: T) = io.canopy.engine.core.flows.events.Signal(initial)
             fun <T> computed(block: () -> T) = io.canopy.engine.core.flows.events.Computed(block)
         }

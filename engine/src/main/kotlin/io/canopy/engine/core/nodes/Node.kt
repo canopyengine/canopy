@@ -133,6 +133,7 @@ abstract class Node<N : Node<N>> protected constructor(
 
     private fun payload(): NodeState = reference.get() ?: throw NodeDestroyedException(diagnostic("cleanup"))
 
+    @PublishedApi
     @JvmSynthetic
     internal fun requireValid(operation: String) {
         state(operation)
@@ -398,6 +399,17 @@ abstract class Node<N : Node<N>> protected constructor(
      * establish ambient ownership; this factory always uses its explicit node receiver.
      */
     fun effect(block: () -> Unit): Effect = NodeLifetime.withOwner(this) { Effect(block) }
+
+    /**
+     * Compiler ownership ABI: implicit Canopy operations inside a custom Node method belong to that Node.
+     * The matching compiler supplies this scope for connections and source creation, including escaped callbacks.
+     * Explicit owner arguments bypass inference. This synchronous scope must never span suspension.
+     */
+    @JvmSynthetic
+    protected inline fun <T> compilerOwned(block: () -> T): T {
+        requireValid("owned operation")
+        return NodeLifetime.withOwner(this, block)
+    }
 
     /**
      * Compiler storage ABI: reads a declaring-class-qualified slot without retaining its value on the facade.

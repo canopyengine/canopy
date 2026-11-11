@@ -68,6 +68,31 @@ fields are not deeply observed. Explicit `Signal(...)`, generic scalar wrappers 
 caller-owned low-level integrations keep their scalar semantics; prefer inferred
 `signal(mutableListOf<Fish>())` for mutable collection state.
 
+## Subscribe without losing ordinary property reads
+
+```kotlin
+import io.canopy.engine.core.flows.events.connect
+
+val connection = (aquarium::population).connect { count ->
+    label.text = "Fish: $count"
+}
+
+connection.disconnect()
+```
+
+Signal and computed property references support the same connection handle as events.
+Connections notify on changes, without an initial callback. Mutable collection edits
+notify too; computed properties retain equality suppression. Use an effect when an
+initial run is wanted.
+
+Inside a Node method or its callbacks, the matching compiler infers that listening
+Node automatically, even when the source belongs to another Node. This also covers
+raw Signal/Computed/event connections and implicit Canopy source/effect factories.
+No owner argument is needed in ordinary Node code. Explicit owner arguments remain
+advanced overrides; standalone integrations can retain and disconnect their handle.
+Connections release their listener when the listening Node exits, or when a reactive
+source exits, clears callbacks or is disposed. Reconnect on reentry.
+
 ## Lifecycle and observation
 
 - Constructor arguments and configuration initialize once. Explicit `addChild` also

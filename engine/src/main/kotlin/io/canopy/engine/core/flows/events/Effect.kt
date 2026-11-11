@@ -20,9 +20,10 @@ import io.canopy.engine.core.nodes.NodeLifetime
  * the effect. After disposal, no further runs occur and all dependency subscriptions
  * are removed.
  *
- * Effects created during managed node callbacks are retained until that node exits, then disposed.
+ * Effects created in Node methods/callbacks infer that Node through the matching compiler.
+ * They are retained until that Node exits, then disposed.
  * Ownership is captured at construction; later reruns do not open a node ownership scope. Use
- * explicit owners for resources created during those reruns.
+ * the matching compiler for Node operations, or explicit owners in standalone helper code.
  *
  * **Important:** Outside a node ownership scope, hold a strong reference to the returned [Effect] for as long as you
  * need it to remain active. If the only reference is dropped, the effect and its

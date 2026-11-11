@@ -53,7 +53,7 @@ class Computed<T>(block: () -> T, owner: Node<*>? = NodeLifetime.current()) {
         output = null
     }
 
-    /** Connects using the caller's explicit or ambient tree lifetime. */
+    /** Connects using inferred lexical Node ownership, or the ambient scope outside Node code. */
     infix fun connect(listener: (T) -> Unit) = signal().connect(listener)
 
     /** Connects using explicit tree-lifetime ownership. */
