@@ -42,44 +42,6 @@ internal class NodePropertyTransform(private val messages: MessageCollector) : I
             owner.declarations.filterIsInstance<IrProperty>().forEach propertyLoop@{ property ->
                 val field = property.backingField ?: return@propertyLoop
                 if (field.isStatic || property.isDelegated) return@propertyLoop
-                val unsupported = when {
-                    property.isLateinit -> "lateinit is not supported; use nullable automatic state or nodeProperty"
-                    field.annotations.isNotEmpty() ||
-                        property.hasAnnotation(
-                            FqName("kotlin.jvm.JvmField")
-                        ) -> "field annotations and @JvmField require a physical field; use nodeProperty"
-                    field.type.classOrNull?.owner?.isValue == true ->
-                        "value-class storage is not supported; use nodeProperty"
-                    else -> null
-                }
-                if (unsupported != null) {
-                    val title = if (property.isLateinit) {
-                        "`lateinit` cannot be used on Node properties"
-                    } else {
-                        "This property needs explicit Node storage"
-                    }
-                    context.diagnostics.emit(
-                        "CANOPY_UNSUPPORTED_NODE_PROPERTY",
-                        title,
-                        owner.file,
-                        property,
-                        label = if (property.isLateinit) {
-                            "`lateinit` cannot use guarded Node storage."
-                        } else {
-                            unsupported.substringBefore(
-                                ';'
-                            )
-                        },
-                        help = if (property.isLateinit) {
-                            "Give it an initial value, use a nullable property, or use by nodeProperty(...)."
-                        } else if (field.annotations.isNotEmpty()) {
-                            "Remove the field annotation and use by nodeProperty(initial)."
-                        } else {
-                            "Store the value with by nodeProperty(initial)."
-                        }
-                    )
-                    return@propertyLoop
-                }
                 val ownerKey = owner.fqNameWhenAvailable?.asString()
                     ?: "${owner.file.fileEntry.name}:${owner.startOffset}:${owner.name}"
                 fields[field.symbol] =
@@ -162,6 +124,8 @@ internal class NodePropertyTransform(private val messages: MessageCollector) : I
                                     arguments[2] = initializer.expression
                                 }
                             }
+                            // The initializer moved out of a backing field; nested lambdas need the new owner.
+                            block.patchDeclarationParents(owner)
                             rewritten += block
                         }
                     }

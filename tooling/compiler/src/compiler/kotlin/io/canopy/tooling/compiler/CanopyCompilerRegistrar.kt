@@ -3,19 +3,14 @@
 package io.canopy.tooling.compiler
 
 import java.util.ServiceLoader
+import io.canopy.tooling.compiler.rules.RuleProvider
 import org.jetbrains.kotlin.backend.common.extensions.IrGenerationExtension
-import org.jetbrains.kotlin.backend.common.extensions.IrPluginContext
 import org.jetbrains.kotlin.cli.common.messages.MessageCollector
 import org.jetbrains.kotlin.compiler.plugin.CompilerPluginRegistrar
 import org.jetbrains.kotlin.config.CommonConfigurationKeys
 import org.jetbrains.kotlin.config.CompilerConfiguration
-import org.jetbrains.kotlin.ir.IrElement
-import org.jetbrains.kotlin.ir.declarations.IrDeclarationBase
-import org.jetbrains.kotlin.ir.declarations.IrModuleFragment
-import org.jetbrains.kotlin.ir.visitors.IrVisitorVoid
-import org.jetbrains.kotlin.ir.visitors.acceptChildrenVoid
 
-/** Installs mandatory engine checks and additional rule providers from the compiler plugin classpath. */
+/** Installs mandatory checks and compiler-only providers before the fixed lowering pipeline. */
 class CanopyCompilerRegistrar : CompilerPluginRegistrar() {
     override val pluginId: String = "io.github.canopyengine.compiler"
     override val supportsK2: Boolean = true
@@ -26,43 +21,29 @@ class CanopyCompilerRegistrar : CompilerPluginRegistrar() {
             configuration.get(DiagnosticOptions.color) ?: false,
             configuration.get(DiagnosticOptions.root)
         )
-        val declarationRules = listOf(ReactiveDeclarationRule())
-        val rules = listOf(NodeStateRule()) +
-            ServiceLoader.load(
-                CanopyCompilerRule::class.java,
-                this@CanopyCompilerRegistrar.javaClass.classLoader
-            ).toList()
-        if ((declarationRules + rules).map { it.id }.distinct().size != declarationRules.size + rules.size) {
+        val registry = try {
+            val loader = this@CanopyCompilerRegistrar.javaClass.classLoader
+            RuleRegistry(
+                listOf(BuiltinRules()) + ServiceLoader.load(RuleProvider::class.java, loader).toList(),
+                ServiceLoader.load(CanopyCompilerRule::class.java, loader).toList()
+            )
+        } catch (failure: Exception) {
             messages.emit(
                 "CANOPY_RULE_ID_CONFLICT",
-                "Canopy compiler rule IDs must be unique",
-                help = "Give each compiler rule provider its own diagnostic ID."
+                "Cannot register compiler rules",
+                label = failure.message ?: failure.javaClass.simpleName,
+                help = "Check provider API versions, unique IDs, diagnostic ownership and rule targets."
+            )
+            return
+        } catch (failure: java.util.ServiceConfigurationError) {
+            messages.emit(
+                "CANOPY_RULE_PROVIDER",
+                "Cannot load a compiler rule provider",
+                label = failure.message,
+                help = "Check the provider's service entry and public no-argument constructor."
             )
             return
         }
-        IrGenerationExtension.registerExtension(CanopyRuleRunner(messages, declarationRules))
-        IrGenerationExtension.registerExtension(NodePropertyTransform(messages))
-        IrGenerationExtension.registerExtension(CanopyRuleRunner(messages, rules))
-        IrGenerationExtension.registerExtension(NodeOwnershipTransform(messages))
-        IrGenerationExtension.registerExtension(UiExpressionTransform(messages))
-        IrGenerationExtension.registerExtension(NodeConstructionTransform(messages))
-    }
-}
-
-/** Traverses each declaration once and shares compilation-local services across all registered rules. */
-private class CanopyRuleRunner(private val messages: MessageCollector, private val rules: List<CanopyCompilerRule>) :
-    IrGenerationExtension {
-    override fun generate(moduleFragment: IrModuleFragment, pluginContext: IrPluginContext) {
-        val context = CanopyRuleContext(moduleFragment, pluginContext, messages)
-        moduleFragment.acceptChildrenVoid(object : IrVisitorVoid() {
-            override fun visitElement(element: IrElement) {
-                element.acceptChildrenVoid(this)
-            }
-
-            override fun visitDeclaration(declaration: IrDeclarationBase) {
-                rules.forEach { it.check(declaration, context) }
-                declaration.acceptChildrenVoid(this)
-            }
-        })
+        IrGenerationExtension.registerExtension(CompilerPipeline(messages, registry))
     }
 }

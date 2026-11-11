@@ -2,6 +2,10 @@ package io.canopy.tooling.compiler
 
 import java.nio.file.Files
 import java.nio.file.Path
+import java.util.IdentityHashMap
+import io.canopy.tooling.compiler.rules.DiagnosticSeverity
+import io.canopy.tooling.compiler.rules.DiagnosticSpec
+import io.canopy.tooling.compiler.rules.SourceSpan
 import io.canopy.tooling.diagnostics.Diagnostic
 import io.canopy.tooling.diagnostics.DiagnosticFormat
 import io.canopy.tooling.diagnostics.SourceLine
@@ -21,8 +25,9 @@ internal class DiagnosticMessages(
 ) : MessageCollector by delegate {
     private val sources = mutableMapOf<String, String?>()
     private val emitted = mutableSetOf<String>()
-    private val invalid = mutableSetOf<String>()
-    private var incompatibleRuntime = false
+    private var errors = 0
+    val errorCount: Int get() = errors
+    private val spans = IdentityHashMap<SourceSpan, IrFile>()
 
     fun source(file: IrFile): String? {
         val name = file.fileEntry.name
@@ -76,14 +81,11 @@ internal class DiagnosticMessages(
         replacement: String? = null,
         note: String? = null,
         compatibility: Boolean = code.endsWith("_ABI"),
+        warning: Boolean = false,
     ) {
         val setup = compatibility
-        val declarationKey = "${file?.fileEntry?.name}:${element?.startOffset}"
-        if (code == "CANOPY_UNMANAGED_NODE_STATE" && declarationKey in invalid) return
-        if (incompatibleRuntime) return
-        if (!emitted.add(if (setup) "runtime-build" else "$code:${file?.fileEntry?.name}:$start:$title:$label")) return
-        if (setup) incompatibleRuntime = true
-        invalid += declarationKey
+        if (!emitted.add("$code:${file?.fileEntry?.name}:$start:$title:$label:$warning")) return
+        if (!warning) errors++
         val offset = start.coerceAtLeast(0)
         val entry = file?.fileEntry
         val line = runCatching { entry?.getLineNumber(offset)?.plus(1) }.getOrNull() ?: 1
@@ -107,13 +109,32 @@ internal class DiagnosticMessages(
                 }
         }
         delegate.report(
-            CompilerMessageSeverity.ERROR,
+            if (warning) CompilerMessageSeverity.WARNING else CompilerMessageSeverity.ERROR,
             DiagnosticFormat.render(
-                Diagnostic(code, title, sourceLine, label, help, replacement, note),
+                Diagnostic(code, title, sourceLine, label, help, replacement, note, warning),
                 color,
                 includeSeverity = false
             ),
             location
+        )
+    }
+
+    fun span(file: IrFile, start: Int, length: Int = 1): SourceSpan =
+        SourceSpan(file.fileEntry.name, start, length).also { spans[it] = file }
+
+    fun report(
+        diagnostic: DiagnosticSpec,
+        at: SourceSpan,
+        title: String,
+        label: String?,
+        help: String?,
+        replacement: String?,
+    ) {
+        val file = requireNotNull(spans[at]) { "A rule reported a source span from another compilation" }
+        emit(
+            diagnostic.code, title, file, label = label, help = help, start = at.start,
+            length = at.length, replacement = replacement, compatibility = false,
+            warning = diagnostic.severity == DiagnosticSeverity.Warning
         )
     }
 

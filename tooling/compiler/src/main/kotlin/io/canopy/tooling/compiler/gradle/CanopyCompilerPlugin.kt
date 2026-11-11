@@ -20,9 +20,15 @@ import org.jetbrains.kotlin.gradle.plugin.getKotlinPluginVersion
  */
 class CanopyCompilerPlugin : KotlinCompilerPluginSupportPlugin {
     override fun apply(target: Project) {
+        val rules = target.configurations.create("canopyCompilerRules") {
+            it.isCanBeConsumed = false
+            it.isCanBeResolved = false
+            it.description = "Additional Canopy compiler rule providers (never part of the game runtime)."
+        }
         // Select the compiler host variant only for our artifact, preserving other compiler plugins' requirements.
         target.configurations.configureEach { configuration ->
             if (configuration.name.startsWith("kotlinCompilerPluginClasspath")) {
+                configuration.extendsFrom(rules)
                 configuration.dependencies.withType(ModuleDependency::class.java).configureEach { dependency ->
                     if (dependency.group == "io.github.canopyengine" && dependency.name == "canopy-compiler") {
                         dependency.capabilities { handler ->
