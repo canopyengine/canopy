@@ -21,18 +21,25 @@ class CanopyCompilerRegistrar : CompilerPluginRegistrar() {
     override val supportsK2: Boolean = true
 
     override fun ExtensionStorage.registerExtensions(configuration: CompilerConfiguration) {
-        val messages = configuration.get(CommonConfigurationKeys.MESSAGE_COLLECTOR_KEY, MessageCollector.NONE)
+        val messages = DiagnosticMessages(
+            configuration.get(CommonConfigurationKeys.MESSAGE_COLLECTOR_KEY, MessageCollector.NONE),
+            configuration.get(DiagnosticOptions.color) ?: false,
+            configuration.get(DiagnosticOptions.root)
+        )
         val declarationRules = listOf(ReactiveDeclarationRule())
         val rules = listOf(NodeStateRule()) +
             ServiceLoader.load(
                 CanopyCompilerRule::class.java,
                 this@CanopyCompilerRegistrar.javaClass.classLoader
             ).toList()
-        require(
-            (declarationRules + rules).map {
-                it.id
-            }.distinct().size == declarationRules.size + rules.size
-        ) { "Canopy compiler rule IDs must be unique" }
+        if ((declarationRules + rules).map { it.id }.distinct().size != declarationRules.size + rules.size) {
+            messages.emit(
+                "CANOPY_RULE_ID_CONFLICT",
+                "Canopy compiler rule IDs must be unique",
+                help = "Give each compiler rule provider its own diagnostic ID."
+            )
+            return
+        }
         IrGenerationExtension.registerExtension(CanopyRuleRunner(messages, declarationRules))
         IrGenerationExtension.registerExtension(NodePropertyTransform(messages))
         IrGenerationExtension.registerExtension(CanopyRuleRunner(messages, rules))

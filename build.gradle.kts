@@ -217,8 +217,12 @@ coverageReport.configure {
     executionData(file("tooling/compiler/build/jacoco/test.exec"))
     listOf("main", "compiler").forEach { sourceSet ->
         sourceDirectories.from(file("tooling/compiler/src/$sourceSet/kotlin"))
-        classDirectories.from(file("tooling/compiler/build/classes/kotlin/$sourceSet"))
+        classDirectories.from(fileTree("tooling/compiler/build/classes/kotlin/$sourceSet") {
+            // Both isolated hosts compile this same source. Analyze the tested main copy once.
+            if (sourceSet == "compiler") exclude("io/canopy/tooling/diagnostics/**")
+        })
     }
+    sourceDirectories.from(file("tooling/compiler/src/shared/kotlin"))
 }
 
 // Stage all enabled artifacts together, including compiler implementation and plugin markers.

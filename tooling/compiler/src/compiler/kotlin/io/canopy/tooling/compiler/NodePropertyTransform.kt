@@ -53,10 +53,30 @@ internal class NodePropertyTransform(private val messages: MessageCollector) : I
                     else -> null
                 }
                 if (unsupported != null) {
-                    context.report(
+                    val title = if (property.isLateinit) {
+                        "`lateinit` cannot be used on Node properties"
+                    } else {
+                        "This property needs explicit Node storage"
+                    }
+                    context.diagnostics.emit(
                         "CANOPY_UNSUPPORTED_NODE_PROPERTY",
+                        title,
+                        owner.file,
                         property,
-                        "${owner.name}.${property.name}: $unsupported"
+                        label = if (property.isLateinit) {
+                            "`lateinit` cannot use guarded Node storage."
+                        } else {
+                            unsupported.substringBefore(
+                                ';'
+                            )
+                        },
+                        help = if (property.isLateinit) {
+                            "Give it an initial value, use a nullable property, or use by nodeProperty(...)."
+                        } else if (field.annotations.isNotEmpty()) {
+                            "Remove the field annotation and use by nodeProperty(initial)."
+                        } else {
+                            "Store the value with by nodeProperty(initial)."
+                        }
                     )
                     return@propertyLoop
                 }
@@ -100,15 +120,11 @@ internal class NodePropertyTransform(private val messages: MessageCollector) : I
         val get = node.functions.singleOrNull { compatible(it, "compilerPropertyGet", true) }
         val set = node.functions.singleOrNull { compatible(it, "compilerPropertySet", false) }
         if (get == null || set == null) {
-            fields.values.forEach { slot ->
-                context.report(
-                    "CANOPY_NODE_PROPERTY_ABI",
-                    slot.property,
-                    "Automatic storage requires the matching Canopy runtime with " +
-                        "compilerPropertyGet/compilerPropertySet; " +
-                        "update the runtime and compiler together or use explicit nodeProperty"
-                )
-            }
+            context.report(
+                "CANOPY_NODE_PROPERTY_ABI",
+                fields.values.first().property,
+                "Automatic storage requires matching compilerPropertyGet/compilerPropertySet runtime helpers."
+            )
             return
         }
         // Initializers keep their declaration positions; constructor parameter values remain available.

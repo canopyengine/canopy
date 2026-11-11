@@ -5,8 +5,6 @@ package io.canopy.tooling.compiler
 import org.jetbrains.kotlin.backend.common.extensions.IrGenerationExtension
 import org.jetbrains.kotlin.backend.common.extensions.IrPluginContext
 import org.jetbrains.kotlin.backend.common.lower.DeclarationIrBuilder
-import org.jetbrains.kotlin.cli.common.messages.CompilerMessageLocation
-import org.jetbrains.kotlin.cli.common.messages.CompilerMessageSeverity
 import org.jetbrains.kotlin.cli.common.messages.MessageCollector
 import org.jetbrains.kotlin.descriptors.DescriptorVisibilities
 import org.jetbrains.kotlin.ir.IrElement
@@ -99,18 +97,42 @@ internal class UiExpressionTransform(private val messages: MessageCollector) : I
                 }
 
                 private fun diagnostic(element: IrElement, explanation: String) {
-                    val file = function!!.file
-                    val offset = element.startOffset.coerceAtLeast(0)
-                    messages.report(
-                        CompilerMessageSeverity.ERROR,
-                        "CANOPY_UI_UNSUPPORTED: $explanation",
-                        CompilerMessageLocation.create(
-                            file.fileEntry.name,
-                            file.fileEntry.getLineNumber(offset) + 1,
-                            file.fileEntry.getColumnNumber(offset) + 1,
-                            null
+                    val diagnostics = messages as? DiagnosticMessages ?: DiagnosticMessages(messages)
+                    val (title, help) = when {
+                        explanation.startsWith("Reusable UI") ->
+                            "UI declaration functions must return Unit" to
+                                "Declare the elements in a Unit-returning function."
+                        explanation.startsWith("Declarative repeated") ->
+                            "Use a keyed for loop for repeated UI" to
+                                "Use for (item in items) { key(item) { ... } }."
+                        explanation.startsWith("Each declarative") ->
+                            "Give each UI item a stable key" to
+                                "Place every child declaration inside key(item) { ... }."
+                        explanation.startsWith("Non-local returns") ->
+                            "This return leaves a reactive UI region" to
+                                "Move the return outside UI composition, or express the branch with if/else."
+                        explanation.startsWith("A conditional") ->
+                            "Declare conditional UI as a statement" to
+                                "Use if (...) { Text(...) } as a statement, without assigning the element."
+                        explanation.startsWith("A derived local") ->
+                            "Move this text calculation into the UI expression" to
+                                "Write Text(expression) directly, or use a computed property."
+                        else ->
+                            "Engine and compiler builds are incompatible" to
+                                "Publish the engine and compiler from the same checkout, then rebuild your project."
+                    }
+                    if (explanation.contains("runtime ABI")) {
+                        diagnostics.legacy("CANOPY_UI_UNSUPPORTED", explanation)
+                    } else {
+                        diagnostics.emit(
+                            "CANOPY_UI_UNSUPPORTED",
+                            title,
+                            function!!.file,
+                            element,
+                            label = explanation.substringBefore(". "),
+                            help = help
                         )
-                    )
+                    }
                 }
 
                 override fun visitWhileLoop(loop: IrWhileLoop): IrExpression {
