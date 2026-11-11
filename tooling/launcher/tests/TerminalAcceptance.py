@@ -27,7 +27,7 @@ if os.name == "posix":
 
 
 class Session:
-    def __init__(self, name, repo, project, output, java, offline):
+    def __init__(self, name, repo, project, output, java, offline, launcher=None):
         self.name = name
         self.output = output
         self.project = project
@@ -47,7 +47,7 @@ class Session:
             fcntl.ioctl(slave, termios.TIOCSCTTY, 0)
 
         command = [
-            java, str(repo / "tooling/launcher/CanopyLaunch.java"), "-p", str(project),
+            java, str(launcher or repo / "tooling/launcher/CanopyLaunch.java"), "-p", str(project),
             "--current-terminal",
             "--gradle-arg", "--max-workers=2",
         ]
@@ -55,7 +55,7 @@ class Session:
             command += ["--gradle-arg", "--offline"]
         try:
             self.child = subprocess.Popen(
-                command, stdin=slave, stdout=slave, stderr=slave,
+                command, cwd=project, stdin=slave, stdout=slave, stderr=slave,
                 env=dict(os.environ, TERM="xterm-256color", COLORTERM="truecolor"),
                 preexec_fn=controlling_terminal,
             )
@@ -321,7 +321,7 @@ def prepare(repo, project, version, kotlin_version, repository, output, java, of
     # Refuse an existing directory so preparation never replaces a user's project.
     project.mkdir(parents=True, exist_ok=False)
     create_project(repo, project, version, kotlin_version)
-    command = [java, str(repo / "tooling/launcher/CanopyLaunch.java"), "-p", str(project),
+    command = [java, str(launcher or repo / "tooling/launcher/CanopyLaunch.java"), "-p", str(project),
                "--gradle-arg", "--max-workers=2"]
     if offline:
         command += ["--gradle-arg", "--offline"]

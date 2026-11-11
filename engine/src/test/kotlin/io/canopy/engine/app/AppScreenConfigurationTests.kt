@@ -3,7 +3,7 @@ package io.canopy.engine.app
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
-import io.canopy.engine.core.managers.manager
+import io.canopy.engine.core.managers.getManager
 
 class AppScreenConfigurationTests {
     private class TestApp : App<AppConfig>() {
@@ -31,7 +31,7 @@ class AppScreenConfigurationTests {
         try {
             // Assert
             assertEquals(listOf("first"), entries)
-            assertNull(manager<ScreenManager>().current)
+            assertNull(getManager<ScreenManager>().current)
         } finally {
             second.exit()
         }

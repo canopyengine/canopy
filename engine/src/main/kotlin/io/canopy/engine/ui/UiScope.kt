@@ -65,7 +65,7 @@ class UiScope internal constructor(private val root: UiRoot<*>, private val pare
             composing = false
         }
     }
-    private fun retire(entry: Entry, failures: CleanupFailures) {
+    private fun retire(entry: Entry, failures: CleanupFailures): Unit = untrack {
         val nodes = entryNodes(entry)
         failures.attempt { entry.dispose() }
         nodes.forEach { node ->
@@ -116,14 +116,14 @@ class UiScope internal constructor(private val root: UiRoot<*>, private val pare
             require(existing.node != null) { "UI site '$site' changed declaration type" }
             return existing.node as N
         }
-        val previousChildren = parent.children.values.toSet()
+        val previousChildren = untrack { parent.children.values.toSet() }
         val created = nodeConstruction {
             parent.withManagedChildrenMutation {
                 untrack { parent.withChildConstruction { create() } }.also {
-                    val added = parent.children.values.filter { child -> child !in previousChildren }
+                    val added = untrack { parent.children.values.filter { child -> child !in previousChildren } }
                     require(
                         added == listOf(it) &&
-                            it.parent === parent &&
+                            untrack { it.parent === parent } &&
                             it !is UiRoot<*> &&
                             it !is UiRegion
                     ) {
@@ -329,7 +329,7 @@ class UiScope internal constructor(private val root: UiRoot<*>, private val pare
             else -> node.children.values.forEach { layoutChildren(it, action) }
         }
     }
-    private fun reorder() {
+    private fun reorder(): Unit = untrack {
         val parentScope = when (parent) {
             is UiNode<*> -> parent.content
             is UiRegion -> parent.content

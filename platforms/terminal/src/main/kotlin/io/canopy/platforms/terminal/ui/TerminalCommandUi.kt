@@ -7,7 +7,7 @@ import com.github.ajalt.mordant.terminal.Terminal
 import com.github.ajalt.mordant.widgets.Text
 import io.canopy.engine.commands.CommandPrompt
 import io.canopy.engine.commands.CommandPromptSnapshot
-import io.canopy.engine.core.managers.manager
+import io.canopy.engine.core.managers.getManager
 import io.canopy.engine.ui.UiAlignment
 import io.canopy.engine.ui.UiLayer
 import io.canopy.engine.ui.UiLength
@@ -43,7 +43,7 @@ internal class TerminalCommandUi(
         transcript = null
         editor = null
         if (prompt == null) return
-        val manager = manager<UiManager>()
+        val manager = getManager<UiManager>()
         val size = viewport()
         manager.onResize(size.width.coerceAtLeast(0), size.height.coerceAtLeast(0))
         val created = UiRoot {
@@ -63,7 +63,7 @@ internal class TerminalCommandUi(
     fun render(snapshot: CommandPromptSnapshot) {
         val ui = root ?: return
         val size = viewport()
-        val manager = manager<UiManager>()
+        val manager = getManager<UiManager>()
         if (manager.viewport.width != size.width.toDouble() || manager.viewport.height != size.height.toDouble()) {
             manager.onResize(size.width.coerceAtLeast(0), size.height.coerceAtLeast(0))
         }
@@ -91,13 +91,13 @@ internal class TerminalCommandUi(
         }
         ui.show()
         surface.renderPrompt(snapshot)
-        manager<UiManager>().renderNow()
+        getManager<UiManager>().renderNow()
     }
 
     fun hide() {
         root?.takeIf { it.isValid }?.hide()
         surface.hidePrompt(redraw = false)
-        manager<UiManager>().renderNow()
+        getManager<UiManager>().renderNow()
     }
 
     private fun pad(text: String, width: Int): String {

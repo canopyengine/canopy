@@ -7,7 +7,7 @@ import io.canopy.engine.app.App
 import io.canopy.engine.app.AppConfig
 import io.canopy.engine.core.managers.ManagersRegistry
 import io.canopy.engine.core.managers.SceneManager
-import io.canopy.engine.core.managers.manager
+import io.canopy.engine.core.managers.getManager
 import io.canopy.engine.core.nodes.behavior
 import io.canopy.engine.core.nodes.types.empty.EmptyNode
 
@@ -50,7 +50,7 @@ class AppTestDriverTests {
             onPhysicsUpdate { calls += "physics" }
             onUpdate { calls += "frame" }
             onEnter {
-                manager<SceneManager>().currScene = EmptyNode("root") {
+                getManager<SceneManager>().currScene = EmptyNode("root") {
                     behavior(
                         onEnterTree = { calls += "root:enter" },
                         onReady = { calls += "root:ready" },
@@ -93,7 +93,7 @@ class AppTestDriverTests {
             driver.start()
             driver.resize(120, 40)
             assertEquals(listOf(120 to 40), sizes)
-            val size = manager<SceneManager>().sceneSize()
+            val size = getManager<SceneManager>().sceneSize()
             assertEquals(120f, size.x)
             assertEquals(40f, size.y)
         } finally {

@@ -8,7 +8,7 @@ import io.canopy.engine.core.managers.ExecutionMode
 import io.canopy.engine.core.managers.GameManager
 import io.canopy.engine.core.managers.ManagersRegistry
 import io.canopy.engine.core.managers.SceneManager
-import io.canopy.engine.core.managers.manager
+import io.canopy.engine.core.managers.getManager
 
 class AppScopeIsolationTests {
     private class TestApp : App<AppConfig>() {
@@ -58,7 +58,7 @@ class AppScopeIsolationTests {
             assertFailsWith<IllegalStateException> { inactive.registerScreen(TestScreen()) }
             assertFailsWith<IllegalStateException> { inactive.startScreen<TestScreen>() }
             assertFailsWith<IllegalStateException> { inactive.removeScreen<TestScreen>() }
-            assertSame(screen, manager<ScreenManager>().current)
+            assertSame(screen, getManager<ScreenManager>().current)
         } finally {
             first.exit()
         }
@@ -72,11 +72,11 @@ class AppScopeIsolationTests {
         var updates = 0
         first.onUpdate { updates++ }
         first.enter()
-        val scenes = manager<SceneManager>()
+        val scenes = getManager<SceneManager>()
         try {
             // Act / Assert
             assertFailsWith<IllegalStateException> { second.enter() }
-            assertSame(scenes, manager<SceneManager>())
+            assertSame(scenes, getManager<SceneManager>())
             first.update(0f)
             assertEquals(1, updates)
         } finally {
@@ -94,12 +94,12 @@ class AppScopeIsolationTests {
         val first = TestApp()
         val second = TestApp()
         first.enter()
-        val scenes = manager<SceneManager>()
+        val scenes = getManager<SceneManager>()
         try {
             // Act / Assert
             assertFailsWith<IllegalStateException> { second.launch() }
             assertEquals(0, second.hostStarts)
-            assertSame(scenes, manager<SceneManager>())
+            assertSame(scenes, getManager<SceneManager>())
         } finally {
             second.exit()
             first.exit()
@@ -111,13 +111,13 @@ class AppScopeIsolationTests {
         // Arrange
         val app = TestApp()
         app.enter()
-        val scenes = manager<SceneManager>()
+        val scenes = getManager<SceneManager>()
         try {
             // Act / Assert
             assertFailsWith<IllegalStateException> { app.launch() }
             assertFailsWith<IllegalStateException> { app.launchAsync() }
             assertEquals(0, app.hostStarts)
-            assertSame(scenes, manager<SceneManager>())
+            assertSame(scenes, getManager<SceneManager>())
             app.update(0f)
         } finally {
             app.exit()
@@ -156,11 +156,11 @@ class AppScopeIsolationTests {
         // Arrange
         val app = TestApp()
         app.enter()
-        val scenes = manager<SceneManager>()
+        val scenes = getManager<SceneManager>()
         try {
             // Act / Assert
             assertFailsWith<IllegalStateException> { ManagersRegistry.withScope {} }
-            assertSame(scenes, manager<SceneManager>())
+            assertSame(scenes, getManager<SceneManager>())
         } finally {
             app.exit()
         }

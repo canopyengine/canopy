@@ -394,11 +394,20 @@ internal class ManagerScope {
     var executionMode = ExecutionMode.Normal
 }
 
-/** Immediately resolves the current global registration on the game thread; missing registrations throw. */
-inline fun <reified T : Manager> manager(): T = ManagersRegistry.getManager(T::class)
+/** Immediately resolves the current registration on the game thread; missing registrations throw. */
+inline fun <reified T : Manager> getManager(): T = ManagersRegistry.getManager(T::class)
 
-/** Immediately resolves the current global registration; only absence returns null, and ambiguity throws. */
-inline fun <reified T : Manager> managerOrNull(): T? = ManagersRegistry.getManagerOrNull(T::class)
+/** Immediate lookup; only absence returns null, while ambiguity still throws. */
+inline fun <reified T : Manager> getManagerOrNull(): T? = ManagersRegistry.getManagerOrNull(T::class)
 
-/** Caches the first successful global lookup; subsequent registration changes are not observed. */
-inline fun <reified T : Manager> lazyManager() = lazy { manager<T>() }
+/** Compatibility alias for the immediate lookup. Live properties use core.queries.manager with by. */
+@Deprecated("Use getManager<T>() for immediate access, or core.queries.manager<T>() with by for a live property")
+inline fun <reified T : Manager> manager(): T = getManager()
+
+/** Compatibility alias for an immediate optional lookup. */
+@Deprecated("Use getManagerOrNull<T>() for immediate access, or core.queries.managerOrNull<T>() with by")
+inline fun <reified T : Manager> managerOrNull(): T? = getManagerOrNull()
+
+/** Caches the first successful global lookup; does not follow registration changes. */
+@Deprecated("Use core.queries.manager<T>() with by for live access; use lazy { getManager<T>() } only for a snapshot")
+inline fun <reified T : Manager> lazyManager() = lazy { getManager<T>() }

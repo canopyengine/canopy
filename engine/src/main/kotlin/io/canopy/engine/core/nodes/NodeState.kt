@@ -15,6 +15,7 @@ internal class NodeState(val owner: SceneManager, var name: String, var builder:
     val properties = mutableMapOf<Any, Any?>()
     val lifetimeSlots = linkedMapOf<Any, AutoCloseable>()
     var entryGeneration = 0L
+    var readyGeneration = -1L
     val activity = linkedSetOf<NodeActivity>()
     val removal = linkedSetOf<CleanupRegistration>()
     val destruction = linkedSetOf<CleanupRegistration>()

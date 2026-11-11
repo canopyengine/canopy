@@ -5,7 +5,7 @@ import kotlin.test.assertEquals
 import io.canopy.engine.core.managers.Manager
 import io.canopy.engine.core.managers.ManagersRegistry
 import io.canopy.engine.core.managers.SceneManager
-import io.canopy.engine.core.managers.manager
+import io.canopy.engine.core.managers.getManager
 import io.canopy.engine.core.nodes.ProcessMode
 import io.canopy.engine.core.nodes.behavior
 import io.canopy.engine.core.nodes.types.empty.EmptyNode
@@ -30,7 +30,7 @@ class AppPauseTests {
             pause()
         }
         app.onEnter {
-            manager<SceneManager>().currScene = EmptyNode("root") {
+            getManager<SceneManager>().currScene = EmptyNode("root") {
                 behavior(onPhysicsUpdate = { calls += "game" })
                 EmptyNode("menu") {
                     processMode = ProcessMode.WhenPaused
@@ -64,7 +64,7 @@ class AppPauseTests {
             override fun internalLaunch(config: AppConfig, vararg args: String) = Unit
         }
         app.onEnter {
-            manager<SceneManager>().currScene = EmptyNode("root") {
+            getManager<SceneManager>().currScene = EmptyNode("root") {
                 EmptyNode("menu") {
                     processMode = ProcessMode.WhenPaused
                     behavior(onPhysicsUpdate = {
@@ -109,7 +109,7 @@ class AppPauseTests {
         }
         app.onPhysicsUpdate { calls += "app" }
         app.onEnter {
-            manager<SceneManager>().currScene = EmptyNode("root") {
+            getManager<SceneManager>().currScene = EmptyNode("root") {
                 behavior(onPhysicsUpdate = { calls += "game" })
                 EmptyNode("menu") {
                     processMode = ProcessMode.WhenPaused
@@ -170,7 +170,7 @@ class AppPauseTests {
         app.onUpdate { calls += "app:frame:$it" }
         app.onPhysicsUpdate { calls += "app:physics:$it" }
         app.onEnter {
-            manager<SceneManager>().currScene = EmptyNode("root") {
+            getManager<SceneManager>().currScene = EmptyNode("root") {
                 behavior(onUpdate = { calls += "game:frame" }, onInput = { calls += "game:input" })
                 EmptyNode("menu") {
                     processMode = ProcessMode.WhenPaused
@@ -216,7 +216,7 @@ class AppPauseTests {
             )
             assertEquals(1L, app.frameCount)
         } finally {
-            manager<SceneManager>().currScene = null
+            getManager<SceneManager>().currScene = null
             app.exit()
             ManagersRegistry.exit()
         }

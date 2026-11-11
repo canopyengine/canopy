@@ -166,12 +166,12 @@ abstract class UiNode<N : UiNode<N>> protected constructor(
         untrack { scope.compose(block) }
     }
 
-    internal fun invalidate() {
+    internal fun invalidate(): Unit = untrack {
         var node: Node<*>? = this
         while (node != null) {
             if (node is UiRoot<*>) {
                 node.dirty = true
-                return
+                return@untrack
             }
             node = node.parent
         }

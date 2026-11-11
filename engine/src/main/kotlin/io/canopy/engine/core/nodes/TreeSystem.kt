@@ -4,7 +4,7 @@ import kotlin.reflect.KClass
 import java.util.Collections
 import io.canopy.engine.core.CleanupFailures
 import io.canopy.engine.core.managers.SceneManager
-import io.canopy.engine.core.managers.manager
+import io.canopy.engine.core.managers.getManager
 import io.canopy.engine.logging.EngineLogs
 import io.canopy.engine.logging.LogContext
 
@@ -210,6 +210,6 @@ fun createTreeSystem(
     override fun processNode(node: Node<*>, delta: Float) = processNode.invoke(this, node, delta)
 }
 
-inline fun <reified T : TreeSystem> treeSystem(): T = manager<SceneManager>().getSystem(T::class)
+inline fun <reified T : TreeSystem> treeSystem(): T = getManager<SceneManager>().getSystem(T::class)
 
 inline fun <reified T : TreeSystem> lazyTreeSystem() = lazy { treeSystem<T>() }

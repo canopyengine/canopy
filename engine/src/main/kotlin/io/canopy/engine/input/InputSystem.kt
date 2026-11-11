@@ -1,7 +1,7 @@
 package io.canopy.engine.input
 
 import io.canopy.engine.core.managers.SceneManager
-import io.canopy.engine.core.managers.manager
+import io.canopy.engine.core.managers.getManager
 import io.canopy.engine.core.nodes.Node
 import io.canopy.engine.core.nodes.TreeSystem
 import io.canopy.engine.input.events.ButtonInputEvent
@@ -16,8 +16,8 @@ import io.canopy.tooling.utils.UnstableApi
 class InputSystem : TreeSystem(UpdatePhase.FramePre, 10, Node::class) {
 
     override fun afterProcess(delta: Float) {
-        val sceneRoot = manager<SceneManager>().currScene ?: return
-        val input = manager<InputManager>()
+        val sceneRoot = getManager<SceneManager>().currScene ?: return
+        val input = getManager<InputManager>()
 
         // Deliver raw events first so text typed in the same frame as Enter is available
         // to action handlers before they submit the command.

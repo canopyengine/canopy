@@ -5,7 +5,7 @@ import io.canopy.engine.commands.PauseCommand
 import io.canopy.engine.commands.ResumeCommand
 import io.canopy.engine.core.flows.events.signal
 import io.canopy.engine.core.managers.SceneManager
-import io.canopy.engine.core.managers.manager
+import io.canopy.engine.core.managers.getManager
 import io.canopy.engine.core.nodes.Node
 import io.canopy.engine.graphics.GridSymbol
 import io.canopy.engine.ui.UiAppearance
@@ -76,7 +76,7 @@ fun main() {
                     command("quit") { execute { app.handle.requestExit() } }
                 }
             )
-            manager<SceneManager>().currScene = scene
+            getManager<SceneManager>().currScene = scene
         }
     }.launch()
 }

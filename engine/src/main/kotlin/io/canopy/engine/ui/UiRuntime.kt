@@ -5,7 +5,7 @@ import io.canopy.engine.core.flows.events.DependencySubscriptions
 import io.canopy.engine.core.flows.events.TrackingContext
 import io.canopy.engine.core.managers.Manager
 import io.canopy.engine.core.managers.SceneManager
-import io.canopy.engine.core.managers.manager
+import io.canopy.engine.core.managers.getManager
 import io.canopy.engine.core.nodes.Node
 import io.canopy.engine.core.nodes.NodeLifetime
 import io.canopy.engine.graphics.DrawContext
@@ -65,9 +65,9 @@ open class UiRoot<N : UiRoot<N>>(name: String = "UiRoot", block: N.() -> Unit = 
     private var focusLease by nodeProperty<AutoCloseable?>(null)
 
     override fun onEnterTree() {
-        manager<UiManager>().mount(this)
+        getManager<UiManager>().mount(this)
         val scope = content
-        val lease = manager<InputFocus>().register(
+        val lease = getManager<InputFocus>().register(
             owner = this,
             priority = zIndex.coerceAtMost(Int.MAX_VALUE - 1),
             capturesGameplay = { focusedElement != null && isVisibleInTree },
@@ -82,7 +82,7 @@ open class UiRoot<N : UiRoot<N>>(name: String = "UiRoot", block: N.() -> Unit = 
     }
     override fun onExitTree() {
         if (isValid) focus(null)
-        manager<UiManager>().unmount(this)
+        getManager<UiManager>().unmount(this)
     }
 
     /** Moves keyboard focus to a visible entered button in this tree, or releases focus. */
@@ -90,7 +90,7 @@ open class UiRoot<N : UiRoot<N>>(name: String = "UiRoot", block: N.() -> Unit = 
         require(element == null || element is Button<*>)
         val target = element?.takeIf { it.isInsideTree && it.isVisibleInTree && it.actionEnabled }
         require(target == null || target.root === this)
-        if (target != null) manager<UiManager>().releaseOtherFocus(this)
+        if (target != null) getManager<UiManager>().releaseOtherFocus(this)
         focusedElement = target
         dirty = true
     }
@@ -280,10 +280,11 @@ open class UiManager(var backend: UiBackend? = null) : Manager {
 
     /** Whether the host should report pointer movement for visible participating UI elements. */
     val needsMouseMovement: Boolean
-        get() = !manager<InputFocus>().capturesAbove(Int.MAX_VALUE - 1) && activeRoots().any { it.hasPointerTargets() }
+        get() = !getManager<InputFocus>().capturesAbove(Int.MAX_VALUE - 1) &&
+            activeRoots().any { it.hasPointerTargets() }
 
     private fun updateHover(active: List<UiRoot<*>>) {
-        if (manager<InputFocus>().capturesAbove(Int.MAX_VALUE - 1)) pointer = null
+        if (getManager<InputFocus>().capturesAbove(Int.MAX_VALUE - 1)) pointer = null
         val next = linkedSetOf<UiNode<*>>()
         pointer?.let { position ->
             for (root in active.asReversed()) {
@@ -304,7 +305,7 @@ open class UiManager(var backend: UiBackend? = null) : Manager {
 
     private fun ensureMouseRoute() {
         if (mouseLease != null) return
-        mouseLease = manager<InputFocus>().register(priority = Int.MAX_VALUE - 1) { event ->
+        mouseLease = getManager<InputFocus>().register(priority = Int.MAX_VALUE - 1) { event ->
             if (event !is MouseButtonEvent && event !is MouseMoveEvent && event !is MouseScrollEvent) {
                 false
             } else {
@@ -391,7 +392,7 @@ open class UiManager(var backend: UiBackend? = null) : Manager {
     fun renderNow() {
         if (updating) return
         backend?.let { renderer ->
-            val scene = manager<SceneManager>()
+            val scene = getManager<SceneManager>()
             val logicalViewport = renderer.viewport(viewport)
             var activeRoots = activeRoots()
             activeRoots.forEach {
@@ -505,7 +506,7 @@ internal class UiObserver(private val owner: Node<*>, private var action: (() ->
         } finally {
             TrackingContext.pop()
             if (!disposed && !suspended && owner.isValid) {
-                subscriptions.reconcile(frame) { manager<UiManager>().enqueue(this) }
+                subscriptions.reconcile(frame) { getManager<UiManager>().enqueue(this) }
             }
         }
     }
@@ -515,14 +516,14 @@ internal class UiObserver(private val owner: Node<*>, private var action: (() ->
         cancelRemoval?.invoke()
         cancelRemoval = null
         subscriptions.clear()
-        manager<UiManager>().cancel(this)
+        getManager<UiManager>().cancel(this)
     }
     fun resume() {
         if (!disposed && suspended) {
             suspended = false
             cancelRemoval = owner.onRemoval(::suspend)
             // Presentation runs after tree entry, so descendant reactive state is active.
-            manager<UiManager>().enqueue(this)
+            getManager<UiManager>().enqueue(this)
         }
     }
     fun dispose() {
@@ -534,6 +535,6 @@ internal class UiObserver(private val owner: Node<*>, private var action: (() ->
         cancelDestruction = null
         action = null
         subscriptions.clear()
-        manager<UiManager>().cancel(this)
+        getManager<UiManager>().cancel(this)
     }
 }

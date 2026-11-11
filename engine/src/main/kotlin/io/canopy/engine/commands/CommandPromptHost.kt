@@ -2,7 +2,7 @@ package io.canopy.engine.commands
 
 import io.canopy.engine.app.App
 import io.canopy.engine.core.managers.Manager
-import io.canopy.engine.core.managers.manager
+import io.canopy.engine.core.managers.getManager
 import io.canopy.engine.input.InputFocus
 import io.canopy.engine.input.binds.Key
 import io.canopy.engine.input.events.InputEvent
@@ -59,7 +59,7 @@ class CommandPromptHost(val app: App<*>, private val presentation: CommandPrompt
     internal fun attach(prompt: CommandPrompt<*>) {
         check(entered == null || entered === prompt) { "Only one command prompt may enter a host" }
         if (entered === prompt) return
-        val focus = manager<InputFocus>()
+        val focus = getManager<InputFocus>()
         focusLease = focus.register(
             owner = prompt,
             priority = Int.MAX_VALUE,
@@ -92,7 +92,7 @@ class CommandPromptHost(val app: App<*>, private val presentation: CommandPrompt
     }
 
     override fun onEnter() {
-        manager<InputFocus>()
+        getManager<InputFocus>()
     }
 
     internal fun beginInputFrame() {

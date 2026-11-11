@@ -3,7 +3,7 @@ package io.canopy.engine.ui
 import kotlin.test.*
 import io.canopy.engine.core.managers.ManagersRegistry
 import io.canopy.engine.core.managers.SceneManager
-import io.canopy.engine.core.managers.manager
+import io.canopy.engine.core.managers.getManager
 import io.canopy.engine.core.nodes.types.empty.EmptyNode
 import io.canopy.engine.input.InputFocus
 import io.canopy.engine.input.binds.InputBind
@@ -58,10 +58,10 @@ class UiMouseTests {
     fun cleanup() = ManagersRegistry.exit()
 
     private fun click(x: Float = 1f, y: Float = 1f, action: String = InputBind.LEFT_MOUSE.name): Boolean =
-        manager<InputFocus>().route(MouseButtonEvent(Vector2(x, y), action, InputState.JustPressed))
+        getManager<InputFocus>().route(MouseButtonEvent(Vector2(x, y), action, InputState.JustPressed))
 
     private fun move(x: Float = 1f, y: Float = 0f) =
-        manager<InputFocus>().route(MouseMoveEvent(Vector2(x, y), "MOUSE_MOVE"))
+        getManager<InputFocus>().route(MouseMoveEvent(Vector2(x, y), "MOUSE_MOVE"))
 
     @Test
     fun `hover enters once leaves once and never changes keyboard focus or activates buttons`() {
@@ -142,7 +142,7 @@ class UiMouseTests {
         move()
         root.focus(button)
         assertTrue(ui.needsMouseMovement, "Keyboard focus must not disable hover")
-        val editor = manager<InputFocus>().register(priority = Int.MAX_VALUE, capturesGameplay = { true }) { true }
+        val editor = getManager<InputFocus>().register(priority = Int.MAX_VALUE, capturesGameplay = { true }) { true }
 
         // Act and Assert
         ui.updateFrame()
@@ -150,7 +150,7 @@ class UiMouseTests {
         assertFalse(ui.needsMouseMovement)
         move()
         editor.close()
-        manager<InputFocus>().beginInputFrame()
+        getManager<InputFocus>().beginInputFrame()
         ui.updateFrame()
         assertTrue(ui.needsMouseMovement)
         assertFalse(button.isHovered)
@@ -314,7 +314,7 @@ class UiMouseTests {
             }
         }
         ui.updateFrame()
-        assertTrue(manager<InputFocus>().route(MouseScrollEvent(Vector2(1f, 1f), vertical = 1)))
+        assertTrue(getManager<InputFocus>().route(MouseScrollEvent(Vector2(1f, 1f), vertical = 1)))
         assertEquals(listOf("wheel"), received)
     }
 

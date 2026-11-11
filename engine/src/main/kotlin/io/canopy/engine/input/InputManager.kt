@@ -3,8 +3,8 @@ package io.canopy.engine.input
 import java.util.ArrayDeque
 import io.canopy.engine.app.App
 import io.canopy.engine.core.managers.Manager
-import io.canopy.engine.core.managers.manager
-import io.canopy.engine.core.managers.managerOrNull
+import io.canopy.engine.core.managers.getManager
+import io.canopy.engine.core.managers.getManagerOrNull
 import io.canopy.engine.data.saving.registerSaveModule
 import io.canopy.engine.input.binds.InputBind
 import io.canopy.engine.input.binds.InputData
@@ -27,7 +27,7 @@ abstract class InputManager : Manager {
     /** Returns copied mapped states, or an empty map while command editing owns this frame's input. */
     val actionStates get() = if (blocksGameplay) emptyMap() else _actionStates.toMap()
 
-    private fun focus(): InputFocus? = managerOrNull<InputFocus>()
+    private fun focus(): InputFocus? = getManagerOrNull<InputFocus>()
 
     internal val blocksGameplay: Boolean get() = focus()?.blocksGameplay == true
 
@@ -266,5 +266,5 @@ abstract class InputManager : Manager {
  * DSL helper
  */
 fun App<*>.inputs(vararg mappings: Pair<String, List<InputBind>>) {
-    manager<InputManager>().mapActions(*mappings)
+    getManager<InputManager>().mapActions(*mappings)
 }
