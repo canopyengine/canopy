@@ -12,6 +12,10 @@ import org.jetbrains.kotlin.name.ClassId
 import org.jetbrains.kotlin.name.FqName
 
 /**
+ * Legacy trusted IR validation SPI. Prefer [io.canopy.tooling.compiler.rules.RuleProvider] for read-only facts,
+ * declared diagnostics, severity and phased validation. This compatibility API exposes mutable Kotlin IR;
+ * it is not an isolated plugin boundary. It runs after storage rewriting and must not rewrite IR.
+ *
  * A compile-time validation rule. Providers need a public no-argument constructor and a
  * META-INF/services/io.canopy.tooling.compiler.CanopyCompilerRule entry in their compiler plugin jar.
  * Rules run once for every source declaration, including nested classes and functions, and must not rewrite the IR.
@@ -31,6 +35,7 @@ class CanopyRuleContext internal constructor(
     /** Kotlin services for symbol resolution; tied to the pinned compiler version. */
     val pluginContext: IrPluginContext,
     private val messages: MessageCollector,
+    private val allowedDiagnostic: String? = null,
 ) {
     private val nodeBase by lazy {
         pluginContext.referenceClass(ClassId.topLevel(FqName("io.canopy.engine.core.nodes.Node")))?.owner
@@ -46,6 +51,9 @@ class CanopyRuleContext internal constructor(
 
     /** Emits an error at the offending declaration without retaining compilation objects afterwards. */
     fun report(id: String, declaration: IrDeclaration, explanation: String) {
+        require(allowedDiagnostic == null || id == allowedDiagnostic) {
+            "Rule $allowedDiagnostic reported undeclared diagnostic $id"
+        }
         diagnostics.legacy(id, explanation, if (id.endsWith("_ABI")) null else declaration.file, declaration)
     }
 

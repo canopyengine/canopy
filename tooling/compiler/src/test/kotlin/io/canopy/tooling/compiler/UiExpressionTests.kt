@@ -280,7 +280,7 @@ class UiExpressionTests {
             assertEquals(ExitCode.OK, compiler.exec(PrintStream(messages), *common, api.path), messages.toString())
             messages.reset()
             val code = compiler.exec(
-                PrintStream(messages), "-no-stdlib", "-no-reflect", "-classpath",
+                PrintStream(messages), "-Xverify-ir=error", "-no-stdlib", "-no-reflect", "-classpath",
                 standardLibrary + File.pathSeparator + output.path,
                 "-Xplugin=" + System.getProperty("canopy.compiler.jar"), "-d", output.path, game.path
             )

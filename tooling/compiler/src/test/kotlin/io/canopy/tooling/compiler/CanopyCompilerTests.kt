@@ -726,6 +726,7 @@ class CanopyCompilerTests {
                 writeText("import io.canopy.engine.core.nodes.*\n" + source)
             }
             val arguments = arrayOf(
+                "-Xverify-ir=error",
                 "-no-stdlib",
                 "-no-reflect",
                 "-classpath",
