@@ -21,12 +21,15 @@ class NodeStateRule : CanopyCompilerRule {
         if (declaration !is IrClass) return
         if (!context.isNodeSubclass(declaration)) return
         if (declaration.isInner) {
-            context.report(
+            context.diagnostics.emit(
                 id,
+                "Node classes cannot be inner",
+                declaration.file,
                 declaration,
-                "${declaration.name}: inner node classes retain their enclosing instance; " +
-                    "use a nested class and 'by nodeProperty(...)' for explicit state"
+                label = "An inner class keeps its enclosing instance outside guarded Node storage.",
+                help = "Use a nested class and pass required values as constructor properties or by nodeProperty(...)."
             )
+            return
         }
         declaration.declarations.filterIsInstance<IrProperty>().forEach { property ->
             val field = property.backingField
@@ -44,22 +47,25 @@ class NodeStateRule : CanopyCompilerRule {
                         )
                     )
             ) {
-                val keyword = if (property.isVar) "var" else "val"
-                context.report(
+                context.diagnostics.emit(
                     id,
-                    property,
-                    "${declaration.name}.${property.name}: use " +
-                        "'$keyword ${property.name} by nodeProperty(initial)'"
+                    "Use a supported delegate for this Node property",
+                    declaration.file,
+                    field.initializer?.expression ?: property,
+                    label = "This delegate keeps state outside the Node's guarded storage.",
+                    help = "Use by nodeProperty(initial), or by signal(initial) for reactive state."
                 )
             }
         }
         declaration.declarations.filterIsInstance<IrField>().forEach { field ->
             if (!field.isStatic && field.correspondingPropertySymbol == null) {
-                context.report(
+                context.diagnostics.emit(
                     id,
+                    "This Node contains an unmanaged instance field",
+                    declaration.file,
                     field,
-                    "${declaration.name}.${field.name}: unmanaged instance field; " +
-                        "implement delegation explicitly with 'var state by nodeProperty(initial)'"
+                    label = "`${field.name}` would remain on the Node object after destruction.",
+                    help = "Store the value with by nodeProperty(initial)."
                 )
             }
         }
@@ -84,6 +90,7 @@ class NodeStateRule : CanopyCompilerRule {
                 )
             }
         }
+        val captured = mutableSetOf<org.jetbrains.kotlin.ir.symbols.IrValueSymbol>()
         bodies.forEach { (member, body, initializing) ->
             body.acceptChildrenVoid(object : IrVisitorVoid() {
                 override fun visitElement(element: IrElement) {
@@ -104,12 +111,17 @@ class NodeStateRule : CanopyCompilerRule {
                         value.parent is IrConstructor &&
                         (value as? IrValueParameter)?.kind == IrParameterKind.Regular
                     if (!belongsToNode || constructorCapture) {
-                        context.report(
-                            id,
-                            member,
-                            "${declaration.name} captures '${value.name}'; " +
-                                "pass it explicitly and store it using 'by nodeProperty(...)'"
-                        )
+                        if (captured.add(expression.symbol)) {
+                            context.diagnostics.emit(
+                                id,
+                                "Pass this value into the Node explicitly",
+                                declaration.file,
+                                expression,
+                                label = "`${value.name}` is captured outside guarded Node storage.",
+                                help = "Declare a constructor property, or store the value with by nodeProperty(...).",
+                                length = value.name.asString().length
+                            )
+                        }
                     }
                 }
             })

@@ -253,6 +253,60 @@ class CanopyCompilerTests {
     }
 
     @Test
+    fun `delegation errors highlight the assignment token and propose a compiling edit`() {
+        val wrong = "class Aquarium : Node<Aquarium>() { val fishNum = computed { 1 } }"
+        compileConsumer(wrong) { code, output ->
+            assertEquals(ExitCode.COMPILATION_ERROR, code, output)
+            assertTrue("[CANOPY_PROPERTY_DELEGATION]: Use `by` for a computed property" in output, output)
+            assertTrue("help: Replace `=` with `by`" in output, output)
+            assertTrue("2 - $wrong" in output, output)
+            assertTrue("2 + ${wrong.replace("fishNum =", "fishNum by")}" in output, output)
+            assertTrue("-> Game.kt:2:${wrong.indexOf('=') + 1}" in output, output)
+            assertTrue('\u001B' !in output, output)
+        }
+        compileConsumer(wrong.replace("fishNum =", "fishNum by")) { code, output ->
+            assertEquals(ExitCode.OK, code, output)
+        }
+    }
+
+    @Test
+    fun `explicit wrapper types receive guidance instead of a misleading single-token edit`() {
+        compileConsumer(
+            "class Fish : Node<Fish>() { val hunger: io.canopy.engine.core.flows.events.Signal<Int> = signal(1) }"
+        ) {
+                code,
+                output,
+            ->
+            assertEquals(ExitCode.COMPILATION_ERROR, code, output)
+            assertTrue("remove the explicit wrapper type" in output, output)
+            assertTrue("2 +" !in output, output)
+        }
+    }
+
+    @Test
+    fun `CRLF and tabbed source keep the assignment location and suggested edit aligned`() {
+        compileConsumer("class Aquarium : Node<Aquarium>() {\r\n\tval fishNum = computed { 1 }\r\n}") { code, output ->
+            assertEquals(ExitCode.COMPILATION_ERROR, code, output)
+            assertTrue("Game.kt:3:14" in output, output)
+            assertTrue("3 +     val fishNum by computed { 1 }" in output, output)
+        }
+    }
+
+    @Test
+    fun `one missing runtime build produces one compatibility error without a field error cascade`() {
+        compileConsumer(
+            "class Enemy : Node<Enemy>() { var first = 1; var second = 2; var third = 3 }",
+            apiSource = "package io.canopy.engine.core.nodes; abstract class Node<N : Node<N>>"
+        ) { code, output ->
+            assertEquals(ExitCode.COMPILATION_ERROR, code, output)
+            assertEquals(1, Regex("\\[CANOPY_NODE_PROPERTY_ABI]").findAll(output).count(), output)
+            assertTrue("Engine and compiler builds are incompatible" in output, output)
+            assertTrue("Publish the engine and compiler from the same checkout" in output, output)
+            assertTrue("CANOPY_UNMANAGED_NODE_STATE" !in output, output)
+        }
+    }
+
+    @Test
     fun `consumer typed dependencies require delegation instead of storing descriptors`() {
         // Arrange / Act / Assert
         compileConsumer(

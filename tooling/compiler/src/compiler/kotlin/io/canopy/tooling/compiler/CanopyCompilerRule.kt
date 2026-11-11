@@ -1,8 +1,6 @@
 package io.canopy.tooling.compiler
 
 import org.jetbrains.kotlin.backend.common.extensions.IrPluginContext
-import org.jetbrains.kotlin.cli.common.messages.CompilerMessageLocation
-import org.jetbrains.kotlin.cli.common.messages.CompilerMessageSeverity
 import org.jetbrains.kotlin.cli.common.messages.MessageCollector
 import org.jetbrains.kotlin.ir.declarations.IrClass
 import org.jetbrains.kotlin.ir.declarations.IrDeclaration
@@ -48,14 +46,8 @@ class CanopyRuleContext internal constructor(
 
     /** Emits an error at the offending declaration without retaining compilation objects afterwards. */
     fun report(id: String, declaration: IrDeclaration, explanation: String) {
-        val file = declaration.file
-        val offset = declaration.startOffset.coerceAtLeast(0)
-        val location = CompilerMessageLocation.create(
-            file.fileEntry.name,
-            file.fileEntry.getLineNumber(offset) + 1,
-            file.fileEntry.getColumnNumber(offset) + 1,
-            null
-        )
-        messages.report(CompilerMessageSeverity.ERROR, "$id: $explanation", location)
+        diagnostics.legacy(id, explanation, if (id.endsWith("_ABI")) null else declaration.file, declaration)
     }
+
+    internal val diagnostics = messages as? DiagnosticMessages ?: DiagnosticMessages(messages)
 }
