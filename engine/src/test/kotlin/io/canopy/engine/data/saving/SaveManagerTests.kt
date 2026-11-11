@@ -6,7 +6,7 @@ import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
 import kotlin.test.assertSame
 import io.canopy.engine.core.managers.ManagersRegistry
-import io.canopy.engine.core.managers.manager
+import io.canopy.engine.core.managers.getManager
 import io.canopy.engine.data.assets.WritableAssetEntry
 import kotlinx.serialization.builtins.serializer
 import org.junit.jupiter.api.AfterEach
@@ -41,8 +41,8 @@ class SaveManagerTests {
 
     @AfterEach
     fun cleanup() {
-        manager<SaveManager>().cleanModules("player")
-        manager<SaveManager>().cleanModules("other")
+        getManager<SaveManager>().cleanModules("player")
+        getManager<SaveManager>().cleanModules("other")
         entries.clear()
     }
 

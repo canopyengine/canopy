@@ -2,7 +2,7 @@ package io.canopy.engine.core.queries
 
 import kotlin.reflect.KClass
 import kotlin.reflect.KProperty
-import io.canopy.engine.core.flows.Context
+import io.canopy.engine.core.flows.lookupContext
 import io.canopy.engine.core.nodes.Behavior
 import io.canopy.engine.core.nodes.Node
 
@@ -10,6 +10,7 @@ import io.canopy.engine.core.nodes.Node
  * Read-only dependency resolved against a node hierarchy or context on each game-thread read.
  * Valid detached nodes can resolve ancestors, children and context; tree/group reads require entered membership.
  * Destroyed owners reject every read, including optional reads. Behaviors resolve against their supplied node.
+ * Reads inside computed/effect observe structural changes, including active-tree reparenting.
  * No owner, provider or resolved value is retained. Construct through the node query factories.
  */
 class NodeDependency<T> private constructor(private val kind: Kind, type: KClass<*>, key: String?, optional: Boolean) :
@@ -33,13 +34,14 @@ class NodeDependency<T> private constructor(private val kind: Kind, type: KClass
     @Suppress("UNCHECKED_CAST")
     private fun resolve(owner: Node<*>?, property: KProperty<*>): T {
         owner?.requireValid("read dependency '${property.name}'")
+        owner?.observeHierarchy()
         val result: Any? = when (kind) {
             Kind.Ancestor -> {
                 var current = owner?.parent
                 while (current != null && !type.isInstance(current)) current = current.parent
                 current
             }
-            Kind.Child -> owner?.let { visibleChildren(it).firstOrNull(type::isInstance) }
+            Kind.Child -> owner?.matchingChildren(type)?.firstOrNull()
             Kind.Tree -> owner?.takeIf { it.isInsideTree }?.let {
                 var root = it
                 while (root.parent != null) root = root.parent!!
@@ -47,43 +49,11 @@ class NodeDependency<T> private constructor(private val kind: Kind, type: KClass
             }
             Kind.Group -> owner?.takeIf { it.isInsideTree }?.owningManager()
                 ?.queryGroup(key!!)?.filter(type::isInstance).orEmpty()
-            Kind.Context -> owner?.let {
-                if (key != null) {
-                    var current: Node<*>? = it
-                    var value: Any? = null
-                    while (current != null) {
-                        if (current is Context && key in current.provided) {
-                            // A null provider shadows outer scopes, just like a non-null provider.
-                            value = current.provided.getValue(key)()
-                            break
-                        }
-                        current = current.parent
-                    }
-                    check(value == null || type.isInstance(value)) {
-                        "Dependency '${property.name}': context '$key' is not ${type.qualifiedName}"
-                    }
-                    value
-                } else {
-                    var current: Node<*>? = it
-                    var value: Any? = null
-                    while (current != null) {
-                        if (current is Context && current.hasTypedProvider(type)) {
-                            value = current.typedValue(type)
-                            break
-                        }
-                        current = current.parent
-                    }
-                    value
-                }
-            }
+            Kind.Context -> owner?.lookupContext(type, key)
         }
         return finish(result, property) {
             owner?.let { "node ${it.nodeId} (${it.path})" } ?: "a behavior without a node"
         }
-    }
-
-    private fun visibleChildren(node: Node<*>): Sequence<Node<*>> = node.children.values.asSequence().flatMap {
-        if (it.isSearchTransparent()) visibleChildren(it) else sequenceOf(it)
     }
 
     private fun walk(root: Node<*>): Sequence<Node<*>> = sequence {

@@ -36,6 +36,8 @@ class NodeStateRule : CanopyCompilerRule {
                     !property.isDelegated ||
                         field.type.classFqName?.asString() !in setOf(
                             "io.canopy.engine.core.nodes.NodeProperty",
+                            "io.canopy.engine.core.flows.events.SignalProperty",
+                            "io.canopy.engine.core.flows.events.ComputedProperty",
                             "io.canopy.engine.core.queries.GlobalDependency",
                             "io.canopy.engine.core.queries.NodeDependency",
                             "io.canopy.engine.data.assets.AssetDelegate"

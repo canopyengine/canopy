@@ -10,7 +10,7 @@ import io.canopy.engine.app.Screen
 import io.canopy.engine.app.screens
 import io.canopy.engine.commands.CommandPrompt
 import io.canopy.engine.core.managers.SceneManager
-import io.canopy.engine.core.managers.manager
+import io.canopy.engine.core.managers.getManager
 import io.canopy.engine.logging.LoggingPolicy
 import io.canopy.engine.ui.UiBackend
 import io.canopy.engine.ui.UiManager
@@ -29,8 +29,8 @@ class TerminalUiBootstrapTests {
         app.logging(LoggingPolicy.Host)
         var screenBackend: UiBackend? = null
         var appBackend: UiBackend? = null
-        app.screens { start(StartupScreen { screenBackend = manager<UiManager>().backend }) }
-        app.onEnter { appBackend = manager<UiManager>().backend }
+        app.screens { start(StartupScreen { screenBackend = getManager<UiManager>().backend }) }
+        app.onEnter { appBackend = getManager<UiManager>().backend }
         try {
             // Act
             app.enter()
@@ -38,9 +38,9 @@ class TerminalUiBootstrapTests {
             // Assert
             assertNotNull(screenBackend)
             assertSame(screenBackend, appBackend)
-            assertSame(appBackend, manager<UiManager>().backend)
-            manager<SceneManager>().currScene = CommandPrompt("Console")
-            assertSame(appBackend, manager<UiManager>().backend)
+            assertSame(appBackend, getManager<UiManager>().backend)
+            getManager<SceneManager>().currScene = CommandPrompt("Console")
+            assertSame(appBackend, getManager<UiManager>().backend)
         } finally {
             app.exit()
         }
@@ -53,14 +53,14 @@ class TerminalUiBootstrapTests {
         val custom = TerminalUiBackend(terminal) {}
         val app = TerminalApp(terminal, {}, { Size(80, 24) })
         app.logging(LoggingPolicy.Host)
-        app.onEnter { manager<UiManager>().backend = custom }
+        app.onEnter { getManager<UiManager>().backend = custom }
         try {
             // Act
             app.enter()
-            manager<SceneManager>().currScene = CommandPrompt("Console")
+            getManager<SceneManager>().currScene = CommandPrompt("Console")
 
             // Assert
-            assertSame(custom, manager<UiManager>().backend)
+            assertSame(custom, getManager<UiManager>().backend)
         } finally {
             app.exit()
         }

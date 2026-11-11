@@ -5,7 +5,7 @@ import java.nio.file.Files
 import java.nio.file.Path
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
-import io.canopy.engine.core.managers.manager
+import io.canopy.engine.core.managers.getManager
 import io.canopy.engine.data.assets.AssetsManager
 import io.canopy.engine.data.assets.FileSource
 import io.canopy.engine.data.assets.WritableAssetEntry
@@ -34,7 +34,7 @@ fun main() {
         onEnter {
             check(Thread.currentThread() === caller)
             lifecycle += "enter"
-            verifyAssets(manager<AssetsManager>())
+            verifyAssets(getManager<AssetsManager>())
         }
         onUpdate {
             check(Thread.currentThread() === caller)

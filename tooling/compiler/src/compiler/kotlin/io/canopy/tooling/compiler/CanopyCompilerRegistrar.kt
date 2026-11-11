@@ -22,14 +22,21 @@ class CanopyCompilerRegistrar : CompilerPluginRegistrar() {
 
     override fun ExtensionStorage.registerExtensions(configuration: CompilerConfiguration) {
         val messages = configuration.get(CommonConfigurationKeys.MESSAGE_COLLECTOR_KEY, MessageCollector.NONE)
+        val declarationRules = listOf(ReactiveDeclarationRule())
         val rules = listOf(NodeStateRule()) +
             ServiceLoader.load(
                 CanopyCompilerRule::class.java,
                 this@CanopyCompilerRegistrar.javaClass.classLoader
             ).toList()
-        require(rules.map { it.id }.distinct().size == rules.size) { "Canopy compiler rule IDs must be unique" }
+        require(
+            (declarationRules + rules).map {
+                it.id
+            }.distinct().size == declarationRules.size + rules.size
+        ) { "Canopy compiler rule IDs must be unique" }
+        IrGenerationExtension.registerExtension(CanopyRuleRunner(messages, declarationRules))
         IrGenerationExtension.registerExtension(NodePropertyTransform(messages))
         IrGenerationExtension.registerExtension(CanopyRuleRunner(messages, rules))
+        IrGenerationExtension.registerExtension(NodeOwnershipTransform(messages))
         IrGenerationExtension.registerExtension(UiExpressionTransform(messages))
         IrGenerationExtension.registerExtension(NodeConstructionTransform(messages))
     }

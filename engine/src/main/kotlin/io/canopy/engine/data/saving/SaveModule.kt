@@ -1,7 +1,7 @@
 package io.canopy.engine.data.saving
 
 import io.canopy.engine.core.managers.ManagersRegistry
-import io.canopy.engine.core.managers.manager
+import io.canopy.engine.core.managers.getManager
 import kotlinx.serialization.KSerializer
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.serializer
@@ -81,7 +81,7 @@ fun <T : @Serializable Any> registerSaveModule(
     }
 
     // Delegates storage/dispatch to the SaveManager.
-    manager<SaveManager>().registerSaveModule(destination, saveModule)
+    getManager<SaveManager>().registerSaveModule(destination, saveModule)
 }
 
 inline fun <reified T : @Serializable Any> registerSaveModule(

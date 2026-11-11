@@ -1,5 +1,7 @@
 package io.canopy.engine.core.nodes
 
+import io.canopy.engine.core.managers.SceneManager
+
 /**
  * Constructs nodes within a game-thread-confined rollback boundary. The block must not suspend or switch threads.
  *
@@ -7,6 +9,7 @@ package io.canopy.engine.core.nodes
  * tree membership before rethrowing the original failure. Cleanup failures are suppressed on that failure.
  * Successful nested boundaries join their enclosing boundary, including nonlocal returns; a failed nested
  * boundary affects only its own new nodes. Existing nodes and arbitrary external mutations are not transactional.
+ * Structural observers run only after the outer construction boundary succeeds or finishes rollback.
  *
  * Java callers and builds without the Canopy compiler plugin must wrap potentially failing constructors
  * explicitly. The base constructor cannot catch a subclass initializer failure after it returns.
@@ -28,10 +31,20 @@ inline fun <T> nodeConstruction(block: () -> T): T {
 internal object NodeConstruction {
     @PublishedApi
     internal class Transaction(val previous: Transaction?) {
+        val managers = linkedSetOf<SceneManager>()
         val nodes = linkedSetOf<Node<*>>()
         val pending = ArrayDeque<Node<*>>()
 
+        fun hold(manager: SceneManager) {
+            var transaction: Transaction? = this
+            while (transaction != null && transaction.managers.add(manager)) {
+                manager.beginHierarchyMutation()
+                transaction = transaction.previous
+            }
+        }
+
         fun add(node: Node<*>) {
+            hold(node.owningManager())
             if (nodes.add(node)) pending.addLast(node)
         }
     }
@@ -64,6 +77,17 @@ internal object NodeConstruction {
             }
         } finally {
             current.set(transaction.previous)
+            val notifications = io.canopy.engine.core.CleanupFailures()
+            transaction.managers.forEach { manager -> notifications.attempt { manager.endHierarchyMutation() } }
+            if (failure == null) {
+                notifications.rethrow()
+            } else {
+                try {
+                    notifications.rethrow()
+                } catch (notification: Throwable) {
+                    if (notification !== failure) failure.addSuppressed(notification)
+                }
+            }
         }
     }
 }

@@ -12,7 +12,7 @@ import io.canopy.engine.core.managers.Manager
 import io.canopy.engine.core.managers.ManagerScope
 import io.canopy.engine.core.managers.ManagersRegistry
 import io.canopy.engine.core.managers.SceneManager
-import io.canopy.engine.core.managers.manager
+import io.canopy.engine.core.managers.getManager
 import io.canopy.engine.input.InputFocus
 import io.canopy.engine.logging.EngineLogs
 import io.canopy.engine.logging.LogContext
@@ -305,7 +305,7 @@ abstract class App<C : AppConfig> protected constructor() {
         updateSequence++
         if (!isPaused) gameplayFrames.incrementAndGet()
 
-        manager<UiManager>().afterUpdates {
+        getManager<UiManager>().afterUpdates {
             LogContext.with("frame" to updateSequence) {
                 val gameplayDelta = if (isPaused) 0f else delta
                 beforeUpdate(gameplayDelta)
@@ -430,7 +430,7 @@ abstract class App<C : AppConfig> protected constructor() {
     @PublishedApi
     internal fun currentScreenManager(): ScreenManager {
         ManagersRegistry.checkAppScope(managerScope)
-        return manager<ScreenManager>()
+        return getManager<ScreenManager>()
     }
 
     /**

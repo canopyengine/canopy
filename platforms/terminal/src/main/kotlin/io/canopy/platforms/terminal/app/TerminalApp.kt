@@ -16,7 +16,7 @@ import io.canopy.engine.app.AppConfig
 import io.canopy.engine.app.FrameSize
 import io.canopy.engine.commands.CommandPromptHost
 import io.canopy.engine.core.managers.SceneManager
-import io.canopy.engine.core.managers.manager
+import io.canopy.engine.core.managers.getManager
 import io.canopy.engine.input.InputSystem
 import io.canopy.engine.logging.EngineLogs
 import io.canopy.engine.ui.UiBackend
@@ -134,7 +134,7 @@ class TerminalApp internal constructor(
 
     override fun presentFrame() {
         surface.endFrame()
-        trackMouseMovement.set(manager<UiManager>().needsMouseMovement)
+        trackMouseMovement.set(getManager<UiManager>().needsMouseMovement)
         processedLine?.complete(Unit)
         processedLine = null
     }
@@ -184,7 +184,7 @@ class TerminalApp internal constructor(
 
         surface.openSession()
         engineLoop.enter()
-        trackMouseMovement.set(manager<UiManager>().needsMouseMovement)
+        trackMouseMovement.set(getManager<UiManager>().needsMouseMovement)
         withLoggingContext { log.info { "Starting terminal runtime" } }
 
         // Native reads run on IO and periodically return so cancellation can close raw mode.

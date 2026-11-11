@@ -2,7 +2,7 @@ import io.canopy.engine.commands.CommandPrompt
 import io.canopy.engine.commands.PauseCommand
 import io.canopy.engine.commands.ResumeCommand
 import io.canopy.engine.core.flows.events.signal
-import io.canopy.engine.core.nodes.types.empty.EmptyNode
+import io.canopy.engine.core.nodes.Node
 import io.canopy.engine.graphics.GridSymbol
 import io.canopy.engine.input.events.InputEvent
 import io.canopy.engine.input.events.MouseScrollEvent
@@ -23,22 +23,20 @@ import io.canopy.platforms.terminal.app.terminalApp
 fun main() {
     terminalApp {
         onEnter {
-            val world = EmptyNode("World")
-            val population = signal(owner = world, value = 3)
-            val details = signal(owner = world, value = true)
+            val world = AcceptanceWorld()
             val root = UiRoot {
                 Column(UiStyle(width = UiLength.Fill, height = UiLength.Fill)) {
                     Text("Canopy terminal acceptance").style = UiStyle(
                         appearance = UiAppearance(foreground = UiColor.Rgb(120, 220, 160), bold = true)
                     )
                     val map = AcceptanceMap()
-                    Text("Ticks: ${map.ticks()}")
+                    Text("Ticks: ${map.displayedTicks}")
                     Divider()
-                    Text("Population: ${population()}")
+                    Text("Population: ${world.population}")
                     ScrollProbe()
-                    Button("Add rabbit") { population.update { it + 1 } }
-                    Button("Toggle details") { details.update { !it } }
-                    if (details()) Text("Details visible")
+                    Button("Add rabbit") { world.addRabbit() }
+                    Button("Toggle details") { world.details = !world.details }
+                    if (world.details) Text("Details visible")
                     Text("Arrows focus; Enter activates; Escape opens commands")
                 }
             }
@@ -50,8 +48,8 @@ fun main() {
                     command<ResumeCommand>()
                     command("add") {
                         execute {
-                            population.update { it + 1 }
-                            reply("Population: ${population()}")
+                            world.addRabbit()
+                            reply("Population: ${world.population}")
                         }
                     }
                     command("quit") { execute { app.handle.requestExit() } }
@@ -64,18 +62,18 @@ fun main() {
 
 /** A custom component opts in; its Text child keeps the default Ignore filter. */
 private class ScrollProbe : UiNode<ScrollProbe>("Scroll") {
-    private val steps = signal(0)
+    private var steps by signal(0)
 
     init {
         mouseFilter = UiMouseFilter.Stop
     }
 
     override fun nodeInit() {
-        ui { Text("Scroll: ${steps()}") }
+        ui { Text("Scroll: ${steps}") }
     }
 
     override fun onMouseInput(event: InputEvent) {
-        if (event is MouseScrollEvent) steps.update { it + event.vertical }
+        if (event is MouseScrollEvent) steps += event.vertical
     }
 }
 
@@ -84,7 +82,8 @@ private class AcceptanceMap : UiNode<AcceptanceMap>(
     "Map",
     UiStyle(width = UiLength.Fill, height = UiLength.Fixed(4.0), border = UiBorder.Rounded)
 ) {
-    val ticks = signal(0)
+    var ticks by signal(0)
+    val displayedTicks by computed { ticks }
     private var elapsed = 0f
     private var map: GridNode<*>? = null
 
@@ -101,7 +100,7 @@ private class AcceptanceMap : UiNode<AcceptanceMap>(
 
     override fun onUpdate(delta: Float) {
         elapsed += delta
-        ticks.update { it + 1 }
+        ticks += 1
         val grid = map ?: return
         val column = (elapsed * 3).toInt().mod(grid.columns)
         grid.clear()
@@ -109,3 +108,20 @@ private class AcceptanceMap : UiNode<AcceptanceMap>(
         grid[column, 1] = GridSymbol('f', UiColor.Rgb(255, 140, 70))
     }
 }
+
+/** Population follows actual gameplay nodes, including subclasses, without a mirrored list or counter. */
+private class AcceptanceWorld : Node<AcceptanceWorld>("World") {
+    var details by signal(true)
+    private var nextRabbit = 0
+    val population by computed { getChildrenOfType<AcceptanceRabbit>().size }
+
+    override fun nodeInit() {
+        repeat(3) { addRabbit() }
+    }
+
+    fun addRabbit() {
+        addChild(AcceptanceRabbit("Rabbit${nextRabbit++}"))
+    }
+}
+
+private class AcceptanceRabbit(name: String) : Node<AcceptanceRabbit>(name)

@@ -6,7 +6,8 @@ import io.canopy.engine.core.nodes.NodeLifetime
 /**
  * Synchronous, game-thread-confined event. Unowned listeners remain weak; retain a handle to retain a callback.
  * Managed connections are tree-owned. Sources capture creation ownership and dispose on permanent destruction.
- * Listener calls suppress ambient ownership; nested resources require explicit owners.
+ * Listener calls suppress ambient ownership. The matching compiler infers ownership of Canopy operations
+ * written inside Node methods and callbacks; standalone helper code can use explicit ownership.
  */
 sealed class Event<T : Any>(owner: Node<*>?) {
     private val lifetime = SourceLifetime(owner)
@@ -33,7 +34,7 @@ sealed class Event<T : Any>(owner: Node<*>?) {
     /** Whether there are no live listeners. */
     fun isEmpty(): Boolean = size() == 0
 
-    /** Connects under the current managed scope, or returns an unowned retained handle. */
+    /** Infers the listening Node through the compiler, otherwise uses the current scope or a retained handle. */
     infix fun connect(listener: T): EventDisconnectHandler {
         requireOpen("connect event")
         return connections.connect(listener)

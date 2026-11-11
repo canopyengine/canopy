@@ -5,7 +5,7 @@ import kotlin.test.assertEquals
 import io.canopy.engine.app.App
 import io.canopy.engine.app.AppConfig
 import io.canopy.engine.core.managers.SceneManager
-import io.canopy.engine.core.managers.manager
+import io.canopy.engine.core.managers.getManager
 import io.canopy.engine.core.nodes.Node
 import io.canopy.engine.input.binds.InputBind
 import io.canopy.engine.input.events.ButtonInputEvent
@@ -48,7 +48,7 @@ class InputSystemTests {
             try {
                 app.enter()
                 val receiver = Receiver()
-                manager<SceneManager>().currScene = receiver
+                getManager<SceneManager>().currScene = receiver
                 input.enqueue(TextInputEvent("run-$run"))
                 input.pressed = true
 

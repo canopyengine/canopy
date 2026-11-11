@@ -4,13 +4,13 @@ import io.canopy.engine.commands.CommandPrompt
 import io.canopy.engine.commands.PauseCommand
 import io.canopy.engine.commands.ResumeCommand
 import io.canopy.engine.core.managers.SceneManager
-import io.canopy.engine.core.managers.manager
+import io.canopy.engine.core.managers.getManager
 
 /** Manual smoke entrypoint: Escape (or exact `:console` in line mode), help, echo, pause, resume and quit. */
 fun main() {
     terminalApp {
         onEnter {
-            manager<SceneManager>().currScene = CommandPrompt("Console") {
+            getManager<SceneManager>().currScene = CommandPrompt("Console") {
                 command<PauseCommand>()
                 command<ResumeCommand>()
                 command("echo", "Repeat required text; quotes preserve spaces") {
