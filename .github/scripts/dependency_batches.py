@@ -55,7 +55,17 @@ def contains(base, commit):
 
 @cache
 def severity(advisory):
-    return api(f"advisories/{advisory}")["severity"]
+    try:
+        data = api(f"advisories/{advisory}")
+        value = data.get("severity") if isinstance(data, dict) else None
+        if value in ("low", "moderate", "high", "critical"):
+            return value
+    except (subprocess.CalledProcessError, ValueError):
+        pass
+    # Missing optional advisory metadata must not halt unrelated checked updates.
+    # Unknown severity never grants critical-fix staging privileges.
+    print(f"::warning::Cannot classify advisory {advisory}; severity remains unknown")
+    return None
 
 
 def advisories(pr):
