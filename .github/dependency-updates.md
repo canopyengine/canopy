@@ -30,13 +30,14 @@ tests, lint, compilation, packaging, and the aggregate coverage gate with JDK 25
 Dependency graph submission runs only for pushes to `main`.
 
 The synchronization uses the built-in `GITHUB_TOKEN`, with repository contents
-and Actions write permissions. It uses normal merges and pushes, retries concurrent
-branch updates, and stops on conflicts or branch-protection rejection. Required PR
+and Actions write permissions. GitHub's branch-merge API merges current main into
+the current dependency tip atomically, preserving concurrent updates without a
+local push or force update. Conflicts and branch-policy rejection stop the job. Required PR
 or restricted-push rules on `dependency-updates` must permit this automation for
 direct synchronization to work. It cannot keep the branch current through a merge
 conflict without a manual resolution.
 
-Token-created pushes do not trigger ordinary push workflows. The sync workflow
+Token-created branch updates do not trigger ordinary push workflows. The sync workflow
 explicitly dispatches Build and CodeQL on `dependency-updates`, including on a
 manual rerun, so validation does not depend on a personal access token.
 
