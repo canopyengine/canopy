@@ -321,7 +321,7 @@ def prepare(repo, project, version, kotlin_version, repository, output, java, of
     # Refuse an existing directory so preparation never replaces a user's project.
     project.mkdir(parents=True, exist_ok=False)
     create_project(repo, project, version, kotlin_version)
-    command = [java, str(launcher or repo / "tooling/launcher/CanopyLaunch.java"), "-p", str(project),
+    command = [java, str(repo / "tooling/launcher/CanopyLaunch.java"), "-p", str(project),
                "--gradle-arg", "--max-workers=2"]
     if offline:
         command += ["--gradle-arg", "--offline"]
