@@ -2,9 +2,11 @@ package io.canopy.engine.ui
 
 import kotlin.math.max
 import kotlin.math.min
+import io.canopy.engine.core.nodes.Node
+import io.canopy.engine.graphics.DrawContext
 
 internal object UiLayoutEngine {
-    fun layout(root: UiRoot, backend: UiBackend, viewport: UiSize) {
+    fun layout(root: UiRoot<*>, backend: UiBackend, viewport: UiSize) {
         val elements = root.content?.elements().orEmpty()
         val available = UiSize(
             resolve(root.style.width, viewport.width, viewport.width, root.style.maxWidth),
@@ -13,7 +15,7 @@ internal object UiLayoutEngine {
         val x = align(root.horizontalAlignment, viewport.width, available.width)
         val y = align(root.verticalAlignment, viewport.height, available.height)
         root.bounds = UiRect(x, y, available.width, available.height)
-        val padding = root.style.padding
+        val padding = root.contentInset
         val inner = UiRect(
             x + padding,
             y + padding,
@@ -34,7 +36,7 @@ internal object UiLayoutEngine {
             )
         }
     }
-    private fun measure(element: UiElement, backend: UiBackend, available: UiSize): UiSize {
+    private fun measure(element: UiNode<*>, backend: UiBackend, available: UiSize): UiSize {
         val style = element.style
         val children = element.content?.elements().orEmpty()
         val constrainedWidth = when (val width = style.width) {
@@ -43,8 +45,8 @@ internal object UiLayoutEngine {
             is UiLength.Fraction -> available.width * width.value
         }.coerceAtMost(style.maxWidth ?: Double.MAX_VALUE)
         val inner = UiSize(
-            max(0.0, constrainedWidth - style.padding * 2),
-            max(0.0, available.height - style.padding * 2)
+            max(0.0, constrainedWidth - element.contentInset * 2),
+            max(0.0, available.height - element.contentInset * 2)
         )
         var measures = children.map { measure(it, backend, inner) }
         if (element.kind == UiKind.Row) {
@@ -67,10 +69,27 @@ internal object UiLayoutEngine {
                 }
             }
         }
-        val key = listOf(backend, element.text, style, available, children.map { it.nodeId }, measures)
+        // Text metrics depend on constrained width, not the height left by a layout pass.
+        // Fill/fraction heights still depend on allocation; containers also retain child measurements.
+        val allocatedHeight = when (style.height) {
+            UiLength.Content, is UiLength.Fixed -> null
+            UiLength.Fill, is UiLength.Fraction -> available.height
+        }
+        val key = listOf(
+            backend,
+            element.contentText,
+            element.contentMeasureKey,
+            style.layoutKey,
+            element.resolvedBorder,
+            constrainedWidth,
+            allocatedHeight,
+            children.map { it.nodeId },
+            measures
+        )
         if (key == element.measurementKey) return element.measured
-        val intrinsic = when (element.kind) {
-            UiKind.Text, UiKind.Button -> backend.measureText(element.text, inner.width, style.wrap)
+        val intrinsic = element.measureContent(backend, inner) ?: when (element.kind) {
+            UiKind.Text -> backend.measureText(element.contentText, inner.width, style.wrap)
+            UiKind.Button -> backend.measureButton(element.contentText, inner.width, style.wrap, element.resolvedBorder)
             UiKind.Row -> UiSize(
                 measures.sumOf { it.width } + max(0, children.size - 1) * style.gap,
                 measures.maxOfOrNull { it.height } ?: 0.0
@@ -88,13 +107,13 @@ internal object UiLayoutEngine {
             resolve(
                 style.width,
                 available.width,
-                intrinsic.width + style.padding * 2,
+                intrinsic.width + element.contentInset * 2,
                 style.maxWidth
             ),
             resolve(
                 style.height,
                 available.height,
-                intrinsic.height + style.padding * 2,
+                intrinsic.height + element.contentInset * 2,
                 style.maxHeight
             )
         )
@@ -102,14 +121,14 @@ internal object UiLayoutEngine {
         element.measured = measured
         return measured
     }
-    private fun place(element: UiElement, backend: UiBackend, bounds: UiRect) {
+    private fun place(element: UiNode<*>, backend: UiBackend, bounds: UiRect) {
         element.bounds = bounds
         val style = element.style
         val inner = UiRect(
-            bounds.x + style.padding,
-            bounds.y + style.padding,
-            max(0.0, bounds.width - style.padding * 2),
-            max(0.0, bounds.height - style.padding * 2)
+            bounds.x + element.contentInset,
+            bounds.y + element.contentInset,
+            max(0.0, bounds.width - element.contentInset * 2),
+            max(0.0, bounds.height - element.contentInset * 2)
         )
         val children = element.content?.elements().orEmpty()
         if (children.isEmpty()) return
@@ -174,11 +193,11 @@ internal object UiLayoutEngine {
         }
     }
     private fun allocateFills(
-        children: List<UiElement>,
+        children: List<UiNode<*>>,
         horizontal: Boolean,
         available: Double,
-    ): Map<UiElement, Double> {
-        val allocations = mutableMapOf<UiElement, Double>()
+    ): Map<UiNode<*>, Double> {
+        val allocations = mutableMapOf<UiNode<*>, Double>()
         var remaining = available
         val unallocated = children.filter {
             (if (horizontal) it.style.width else it.style.height) == UiLength.Fill
@@ -202,12 +221,36 @@ internal object UiLayoutEngine {
         }
         return allocations
     }
-    fun paint(element: UiElement, backend: UiBackend, clip: UiRect, focused: UiElement?) {
+    fun paint(element: UiNode<*>, backend: UiBackend, clip: UiRect, focused: UiNode<*>?) {
         if (!element.isVisibleInTree) return
         val ownClip = if (element.style.clip) clip.intersect(element.bounds) else clip
+        val appearance = element.appearance(element === focused)
+        backend.drawBox(
+            element.bounds,
+            ownClip,
+            appearance,
+            if (element.kind == UiKind.Button) UiBorder.None else element.resolvedBorder
+        )
+        element.paintContent(backend, ownClip, appearance)
+        if (element.draws) {
+            val padding = element.contentInset
+            val area = UiRect(
+                element.bounds.x + padding,
+                element.bounds.y + padding,
+                max(0.0, element.bounds.width - 2 * padding),
+                max(0.0, element.bounds.height - 2 * padding)
+            )
+            val context =
+                DrawContext(backend, area, if (element.style.clip) ownClip.intersect(area) else ownClip, appearance)
+            try {
+                element.drawSelf(context)
+            } finally {
+                context.close()
+            }
+        }
         when (element.kind) {
             UiKind.Text, UiKind.Button -> {
-                val padding = element.style.padding
+                val padding = element.contentInset
                 val bounds = element.bounds
                 val textBounds = UiRect(
                     bounds.x + padding,
@@ -215,9 +258,77 @@ internal object UiLayoutEngine {
                     max(0.0, bounds.width - 2 * padding),
                     max(0.0, bounds.height - 2 * padding)
                 )
-                backend.drawText(element.text, textBounds, ownClip, element === focused, element.style.wrap)
+                if (element.kind == UiKind.Button) {
+                    backend.drawButton(
+                        element.contentText,
+                        textBounds,
+                        ownClip,
+                        element === focused,
+                        element.actionEnabled,
+                        element.style.wrap,
+                        appearance,
+                        element.resolvedBorder
+                    )
+                } else {
+                    backend.drawText(
+                        element.contentText,
+                        textBounds,
+                        ownClip,
+                        element === focused,
+                        element.style.wrap,
+                        appearance
+                    )
+                }
             }
-            else -> element.content?.elements()?.forEach { paint(it, backend, ownClip, focused) }
+            else -> {
+                val padding = element.contentInset
+                val area = UiRect(
+                    element.bounds.x + padding,
+                    element.bounds.y + padding,
+                    max(0.0, element.bounds.width - 2 * padding),
+                    max(0.0, element.bounds.height - 2 * padding)
+                )
+                val contentClip = if (element.style.clip) ownClip.intersect(area) else ownClip
+                element.content?.nodes()?.forEach {
+                    paintNode(
+                        it,
+                        backend,
+                        area,
+                        if (it is UiNode<*> && element.resolvedBorder == UiBorder.None) ownClip else contentClip,
+                        focused,
+                        appearance
+                    )
+                }
+            }
+        }
+    }
+
+    fun paintNode(
+        node: Node<*>,
+        backend: UiBackend,
+        area: UiRect,
+        clip: UiRect,
+        focused: UiNode<*>?,
+        appearance: UiAppearance = UiAppearance(),
+    ) {
+        if (node is UiNode<*>) {
+            paint(node, backend, clip, focused)
+        } else {
+            val context = DrawContext(backend, area, clip, appearance)
+            try {
+                node.drawSubtree(context) {
+                    when (it) {
+                        is UiRoot<*> -> true
+                        is UiNode<*> -> {
+                            paint(it, backend, clip, focused)
+                            true
+                        }
+                        else -> false
+                    }
+                }
+            } finally {
+                context.close()
+            }
         }
     }
     private fun resolve(policy: UiLength, available: Double, content: Double, cap: Double?): Double = min(

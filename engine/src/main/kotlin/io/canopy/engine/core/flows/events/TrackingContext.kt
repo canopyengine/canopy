@@ -20,6 +20,8 @@ internal object TrackingContext {
     private val stack: ThreadLocal<ArrayDeque<MutableSet<Signal<*>>>> =
         ThreadLocal.withInitial { ArrayDeque() }
 
+    internal val isTracking: Boolean get() = stack.get().isNotEmpty()
+
     /**
      * Opens a new tracking frame and returns it.
      * The caller must call [pop] when the computation block finishes.

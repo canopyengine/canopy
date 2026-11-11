@@ -1,7 +1,7 @@
 package io.canopy.engine.core.managers
 
 /**
- * Global runtime state for the engine.
+ * Access to the active app's diagnostic mode, or the standalone lifecycle scope.
  *
  * Currently used to control the engine execution mode (Normal vs Debug).
  * Systems and tools can check this to enable additional diagnostics,
@@ -14,7 +14,11 @@ object GameManager {
      *
      * Defaults to [ExecutionMode.Normal].
      */
-    var executionMode: ExecutionMode = ExecutionMode.Normal
+    var executionMode: ExecutionMode
+        get() = ManagersRegistry.executionMode
+        set(value) {
+            ManagersRegistry.executionMode = value
+        }
 
     /**
      * Returns true if the engine is running in debug mode.

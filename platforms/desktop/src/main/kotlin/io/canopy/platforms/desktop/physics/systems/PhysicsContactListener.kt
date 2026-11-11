@@ -21,15 +21,15 @@ class PhysicsContactListener : ContactListener {
         if (nodeA == null || nodeB == null) return
 
         when {
-            nodeA is Collider2D && nodeB is Collider2D -> {
+            nodeA is Collider2D<*> && nodeB is Collider2D<*> -> {
                 nodeA.bodyEntered.emit(nodeB)
                 nodeB.bodyEntered.emit(nodeA)
             }
 
-            nodeA is Area2D && nodeB is Collider2D -> nodeA.bodyEntered.emit(nodeB)
-            nodeB is Area2D && nodeA is Collider2D -> nodeB.bodyEntered.emit(nodeA)
+            nodeA is Area2D<*> && nodeB is Collider2D<*> -> nodeA.bodyEntered.emit(nodeB)
+            nodeB is Area2D<*> && nodeA is Collider2D<*> -> nodeB.bodyEntered.emit(nodeA)
 
-            nodeA is Area2D && nodeB is Area2D -> {
+            nodeA is Area2D<*> && nodeB is Area2D<*> -> {
                 nodeA.areaEntered.emit(nodeB)
                 nodeB.areaEntered.emit(nodeA)
             }
@@ -47,15 +47,15 @@ class PhysicsContactListener : ContactListener {
         if (nodeA == null || nodeB == null) return
 
         when {
-            nodeA is Collider2D && nodeB is Collider2D -> {
+            nodeA is Collider2D<*> && nodeB is Collider2D<*> -> {
                 nodeA.bodyExited.emit(nodeB)
                 nodeB.bodyExited.emit(nodeA)
             }
 
-            nodeA is Area2D && nodeB is Collider2D -> nodeA.bodyExited.emit(nodeB)
-            nodeB is Area2D && nodeA is Collider2D -> nodeB.bodyExited.emit(nodeA)
+            nodeA is Area2D<*> && nodeB is Collider2D<*> -> nodeA.bodyExited.emit(nodeB)
+            nodeB is Area2D<*> && nodeA is Collider2D<*> -> nodeB.bodyExited.emit(nodeA)
 
-            nodeA is Area2D && nodeB is Area2D -> {
+            nodeA is Area2D<*> && nodeB is Area2D<*> -> {
                 nodeA.areaExited.emit(nodeB)
                 nodeB.areaExited.emit(nodeA)
             }

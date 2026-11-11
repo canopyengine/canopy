@@ -9,11 +9,11 @@ import ktx.log.logger
  * Manages cameras configured in a scene
  */
 class CameraManager : Manager {
-    val activeCamera = null.asSignal<Camera2D>()
+    val activeCamera = null.asSignal<Camera2D<*>>()
 
     private val logger = logger<CameraManager>()
 
-    internal fun registerCamera(cam: Camera2D) {
+    internal fun registerCamera(cam: Camera2D<*>) {
         if (activeCamera.value == cam) return
         val oldCamera = activeCamera.value
 
@@ -26,7 +26,7 @@ class CameraManager : Manager {
         logger.debug { "Active camera set to ${cam.name}" }
     }
 
-    internal fun unregisterCamera(cam: Camera2D) {
+    internal fun unregisterCamera(cam: Camera2D<*>) {
         if (activeCamera.value == cam) {
             logger.debug { "Camera ${cam.name} unregistered as active camera" }
             activeCamera.value = null

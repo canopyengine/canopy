@@ -29,7 +29,8 @@ import org.slf4j.LoggerFactory
  * [Mode.DIAGNOSTIC] adds JSONL and a separate run directory. Concurrent standard runs use separate text-only folders.
  * Defaults temporarily replace host appenders with files, enabling engine and game DEBUG logging.
  * The last managed session restores the previous host configuration without resetting or stopping its backend.
- * Unscoped events belong to the sole active session; overlapping applications must use their logging context.
+ * Unscoped events belong to the sole active session; explicitly opened overlapping sessions need session context.
+ * Session routing does not permit concurrent Apps; the runtime allows one running App per JVM process.
  * Custom Canopy providers are unchanged. Start/end/close run on the application lifecycle thread.
  * Select [LoggingPolicy.Host] to leave host output entirely under the caller's control.
  */

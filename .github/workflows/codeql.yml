@@ -5,7 +5,7 @@ on:
   push:
     branches: [ "main", "dependency-updates" ]
   pull_request:
-    branches: [ "main", "dependency-updates" ]
+    branches: [ "main", "dependency-updates", "codex/agent/refactor/foundation-integration" ]
 
 permissions:
   contents: read

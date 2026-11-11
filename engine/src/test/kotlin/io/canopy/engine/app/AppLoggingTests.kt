@@ -136,30 +136,52 @@ class AppLoggingTests {
     }
 
     @Test
-    fun `policy startup failure does not close a session belonging to another app`() {
+    fun `rejected second startup does not initialize logging or close the running app's session`() {
         // Arrange
         val firstSession = Session()
         val first = TestApp().apply { logging(LoggingPolicy { firstSession }) }
         first.enter()
-        val startup = IllegalStateException("logging startup")
+        var policyStarts = 0
         var exits = 0
         val second = TestApp().apply {
-            logging(LoggingPolicy { throw startup })
+            logging(
+                LoggingPolicy {
+                    policyStarts++
+                    error("A rejected app must not start logging")
+                }
+            )
             onExit { exits++ }
         }
 
         // Act
-        assertSame(startup, assertFailsWith<IllegalStateException> { second.enter() })
-        second.exit()
+        try {
+            assertFailsWith<IllegalStateException> { second.enter() }
+            second.exit()
 
-        // Assert
-        assertEquals(0, firstSession.ends)
-        assertEquals(0, firstSession.closes)
-        first.withLoggingContext { assertEquals(1, firstSession.depth) }
-        first.exit()
+            // Assert
+            assertEquals(0, policyStarts)
+            assertEquals(0, firstSession.ends)
+            assertEquals(0, firstSession.closes)
+            first.withLoggingContext { assertEquals(1, firstSession.depth) }
+        } finally {
+            first.exit()
+        }
         assertEquals(1, firstSession.ends)
         assertEquals(1, firstSession.closes)
         assertEquals(1, exits)
+    }
+
+    @Test
+    fun `logging policy startup failure releases the app reservation`() {
+        // Arrange
+        val failure = IllegalStateException("logging startup")
+        val failed = TestApp().apply { logging(LoggingPolicy { throw failure }) }
+
+        // Act / Assert
+        assertSame(failure, assertFailsWith<IllegalStateException> { failed.enter() })
+        val next = TestApp()
+        next.enter()
+        next.exit()
     }
 
     @Test

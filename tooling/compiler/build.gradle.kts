@@ -21,6 +21,10 @@ java {
 
 // Compiler and Gradle entry points run in separate hosts; keep their classes and dependencies isolated.
 val compiler = sourceSets.create("compiler")
+// Small dependency-free presentation types are compiled independently for each isolated host.
+kotlin.sourceSets.main { kotlin.srcDir("src/shared/kotlin") }
+kotlin.sourceSets.named("compiler") { kotlin.srcDir("src/shared/kotlin") }
+kotlin.target.compilations.getByName("test").associateWith(kotlin.target.compilations.getByName("compiler"))
 sourceSets.test {
     compileClasspath += compiler.output
     runtimeClasspath += compiler.output

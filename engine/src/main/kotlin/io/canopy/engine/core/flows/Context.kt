@@ -24,6 +24,7 @@ interface ContextKey {
 
 /**
  * A transparent "scope" node used to attach contextual values to a subtree.
+ * This structural scope remains final; configure providers through its builder rather than subclassing it.
  *
  * Context scopes are implementation details of the DSL and are typically treated as invisible:
  * - [Node.getNode] path resolution intentionally skips these nodes so you don't have to include
@@ -47,8 +48,8 @@ interface ContextKey {
  *     +PlayerNode { ... }
  * }
  *
- * val theme: String = player.fromContext(GameContextKey.THEME)
- * val debug: Boolean = player.fromContext("debug")
+ * val theme: String = player.getContext<String>(GameContextKey.THEME)
+ * val debug: Boolean = player.getContext<String>("debug")
  * ```
  */
 class Context(
@@ -69,6 +70,7 @@ class Context(
     @PublishedApi
     internal fun <T : Any> provideTyped(type: KClass<T>, value: () -> T?) {
         typedProviders[type] = value
+        sceneManager.hierarchyChanged()
     }
 
     internal fun hasTypedProvider(type: KClass<*>): Boolean = type in typedProviders
@@ -80,6 +82,7 @@ class Context(
      */
     fun <T : Any> provide(key: String, value: () -> T?) {
         provided[key] = value
+        sceneManager.hierarchyChanged()
     }
 
     /**
@@ -102,6 +105,7 @@ class Context(
  * Returns null if no matching key is found.
  */
 @Suppress("UNCHECKED_CAST")
+@Deprecated("Use getContext/getContextOrNull for immediate access; context with by for live properties")
 fun <T : Any> Node<*>.fromContextOrNull(key: String): T? {
     var current: Node<*>? = this
 
@@ -121,16 +125,19 @@ fun <T : Any> Node<*>.fromContextOrNull(key: String): T? {
 /**
  * Typed overload of [fromContextOrNull] using a [ContextKey].
  */
+@Deprecated("Use getContext/getContextOrNull for immediate access; context with by for live properties")
 fun <T : Any> Node<*>.fromContextOrNull(key: ContextKey): T? = fromContextOrNull(key.key)
 
 /**
  * Lazily resolves a context value by raw string key, returning null if not found.
  */
+@Deprecated("Use core.queries.context with by for live access; this helper caches its first result")
 fun <T : Any> Node<*>.lazyFromContextOrNull(key: String): Lazy<T?> = lazy { fromContextOrNull(key) }
 
 /**
  * Lazily resolves a context value by [ContextKey], returning null if not found.
  */
+@Deprecated("Use core.queries.context with by for live access; this helper caches its first result")
 fun <T : Any> Node<*>.lazyFromContextOrNull(key: ContextKey): Lazy<T?> = lazy { fromContextOrNull(key) }
 
 /**
@@ -139,6 +146,7 @@ fun <T : Any> Node<*>.lazyFromContextOrNull(key: ContextKey): Lazy<T?> = lazy { 
  * @throws NoSuchElementException if the key does not exist in any visible context scope.
  */
 @Throws(NoSuchElementException::class)
+@Deprecated("Use getContext/getContextOrNull for immediate access; context with by for live properties")
 fun <T : Any> Node<*>.fromContext(key: String): T = fromContextOrNull(key)
     ?: throw NoSuchElementException("Context key '$key' not found")
 
@@ -148,6 +156,7 @@ fun <T : Any> Node<*>.fromContext(key: String): T = fromContextOrNull(key)
  * @throws NoSuchElementException if the key does not exist in any visible context scope.
  */
 @Throws(NoSuchElementException::class)
+@Deprecated("Use getContext/getContextOrNull for immediate access; context with by for live properties")
 fun <T : Any> Node<*>.fromContext(key: ContextKey): T = fromContext(key.key)
 
 /**
@@ -156,6 +165,7 @@ fun <T : Any> Node<*>.fromContext(key: ContextKey): T = fromContext(key.key)
  * @throws NoSuchElementException if the key does not exist in any visible context scope.
  */
 @Throws(NoSuchElementException::class)
+@Deprecated("Use core.queries.context with by for live access; this helper caches its first result")
 fun <T : Any> Node<*>.lazyFromContext(key: String): Lazy<T> = lazy { fromContext(key) }
 
 /**
@@ -164,4 +174,46 @@ fun <T : Any> Node<*>.lazyFromContext(key: String): Lazy<T> = lazy { fromContext
  * @throws NoSuchElementException if the key does not exist in any visible context scope.
  */
 @Throws(NoSuchElementException::class)
+@Deprecated("Use core.queries.context with by for live access; this helper caches its first result")
 fun <T : Any> Node<*>.lazyFromContext(key: ContextKey): Lazy<T> = lazy { fromContext(key) }
+
+/** Immediate typed context lookup; nearest provider wins, including null shadowing. */
+inline fun <reified T : Any> Node<*>.getContextOrNull(key: String): T? = lookupContext(T::class, key) as T?
+
+/** Immediate context lookup using a named key. */
+inline fun <reified T : Any> Node<*>.getContextOrNull(key: ContextKey): T? = getContextOrNull(key.key)
+
+/** Immediate context lookup by exact declared provider type. */
+inline fun <reified T : Any> Node<*>.getContextOrNull(): T? = lookupContext(T::class, null) as T?
+
+/** Required immediate lookup; missing or null values throw, incompatible values also fail. */
+inline fun <reified T : Any> Node<*>.getContext(key: String): T = getContextOrNull<T>(key)
+    ?: throw NoSuchElementException("Context key '$key' not found at $path")
+
+/** Required immediate lookup using a named key. */
+inline fun <reified T : Any> Node<*>.getContext(key: ContextKey): T = getContext(key.key)
+
+/** Required immediate lookup by exact declared provider type. */
+inline fun <reified T : Any> Node<*>.getContext(): T = getContextOrNull<T>()
+    ?: throw NoSuchElementException("Context type '${T::class.qualifiedName}' not found at $path")
+
+@PublishedApi
+internal fun Node<*>.lookupContext(type: KClass<*>, key: String?): Any? {
+    requireValid("get context")
+    observeHierarchy()
+    var current: Node<*>? = this
+    while (current != null) {
+        if (current is Context) {
+            val found = if (key == null) current.hasTypedProvider(type) else key in current.provided
+            if (found) {
+                val value = if (key == null) current.typedValue(type) else current.provided.getValue(key)()
+                check(value == null || type.isInstance(value)) {
+                    "Context '${key ?: type.qualifiedName}' at $path is not ${type.qualifiedName}"
+                }
+                return value
+            }
+        }
+        current = current.parent
+    }
+    return null
+}

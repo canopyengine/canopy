@@ -1,11 +1,10 @@
 package io.canopy.engine.math
 
 /**
- * Immutable two-dimensional vector.
+ * Two-dimensional vector with mutable components and structural equality.
  *
- * Components cannot be changed after construction. Arithmetic helpers and
- * operators return vector values, so a [Vector2] can be safely shared or used
- * as a map key.
+ * Arithmetic helpers return vector values without changing the operands.
+ * Copy a vector when two owners need independent component state.
  *
  * Example:
  * ```
@@ -15,15 +14,29 @@ package io.canopy.engine.math
  */
 data class Vector2(
     /** Horizontal component. */
-    val x: Float = 0f,
+    var x: Float = 0f,
     /** Vertical component. */
-    val y: Float = 0f,
+    var y: Float = 0f,
 ) {
     /** Returns a new vector offset by [x] and [y]. */
     fun add(x: Float, y: Float): Vector2 = Vector2(this.x + x, this.y + y)
 
     /** Returns the component-wise sum without changing either operand. */
     operator fun plus(that: Vector2): Vector2 = Vector2(x + that.x, y + that.y)
+
+    operator fun Vector2.plusAssign(that: Vector2) {
+        x += that.x
+        y += that.y
+    }
+
+    fun sub(x: Float, y: Float): Vector2 = Vector2(this.x - x, this.y - y)
+
+    operator fun minus(that: Vector2): Vector2 = Vector2(x - that.x, y - that.y)
+
+    operator fun Vector2.minusAssign(that: Vector2) {
+        x -= that.x
+        y -= that.y
+    }
 
     /** Returns a new vector with both components multiplied by [scalar]. */
     fun scl(scalar: Float): Vector2 = Vector2(x * scalar, y * scalar)
@@ -43,6 +56,20 @@ data class Vector2(
      */
     operator fun times(scalar: Vector2) = Vector2(x * scalar.x, y * scalar.y)
 
+    operator fun Vector2.timesAssign(scalar: Float) {
+        x *= scalar
+        y *= scalar
+    }
+
+    fun divide(scalar: Float): Vector2 = Vector2(x / scalar, y / scalar)
+
+    operator fun div(scalar: Float): Vector2 = Vector2(x / scalar, y / scalar)
+
+    operator fun Vector2.divAssign(scalar: Float) {
+        x /= scalar
+        y /= scalar
+    }
+
     /** Returns this vector's Euclidean length. */
     fun len(): Float = kotlin.math.sqrt(x * x + y * y)
 
@@ -53,7 +80,7 @@ data class Vector2(
     }
 
     companion object {
-        /** Shared immutable zero vector. */
+        /** Shared origin value. Treat it as a constant; use [copy] for mutable state. */
         val Zero = Vector2(0f, 0f)
     }
 }

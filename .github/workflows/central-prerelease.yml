@@ -52,7 +52,7 @@ jobs:
               raise SystemExit('Configure MAVEN_SIGNING_KEY before running this workflow')
           PY
       - name: Verify publication helpers offline
-        run: python3 -m unittest discover -s tooling/central -p 'test_*.py'
+        run: python3 -m unittest discover -s tooling/central/tests -p 'test_*.py'
       - name: Verify engine and compiler
         run: ./gradlew test ktlintCheck build coverageReport --max-workers=2 --console=plain
       - name: Clear previous staging

@@ -13,7 +13,7 @@
  * limitations under the License.
  */
 // Note, the above license and copyright applies to this file only.
-package io.canopy.engine.app.desktop
+package io.canopy.platforms.desktop.app
 
 import java.io.File
 import java.lang.management.ManagementFactory

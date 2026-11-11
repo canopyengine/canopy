@@ -46,7 +46,7 @@ class EngineLoopTests {
     }
 
     @Test
-    fun `paused updates retain real time and reset physics remainder on transitions`() {
+    fun `paused and running updates keep independent physics remainders`() {
         val events = mutableListOf<String>()
         var paused = true
         val loop = EngineLoop(
@@ -64,11 +64,139 @@ class EngineLoopTests {
         paused = false
         loop.update(0.05f)
         loop.update(0.05f)
+        paused = true
+        loop.update(0.05f)
 
         assertEquals(
-            listOf("physics:0.1", "update:0.15", "update:0.05", "physics:0.1", "update:0.05"),
+            listOf(
+                "physics:0.1",
+                "update:0.15",
+                "update:0.05",
+                "physics:0.1",
+                "update:0.05",
+                "physics:0.1",
+                "update:0.05"
+            ),
             events
         )
+    }
+
+    @Test
+    fun `rapid pause toggles preserve earned time for both states`() {
+        // Arrange
+        var paused = false
+        var frames = 0
+        val ticks = mutableListOf<Boolean>()
+        val loop = EngineLoop(
+            {},
+            { frames++ },
+            { ticks += paused },
+            { _, _ -> },
+            {},
+            isPaused = { paused },
+            physicsStep = 0.1f
+        )
+        loop.enter()
+
+        // Act
+        repeat(8) { frame ->
+            paused = frame % 2 != 0
+            loop.update(0.025f)
+        }
+
+        // Assert
+        assertEquals(listOf(false, true), ticks)
+        assertEquals(8, frames)
+    }
+
+    @Test
+    fun `capped running debt survives pause without advancing the paused clock`() {
+        // Arrange
+        var paused = false
+        val ticks = mutableListOf<Boolean>()
+        val loop = EngineLoop(
+            {},
+            {},
+            { ticks += paused },
+            { _, _ -> },
+            {},
+            isPaused = { paused },
+            physicsStep = 0.1f,
+            maxPhysicsStepsPerFrame = 2
+        )
+        loop.enter()
+
+        // Act
+        loop.update(0.75f)
+        paused = true
+        loop.update(0.1f)
+        paused = false
+        loop.update(0f)
+
+        // Assert
+        assertEquals(listOf(false, false, true, false, false), ticks)
+    }
+
+    @Test
+    fun `pause inside a physics callback ends the burst and retains running debt`() {
+        // Arrange
+        var paused = false
+        val ticks = mutableListOf<Boolean>()
+        val loop = EngineLoop(
+            {},
+            {},
+            {
+                ticks += paused
+                if (ticks.size == 1) paused = true
+            },
+            { _, _ -> },
+            {},
+            isPaused = { paused },
+            physicsStep = 0.1f
+        )
+        loop.enter()
+
+        // Act and Assert
+        loop.update(0.3f)
+        assertEquals(listOf(false), ticks)
+        loop.update(0.05f)
+        assertEquals(listOf(false), ticks)
+        paused = false
+        loop.update(0f)
+        assertEquals(listOf(false, false, false), ticks)
+    }
+
+    @Test
+    fun `changing physics step resets both clock remainders`() {
+        // Arrange
+        var paused = false
+        val ticks = mutableListOf<Boolean>()
+        val loop = EngineLoop(
+            {},
+            {},
+            { ticks += paused },
+            { _, _ -> },
+            {},
+            isPaused = { paused },
+            physicsStep = 0.1f
+        )
+        loop.enter()
+        loop.update(0.06f)
+        paused = true
+        loop.update(0.06f)
+
+        // Act and Assert
+        loop.configurePhysicsStep(0.1f)
+        paused = false
+        loop.update(0.04f)
+        paused = true
+        loop.update(0.04f)
+        assertEquals(emptyList(), ticks)
+        paused = false
+        loop.update(0.06f)
+        paused = true
+        loop.update(0.06f)
+        assertEquals(listOf(false, true), ticks)
     }
 
     @Test

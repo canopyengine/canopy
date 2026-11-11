@@ -4,7 +4,8 @@ package io.canopy.engine.app
  * Coordinates the platform-independent application lifecycle.
  *
  * Platform drivers should forward lifecycle events to this class. Frame updates
- * run fixed-step physics updates first, followed by one variable-step update.
+ * prepare the host frame, run fixed-step physics and one variable-step update, then present output.
+ * Preparation, update or presentation failure aborts the frame, preserving the original failure.
  * Nested entry, frame, resize and exit calls during entry or frame dispatch are rejected.
  * Calls from different threads are serialized; callbacks must still run on the host thread.
  * Repeated exit during teardown is harmless. The first uncaught callback failure is retained
@@ -19,13 +20,16 @@ class EngineLoop(
     private val isPaused: () -> Boolean = { false },
     physicsStep: Float = DEFAULT_PHYSICS_STEP,
     private val maxPhysicsStepsPerFrame: Int = DEFAULT_MAX_PHYSICS_STEPS_PER_FRAME,
+    private val onBeginFrame: () -> Unit = {},
+    private val onPresentFrame: () -> Unit = {},
+    private val onAbortFrame: () -> Unit = {},
 ) {
     private var entering = false
     private var dispatching = false
     private var entered = false
     private var exited = false
-    private var physicsAccumulator = 0f
-    private var wasPaused = false
+    private var runningPhysicsAccumulator = 0f
+    private var pausedPhysicsAccumulator = 0f
 
     internal var failure: Throwable? = null
         private set
@@ -59,8 +63,9 @@ class EngineLoop(
 
     /**
      * Runs fixed-step ticks and a frame update even while paused, with real deltas in seconds.
-     * Callers decide which work remains eligible. Pause transitions discard the fractional physics
-     * remainder so gameplay and paused processing do not share accumulated time.
+     * Callers decide which work remains eligible. Running and paused time have independent accumulators;
+     * each remainder survives transitions without advancing the other state. A pause change inside a
+     * physics callback ends the burst before the next tick, retaining its unprocessed time.
      */
     @Synchronized
     fun update(delta: Float) {
@@ -68,22 +73,34 @@ class EngineLoop(
         checkActive()
         require(delta.isFinite() && delta >= 0f) { "delta must be finite and non-negative" }
         dispatch {
-            val paused = isPaused()
-            if (paused != wasPaused) physicsAccumulator = 0f
-            wasPaused = paused
+            try {
+                onBeginFrame()
+                val paused = isPaused()
+                if (paused) pausedPhysicsAccumulator += delta else runningPhysicsAccumulator += delta
+                var accumulated = if (paused) pausedPhysicsAccumulator else runningPhysicsAccumulator
+                var steps = 0
+                while (
+                    accumulated + PHYSICS_STEP_EPSILON >= physicsStep &&
+                    steps < maxPhysicsStepsPerFrame &&
+                    isPaused() == paused
+                ) {
+                    accumulated = (accumulated - physicsStep).coerceAtLeast(0f)
+                    // Commit before dispatch so a failed callback cannot replay an already-started tick.
+                    if (paused) pausedPhysicsAccumulator = accumulated else runningPhysicsAccumulator = accumulated
+                    onPhysicsUpdate(physicsStep)
+                    steps++
+                }
 
-            physicsAccumulator += delta
-            var steps = 0
-            while (
-                physicsAccumulator + PHYSICS_STEP_EPSILON >= physicsStep &&
-                steps < maxPhysicsStepsPerFrame
-            ) {
-                physicsAccumulator = (physicsAccumulator - physicsStep).coerceAtLeast(0f)
-                onPhysicsUpdate(physicsStep)
-                steps++
+                onUpdate(delta)
+                onPresentFrame()
+            } catch (error: Throwable) {
+                try {
+                    onAbortFrame()
+                } catch (cleanup: Throwable) {
+                    if (cleanup !== error) error.addSuppressed(cleanup)
+                }
+                throw error
             }
-
-            onUpdate(delta)
         }
     }
 
@@ -148,7 +165,8 @@ class EngineLoop(
     internal fun configurePhysicsStep(physicsStep: Float) {
         require(physicsStep.isFinite() && physicsStep > 0f) { "physicsStep must be finite and positive" }
         this.physicsStep = physicsStep
-        physicsAccumulator = 0f
+        runningPhysicsAccumulator = 0f
+        pausedPhysicsAccumulator = 0f
     }
 
     private inline fun dispatch(block: () -> Unit) {

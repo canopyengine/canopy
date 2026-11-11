@@ -4,7 +4,7 @@ import io.canopy.engine.core.managers.Manager
 
 /**
  * Global dependency on the current assignable manager registration, independent of receiver lifetime.
- * Each game-thread read resolves again; missing values throw. core.managers.manager performs an immediate lookup.
+ * Each game-thread read resolves again; missing values throw. core.managers.getManager performs an immediate lookup.
  */
 inline fun <reified T : Manager> manager(): GlobalDependency<T> = GlobalDependency.create(T::class)
 

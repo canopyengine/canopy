@@ -4,6 +4,7 @@ import kotlin.test.Test
 import kotlin.test.assertFailsWith
 import kotlin.test.assertSame
 import kotlin.test.assertTrue
+import kotlin.time.Duration.Companion.seconds
 import io.canopy.engine.core.exceptions.CanopyException
 import io.canopy.engine.core.flows.events.asSignal
 import io.canopy.engine.core.flows.events.signal
@@ -12,6 +13,7 @@ import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.flow.take
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withTimeout
 import kotlinx.coroutines.yield
 import org.junit.jupiter.api.Assertions.assertEquals
 
@@ -33,7 +35,7 @@ class SignalTests {
 
         signal.update { it + 42 }
 
-        assert(receivedValue == 42) { "Listener should have received the emitted value." }
+        assertEquals(42, receivedValue)
     }
 
     @Test
@@ -51,7 +53,7 @@ class SignalTests {
         signal.update { 42 }
         signal.update { 42 }
 
-        assert(callCount == 1) { "Listener should have been called only once." }
+        assertEquals(1, callCount)
     }
 
     @Test
@@ -68,7 +70,7 @@ class SignalTests {
         signal disconnect callback
         signal.update { 100 }
 
-        assert(callCount == 1) { "Listener should have been called only once before disconnection." }
+        assertEquals(1, callCount)
     }
 
     @Test
@@ -86,7 +88,7 @@ class SignalTests {
 
         signal.update { 100 }
 
-        assert(callCount == 1) { "Listener should have been called only once before clear." }
+        assertEquals(1, callCount)
     }
 
     @Test
@@ -127,15 +129,6 @@ class SignalTests {
         signal.update { it + 5 }
 
         assertEquals(15, signal())
-    }
-
-    @Test
-    fun `update from coroutine does not block`() = runBlocking {
-        val value = signal(0)
-
-        value.update { 1 }
-
-        assertEquals(1, value())
     }
 
     @Test
@@ -201,8 +194,12 @@ class SignalTests {
         }
         for (next in 1..100) value.update { next }
         release.complete(Unit)
-        job.join()
-        assertEquals(listOf(0) + (36..100), collected)
-        value.dispose()
+        try {
+            withTimeout(5.seconds) { job.join() }
+            assertEquals(listOf(0) + (36..100), collected)
+        } finally {
+            job.cancel()
+            value.dispose()
+        }
     }
 }

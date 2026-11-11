@@ -1,7 +1,7 @@
 package io.canopy.engine.app
 
 import kotlin.reflect.KClass
-import io.canopy.engine.core.managers.lazyManager
+import io.canopy.engine.core.queries.manager
 
 /**
  * DSL-style registry for managing application screens during bootstrap.
@@ -24,7 +24,7 @@ class ScreenRegistry internal constructor() {
      * Managers
      * ============================================================ */
 
-    val screenManager by lazyManager<ScreenManager>()
+    val screenManager by manager<ScreenManager>()
 
     /* ============================================================
      * Registration

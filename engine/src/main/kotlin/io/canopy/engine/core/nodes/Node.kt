@@ -5,8 +5,15 @@ import java.lang.ref.WeakReference
 import java.util.concurrent.atomic.AtomicLong
 import io.canopy.engine.core.CleanupFailures
 import io.canopy.engine.core.exceptions.*
+import io.canopy.engine.core.flows.events.Computed
+import io.canopy.engine.core.flows.events.Effect
+import io.canopy.engine.core.flows.events.NoArgEvent
+import io.canopy.engine.core.flows.events.OneArgEvent
+import io.canopy.engine.core.flows.events.Signal
+import io.canopy.engine.core.flows.events.TwoArgsEvent
 import io.canopy.engine.core.managers.SceneManager
-import io.canopy.engine.core.managers.manager
+import io.canopy.engine.core.managers.getManager
+import io.canopy.engine.graphics.DrawContext
 import io.canopy.engine.input.events.InputEvent
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
@@ -15,6 +22,8 @@ import kotlinx.coroutines.Job
  * Typed, guarded node facade preserving class-named Kotlin construction and concrete DSL receivers.
  * Engine-owned state is referenced weakly. Destruction invalidates state access, releases owned work,
  * and leaves only immutable identity/diagnostics in retained facades. All operations are game-thread confined.
+ * Reusable Canopy node components are open for subclassing; structural scopes such as Context remain final.
+ * Override lifecycle hooks to add behavior; identity, ownership and dispatch remain engine-controlled.
  * The matching Canopy compiler stores ordinary custom properties in engine state.
  * Without the plugin, custom stored values must use [nodeProperty]; runtime queries use the concrete
  * [io.canopy.engine.core.queries.NodeDependency] or [io.canopy.engine.core.queries.GlobalDependency] delegates.
@@ -58,7 +67,7 @@ abstract class Node<N : Node<N>> protected constructor(
 
     init {
         NodeDefinition.validate(javaClass)
-        val owner = manager<SceneManager>()
+        val owner = getManager<SceneManager>()
         val payload = NodeState(owner, name) { block(this as N) }
         reference = WeakReference(payload)
         owner.retainState(nodeId, payload)
@@ -79,6 +88,9 @@ abstract class Node<N : Node<N>> protected constructor(
     val isValid: Boolean get() = lifecycle != Lifecycle.Destroying &&
         lifecycle != Lifecycle.Destroyed &&
         reference.get() != null
+
+    /** Internal distinction between initial construction and reusable detachment. */
+    internal val hasEnteredTree: Boolean get() = state("read entry history").entryGeneration > 0
 
     /** True after permanent destruction starts. */
     val isFreed: Boolean get() = lifecycle == Lifecycle.Destroying || lifecycle == Lifecycle.Destroyed
@@ -121,6 +133,7 @@ abstract class Node<N : Node<N>> protected constructor(
 
     private fun payload(): NodeState = reference.get() ?: throw NodeDestroyedException(diagnostic("cleanup"))
 
+    @PublishedApi
     @JvmSynthetic
     internal fun requireValid(operation: String) {
         state(operation)
@@ -147,6 +160,7 @@ abstract class Node<N : Node<N>> protected constructor(
             p?.children?.set(value, this)
             p?.changed()
             refreshPaths()
+            s.owner.hierarchyChanged()
         }
 
     /** Absolute path; unavailable after destruction. Diagnostics retain its last value. */
@@ -155,14 +169,28 @@ abstract class Node<N : Node<N>> protected constructor(
         return lastPath
     }
 
-    /** Parent facade, or null for a root or reusable detached node. */
-    val parent: Node<*>? get() = state("read parent").parent
+    internal fun observeHierarchy() {
+        val s = state("observe hierarchy")
+        if (s.entered || s.entryGeneration == 0L) s.owner.observeHierarchy()
+    }
 
-    /** Read-only membership snapshot, rebuilt only when children change. */
-    val children: Map<String, Node<*>> get() = state("read children").publicSnapshot()
+    /** Parent facade, or null for a root or reusable detached node. */
+    val parent: Node<*>? get() {
+        observeHierarchy()
+        return state("read parent").parent
+    }
+
+    /** Physical direct-child snapshot. Reads inside computed/effect observe structural changes without polling. */
+    val children: Map<String, Node<*>> get() {
+        observeHierarchy()
+        return state("read children").publicSnapshot()
+    }
 
     /** Read-only view of local group membership. */
-    val groups: Set<String> get() = state("read groups").groupView
+    val groups: Set<String> get() {
+        observeHierarchy()
+        return state("read groups").groupView
+    }
 
     /** Local rendering visibility. Hidden nodes keep normal lifecycle, frame, physics and input callbacks. */
     var isVisible: Boolean
@@ -215,15 +243,17 @@ abstract class Node<N : Node<N>> protected constructor(
         }
     }
 
-    internal fun reorderManagedChildren(order: List<Node<*>>) {
+    internal fun reorderManagedChildren(order: List<Node<*>>): Unit = owningManager().mutateHierarchy {
         checkChildrenMutation("reorder managed children")
         val s = state("reorder managed children")
         require(order.size == s.children.size && order.toSet() == s.children.values.toSet()) {
             "Reordering must preserve exact child membership"
         }
+        if (s.snapshot() == order) return
         s.children.clear()
         order.forEach { s.children[it.name] = it }
         s.changed()
+        s.owner.hierarchyChanged()
     }
 
     private fun checkChildrenMutation(operation: String) {
@@ -258,28 +288,35 @@ abstract class Node<N : Node<N>> protected constructor(
     }
 
     /** Adds a local group; only entered nodes are mirrored into manager memberships. */
-    fun addGroup(group: String) {
+    fun addGroup(group: String): Unit = owningManager().mutateHierarchy {
         val s = state("addGroup")
-        if (s.groups.add(group) && s.entered) s.owner.addToGroup(group, this)
+        if (s.groups.add(group)) {
+            if (s.entered) s.owner.addToGroup(group, this)
+            s.owner.hierarchyChanged()
+        }
     }
 
     /** Removes a local and, when entered, manager group membership. */
-    fun removeGroup(group: String) {
+    fun removeGroup(group: String): Unit = owningManager().mutateHierarchy {
         val s = state("removeGroup")
-        if (s.groups.remove(group) && s.entered) s.owner.removeFromGroup(group, this)
+        if (s.groups.remove(group)) {
+            if (s.entered) s.owner.removeFromGroup(group, this)
+            s.owner.hierarchyChanged()
+        }
     }
 
     /** Applies a group diff without exposing the engine's mutable membership set. */
-    fun updateGroups(block: MutableSet<String>.() -> Unit) {
+    fun updateGroups(block: MutableSet<String>.() -> Unit): Unit = owningManager().mutateHierarchy {
         val s = state("updateGroups")
         val result = s.groups.toMutableSet().apply(block)
         s.groups.clear()
         s.groups.addAll(result)
         if (s.entered) s.owner.updateGroups(this)
+        s.owner.hierarchyChanged()
     }
 
-    internal var behavior: Behavior<N>?
-        get() = state("read behavior").behavior as Behavior<N>?
+    internal var behavior: Behavior<*>?
+        get() = state("read behavior").behavior
         set(value) {
             val s = state("attach behavior")
             if (s.behavior === value) return
@@ -293,6 +330,85 @@ abstract class Node<N : Node<N>> protected constructor(
         val key = Any()
         state("create property").properties[key] = initial
         return NodeProperty.create(key)
+    }
+
+    /** Internal state slot used by native reactive delegates; no payload is retained by their facades. */
+    internal fun <T> reactiveSlot(value: T): NodeProperty<T> = nodeProperty(value)
+
+    /** Persistent source lifecycle hooks; resources themselves remain owned by engine state. */
+    internal fun observeActivity(enter: () -> Unit, exit: () -> Unit): () -> Unit {
+        val s = state("observe activity")
+        val entry = NodeActivity(enter, exit)
+        s.activity += entry
+        val weak = WeakReference(s)
+        return {
+            entry.clear()
+            weak.get()?.activity?.remove(entry)
+        }
+    }
+
+    /**
+     * Creates signal state owned by this node, including when called from a subclass initializer.
+     * State survives reusable detachment; observation disconnects on exit. Destruction releases the state.
+     * Global factories with an
+     * explicit null owner remain available for shared state. Use on the lifecycle thread.
+     */
+    fun <T> signal(value: T): Signal<T> = Signal(value, this)
+
+    /** Owned list state; read-only lists use replacement and mutable lists also observe in-place edits. */
+    fun <E> signal(value: List<E>): Signal<List<E>> = io.canopy.engine.core.flows.events.signal(this, value)
+
+    /** Owned mutable list state; iterator and sublist edits also notify. */
+    @JvmName("mutableListSignal")
+    fun <E> signal(value: MutableList<E>): Signal<MutableList<E>> =
+        io.canopy.engine.core.flows.events.signal(this, value)
+
+    /** Owned read-only set state. */
+    fun <E> signal(value: Set<E>): Signal<Set<E>> = io.canopy.engine.core.flows.events.signal(this, value)
+
+    /** Owned mutable set state. */
+    @JvmName("mutableSetSignal")
+    fun <E> signal(value: MutableSet<E>): Signal<MutableSet<E>> = io.canopy.engine.core.flows.events.signal(this, value)
+
+    /** Owned read-only map state. */
+    fun <K, V> signal(value: Map<K, V>): Signal<Map<K, V>> = io.canopy.engine.core.flows.events.signal(this, value)
+
+    /** Owned mutable map state, including mutations through entries, keys and values. */
+    @JvmName("mutableMapSignal")
+    fun <K, V> signal(value: MutableMap<K, V>): Signal<MutableMap<K, V>> =
+        io.canopy.engine.core.flows.events.signal(this, value)
+
+    /** Creates a zero-argument event owned until this node is destroyed. Listener ownership is independent. */
+    fun event(): NoArgEvent = NoArgEvent(this)
+
+    /** Creates a one-argument event owned until this node is destroyed. Listener ownership is independent. */
+    fun <A> event(): OneArgEvent<A> = OneArgEvent(this)
+
+    /** Creates a two-argument event owned until this node is destroyed. Listener ownership is independent. */
+    fun <A, B> event(): TwoArgsEvent<A, B> = TwoArgsEvent(this)
+
+    /**
+     * Creates derived state owned by this node. Observation stops on exit and resumes on later reads after entry.
+     * Stored calculations are released on destruction. Use on the lifecycle thread.
+     */
+    fun <T> computed(block: () -> T): Computed<T> = Computed(block, this)
+
+    /**
+     * Creates an immediately running reaction retained until this node exits or is destroyed.
+     * Create it in [onEnterTree] when it must be renewed on reentry. The reaction's later runs do not
+     * establish ambient ownership; this factory always uses its explicit node receiver.
+     */
+    fun effect(block: () -> Unit): Effect = NodeLifetime.withOwner(this) { Effect(block) }
+
+    /**
+     * Compiler ownership ABI: implicit Canopy operations inside a custom Node method belong to that Node.
+     * The matching compiler supplies this scope for connections and source creation, including escaped callbacks.
+     * Explicit owner arguments bypass inference. This synchronous scope must never span suspension.
+     */
+    @JvmSynthetic
+    protected inline fun <T> compilerOwned(block: () -> T): T {
+        requireValid("owned operation")
+        return NodeLifetime.withOwner(this, block)
     }
 
     /**
@@ -346,7 +462,7 @@ abstract class Node<N : Node<N>> protected constructor(
         }
     }
 
-    private fun attach(child: Node<*>) {
+    private fun attach(child: Node<*>): Unit = owningManager().mutateHierarchy {
         checkChildrenMutation("attach")
         val s = state("attach")
         val c = child.state("attach")
@@ -363,17 +479,24 @@ abstract class Node<N : Node<N>> protected constructor(
         c.parent = this
         c.parentState = s
         child.refreshPaths()
+        s.owner.hierarchyChanged()
         if (s.entered) s.owner.registerSubtree(child)
     }
 
-    /** Attaches a valid child, entering it only when its parent is entered and it is not a prefab. */
-    fun addChild(child: Node<*>) {
-        attach(child)
-        if (state("addChild").entered && !child.state("addChild").prefab) child.buildTree()
+    /**
+     * Attaches a child, or keeps an already composed child of this parent. Other-parent attachment fails.
+     * Initialization defers child entry until parent configuration finishes; runtime additions enter immediately.
+     */
+    fun addChild(child: Node<*>): Unit = owningManager().mutateHierarchy {
+        checkChildrenMutation("addChild")
+        val owner = state("addChild")
+        val member = child.state("addChild")
+        if (member.parent !== this) attach(child)
+        if (owner.entered && !owner.initializing && !member.prefab) child.buildTree()
     }
 
     /** Immediate reusable detachment; completes despite exit or unregister failures. */
-    fun removeChild(child: Node<*>) {
+    fun removeChild(child: Node<*>): Unit = owningManager().mutateHierarchy {
         checkChildrenMutation("removeChild")
         val s = state("removeChild")
         if (child.state("removeChild").parent !== this) fail("removeChild", "Node is not a child")
@@ -413,6 +536,7 @@ abstract class Node<N : Node<N>> protected constructor(
 
     private fun resolve(request: String): Node<*>? {
         state("lookup '$request'")
+        observeHierarchy()
         var cursor: Node<*>? = if (request.startsWith("$/")) sceneManager.currScene else this
         fun visible(node: Node<*>): Node<*>? = if (!node.skipOnSearch) {
             node
@@ -439,16 +563,16 @@ abstract class Node<N : Node<N>> protected constructor(
         return cursor?.takeIf { it.isValid }
     }
 
-    /** Resolves typed facades through context-transparent paths; invalid receivers always fail. */
-    inline fun <reified T : Node<T>> getNode(path: String): T =
+    /** Resolves any node subclass through context-transparent paths; invalid receivers always fail. */
+    inline fun <reified T : Node<*>> getNode(path: String): T =
         lookup(path, T::class) ?: throw NodeNotFoundException(diagnostic("getNode"), path)
 
     /** Missing nodes return null; invalid receivers and incompatible requested types still fail. */
-    inline fun <reified T : Node<T>> getNodeOrNull(path: String): T? = lookup(path, T::class)
+    inline fun <reified T : Node<*>> getNodeOrNull(path: String): T? = lookup(path, T::class)
 
     @PublishedApi
     @JvmSynthetic
-    internal fun <T : Node<T>> lookup(path: String, type: KClass<T>): T? {
+    internal fun <T : Node<*>> lookup(path: String, type: KClass<T>): T? {
         val result = resolve(path) ?: return null
         if (!type.isInstance(
                 result
@@ -460,10 +584,10 @@ abstract class Node<N : Node<N>> protected constructor(
     }
 
     /** Typed indexing shorthand. */
-    inline operator fun <reified T : Node<T>> get(path: String): T = getNode(path)
+    inline operator fun <reified T : Node<*>> get(path: String): T = getNode(path)
 
     /** Applies a typed patch without exposing private engine state. */
-    inline fun <reified T : Node<T>> patch(path: String, handler: T.() -> Unit) = getNode<T>(path).apply(handler)
+    inline fun <reified T : Node<*>> patch(path: String, handler: T.() -> Unit) = getNode<T>(path).apply(handler)
 
     /** Marks this facade as a reusable prefab; skips automatic entry during attachment. */
     fun asPrefab(): N {
@@ -479,7 +603,7 @@ abstract class Node<N : Node<N>> protected constructor(
     }
 
     /** Moves an existing child. Same-tree moves preserve lifetimes and system registrations. */
-    fun reparent(child: Node<*>, newParent: Node<*>) {
+    fun reparent(child: Node<*>, newParent: Node<*>): Unit = owningManager().mutateHierarchy {
         val s = state("reparent")
         val c = child.state("reparent")
         val destination = newParent.state("reparent")
@@ -507,8 +631,42 @@ abstract class Node<N : Node<N>> protected constructor(
         }
     }
 
-    /** Whether an immediate child has the exact public facade type. */
-    fun hasChildType(type: KClass<out Node<*>>) = state("hasChildType").snapshot().any { it::class == type }
+    /** Whether an actual immediate child has exactly [type], excluding subclasses. */
+    fun hasExactChildType(type: KClass<out Node<*>>) = state("hasExactChildType").snapshot().any { it::class == type }
+
+    /** Compatibility name for exact matching; prefer the explicitly named operation. */
+    @Deprecated("Use hasExactChildType for exact matching, or hasChild<T>() to include subclasses")
+    fun hasChildType(type: KClass<out Node<*>>) = hasExactChildType(type)
+
+    /** Reactive snapshot of logical children, including subclasses and traversing transparent Context scopes. */
+    inline fun <reified T : Node<*>> getChildrenOfType(): List<T> = matchingChildren(T::class).map { it as T }
+
+    /** First matching logical child, or null; invalid owners still fail. */
+    inline fun <reified T : Node<*>> getChildOrNull(): T? = matchingChildren(T::class).firstOrNull() as T?
+
+    /** First matching logical child; absence throws a contextual lookup error. */
+    inline fun <reified T : Node<*>> getChild(): T = getChildOrNull<T>()
+        ?: throw NodeNotFoundException(diagnostic("getChild"), "<${T::class.qualifiedName}>")
+
+    /** Whether a matching logical child exists, including subclasses. */
+    inline fun <reified T : Node<*>> hasChild(): Boolean = getChildOrNull<T>() != null
+
+    @PublishedApi
+    internal fun matchingChildren(type: KClass<*>): List<Node<*>> {
+        observeHierarchy()
+        val pending = ArrayDeque<Node<*>>()
+        state("read typed children").snapshot().asReversed().forEach(pending::addLast)
+        val matches = mutableListOf<Node<*>>()
+        while (pending.isNotEmpty()) {
+            val child = pending.removeLast()
+            if (child.isSearchTransparent()) {
+                child.childSnapshot().asReversed().forEach(pending::addLast)
+            } else if (type.isInstance(child)) {
+                matches += child
+            }
+        }
+        return matches
+    }
 
     internal fun requireSceneRootTransfer() {
         state("transfer scene root").parent?.checkChildrenMutation("transfer child to scene root")
@@ -563,14 +721,57 @@ abstract class Node<N : Node<N>> protected constructor(
     /** Custom eligible input hook. Consuming the event stops remaining descendants and behavior callbacks. */
     protected open fun onInput(event: InputEvent) {}
 
-    /** Builds and enters the class-named DSL once, then runs readiness. */
-    fun buildTree() {
+    /**
+     * Paints into the host's pending frame after updates, including while simulation is paused.
+     * Hidden or detached nodes do not draw. Inside UI, [context] uses the container's content area;
+     * ordinary descendants inherit it. The context expires when this callback returns.
+     */
+    protected open fun onDraw(context: DrawContext) {}
+
+    internal val draws: Boolean get() = NodeDefinition.draws(javaClass)
+
+    internal fun drawSelf(context: DrawContext) {
+        if (!isValid || !isInsideTree || !isVisibleInTree || !draws) return
+        val local = context.fork()
+        try {
+            callback("draw") { onDraw(local) }
+        } finally {
+            local.close()
+        }
+    }
+
+    internal fun drawSubtree(context: DrawContext, exclude: (Node<*>) -> Boolean) {
+        val pending = ArrayDeque<Pair<Node<*>, Node<*>?>>()
+        pending.addLast(this to parent)
+        while (pending.isNotEmpty()) {
+            val (node, expectedParent) = pending.removeLast()
+            if (!node.isValid ||
+                !node.isInsideTree ||
+                node.parent !== expectedParent ||
+                !node.isVisibleInTree ||
+                exclude(node)
+            ) {
+                continue
+            }
+            node.drawSelf(context)
+            if (!node.isValid || !node.isInsideTree) continue
+            val children = node.childSnapshot()
+            for (index in children.indices.reversed()) pending.addLast(children[index] to node)
+        }
+    }
+
+    /**
+     * Standalone driver entry point: enters this subtree and readies each node once per entry.
+     * Games normally let App drive lifecycle through addChild/asSceneRoot; do not call from lifecycle hooks.
+     */
+    fun buildTree(): Unit = owningManager().mutateHierarchy {
         nodeEnterTree()
         nodeReady()
     }
 
     /** Engine-controlled parent-first entry. */
-    fun nodeEnterTree() {
+    @JvmName("nodeEnterTree")
+    internal fun nodeEnterTree(): Unit = owningManager().mutateHierarchy {
         val s = state("enter tree")
         if (s.entered) return
         s.entryGeneration++
@@ -596,17 +797,28 @@ abstract class Node<N : Node<N>> protected constructor(
         }
         s.owner.registerSubtree(this)
         s.groups.forEach { s.owner.addToGroup(it, this) }
+        for (entry in s.activity.toList()) {
+            if (!isInsideTree) return
+            callback("activate source") { entry.enter?.invoke() }
+        }
+        if (!isInsideTree) return
         callback("enter") {
             onEnterTree()
             s.behavior?.onEnterTree()
         }
+        if (!isInsideTree) return
         for (child in s.snapshot()) if (child.isValid && child.payload().parent === this) child.nodeEnterTree()
     }
 
     /** Engine-controlled child-first readiness. */
-    fun nodeReady() {
+    @JvmName("nodeReady")
+    internal fun nodeReady() {
         val s = state("ready")
+        if (!s.entered || s.readyGeneration == s.entryGeneration) return
+        val generation = s.entryGeneration
+        s.readyGeneration = generation
         for (child in s.snapshot()) if (child.isInsideTree) child.nodeReady()
+        if (!isInsideTree || s.entryGeneration != generation) return
         callback("ready") {
             onReady()
             s.behavior?.onReady()
@@ -614,7 +826,8 @@ abstract class Node<N : Node<N>> protected constructor(
     }
 
     /** Engine-controlled child-first exit. All descendants and registrations are attempted on failure. */
-    fun nodeExitTree() {
+    @JvmName("nodeExitTree")
+    internal fun nodeExitTree() {
         state("exit tree")
         exitInternal()
     }
@@ -632,6 +845,9 @@ abstract class Node<N : Node<N>> protected constructor(
             s.entered = false
             if (!isFreed) lifecycle = Lifecycle.Detached
             if (wasEntered) {
+                s.activity.toList().forEach { entry ->
+                    failures.attempt { cleanup("suspend source") { entry.exit?.invoke() } }
+                }
                 failures.attempt { cleanup("exit hook") { onExitTree() } }
                 failures.attempt { cleanup("behavior exit") { s.behavior?.onExitTree() } }
             }
@@ -684,6 +900,8 @@ abstract class Node<N : Node<N>> protected constructor(
         val failures = CleanupFailures()
         drainSlots(s, failures)
         drain(s.destruction, failures)
+        s.activity.forEach { it.clear() }
+        s.activity.clear()
         s.children.clear()
         s.changed()
         s.groups.clear()
@@ -699,7 +917,7 @@ abstract class Node<N : Node<N>> protected constructor(
     }
 
     @JvmSynthetic
-    internal fun detachFromParent() {
+    internal fun detachFromParent(): Unit = owningManager().mutateHierarchy {
         val s = payload()
         s.parent?.payload()?.let { p ->
             p.children.remove(s.name)
@@ -708,6 +926,7 @@ abstract class Node<N : Node<N>> protected constructor(
         s.parent = null
         s.parentState = null
         if (isValid) refreshPaths()
+        s.owner.hierarchyChanged()
     }
 
     @JvmSynthetic
@@ -732,13 +951,15 @@ abstract class Node<N : Node<N>> protected constructor(
     }
 
     /** Validated frame entrypoint. Engine processing is not overridable. */
-    fun nodeUpdate(delta: Float) {
+    @JvmName("nodeUpdate")
+    internal fun nodeUpdate(delta: Float) {
         state("frame update")
         dispatchUpdate(delta)
     }
 
     /** Validated physics entrypoint. */
-    fun nodePhysicsUpdate(delta: Float) {
+    @JvmName("nodePhysicsUpdate")
+    internal fun nodePhysicsUpdate(delta: Float) {
         state("physics update")
         dispatchPhysicsUpdate(delta)
     }
@@ -747,7 +968,8 @@ abstract class Node<N : Node<N>> protected constructor(
      * Validated input entrypoint. Traverses node, children in tree order, then behavior. A consumed event stops
      * the remaining traversal; use a fresh event for each independent dispatch.
      */
-    fun nodeInput(event: InputEvent) {
+    @JvmName("nodeInput")
+    internal fun nodeInput(event: InputEvent) {
         state("input")
         dispatchInput(event)
     }

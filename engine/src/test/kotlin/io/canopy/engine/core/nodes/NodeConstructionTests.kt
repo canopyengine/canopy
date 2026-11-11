@@ -46,8 +46,8 @@ class NodeConstructionTests {
     fun `nested successful nodes join outer rollback but failed inner nodes stay isolated`() {
         val existing = EmptyNode("existing")
         val innerFailure = IllegalArgumentException("inner")
-        lateinit var successful: EmptyNode
-        lateinit var isolated: EmptyNode
+        lateinit var successful: EmptyNode<*>
+        lateinit var isolated: EmptyNode<*>
         assertFailsWith<IllegalStateException> {
             nodeConstruction {
                 successful = nodeConstruction { EmptyNode("successful") }
@@ -91,7 +91,7 @@ class NodeConstructionTests {
     fun `rollback preserves original error and collects reentrant cleanup nodes`() {
         val failure = IllegalStateException("initializer")
         val cleanupFailure = IllegalArgumentException("cleanup")
-        lateinit var createdDuringCleanup: EmptyNode
+        lateinit var createdDuringCleanup: EmptyNode<*>
         var destroyed = 0
         val thrown = assertFails {
             nodeConstruction {
@@ -126,7 +126,7 @@ class NodeConstructionTests {
     @Test
     fun `already freed participant and queued participant are disposed once`() {
         var destroyed = 0
-        lateinit var node: EmptyNode
+        lateinit var node: EmptyNode<*>
         assertFails {
             nodeConstruction {
                 node = EmptyNode("queued")
@@ -221,11 +221,11 @@ class NodeConstructionTests {
         assertEquals(0, scenes.retainedStateCount)
     }
 
-    private fun earlyReturn(): EmptyNode = nodeConstruction { return EmptyNode("early") }
+    private fun earlyReturn(): EmptyNode<*> = nodeConstruction { return EmptyNode("early") }
 
     @Test
     fun `nonlocal return commits ownership into enclosing rollback and restores the scope`() {
-        lateinit var node: EmptyNode
+        lateinit var node: EmptyNode<*>
         assertFails {
             nodeConstruction {
                 node = earlyReturn()
@@ -292,8 +292,8 @@ class NodeConstructionTests {
         scenes.addSystem(system)
         scenes.onEnter()
         var destroyed = 0
-        lateinit var parent: EmptyNode
-        lateinit var child: EmptyNode
+        lateinit var parent: EmptyNode<*>
+        lateinit var child: EmptyNode<*>
         assertFails {
             nodeConstruction {
                 child = EmptyNode("child")

@@ -15,6 +15,7 @@ dependencies {
 
     // Terminal adapter ONLY (no headless, no libgdx)
     implementation(projects.adapters.mordant)
+    implementation(libs.mordant.jna)
 
     // Devtools for testing (AppTestDriver, testHeadlessApp, etc.)
     testImplementation(projects.tooling.devtools)
@@ -24,6 +25,12 @@ dependencies {
     // Test dependencies
     testImplementation(libs.kotlin.test.junit5)
     testImplementation(libs.junit.jupiter)
+}
+
+tasks.test {
+    doFirst {
+        systemProperty("canopy.test.runtimeClasspath", sourceSets.test.get().runtimeClasspath.asPath)
+    }
 }
 
 tasks.register<JavaExec>("commandPromptSmoke") {
@@ -106,6 +113,6 @@ tasks.register<JavaExec>("terminalUiSmoke") {
     description = "Launch the responsive declarative terminal UI and command overlay smoke example"
     dependsOn(tasks.testClasses)
     classpath = sourceSets.test.get().runtimeClasspath
-    mainClass.set("io.canopy.platforms.terminal.app.TerminalUiSmokeKt")
+    mainClass.set("io.canopy.platforms.terminal.ui.TerminalUiSmokeKt")
     standardInput = System.`in`
 }

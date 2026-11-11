@@ -16,7 +16,7 @@ dependencies {
     // Serialization
     api(libs.kotlinx.serialization.core)
     api(libs.kotlinx.serialization.json)
-    implementation(libs.tomlkt)
+    api(libs.tomlkt)
 
     // Logging
     api(libs.slf4j.api)

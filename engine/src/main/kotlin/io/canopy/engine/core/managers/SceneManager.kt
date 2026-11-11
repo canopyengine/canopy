@@ -3,6 +3,7 @@ package io.canopy.engine.core.managers
 import kotlin.reflect.KClass
 import io.canopy.engine.app.App
 import io.canopy.engine.core.CleanupFailures
+import io.canopy.engine.core.flows.events.Signal
 import io.canopy.engine.core.flows.events.event
 import io.canopy.engine.core.nodes.Node
 import io.canopy.engine.core.nodes.NodeLifetime
@@ -33,6 +34,65 @@ import io.canopy.engine.math.Vector2
  */
 class SceneManager(val physicsStep: Float = 1f / 60f, private val block: SceneManager.() -> Unit = {}) : Manager {
 
+    // A lazy, scene-wide dependency keeps structural observation event-driven and inexpensive when unused.
+    private var hierarchyRevision: Signal<Long>? = null
+    private var hierarchyDepth = 0
+    private var hierarchyDirty = false
+    private var publishingHierarchy = false
+
+    internal fun observeHierarchy() {
+        if (!io.canopy.engine.core.flows.events.TrackingContext.isTracking) return
+        val source = hierarchyRevision ?: Signal(0L, owner = null).also { hierarchyRevision = it }
+        source()
+    }
+
+    internal fun hierarchyChanged() {
+        hierarchyDirty = true
+        publishHierarchy()
+    }
+
+    @PublishedApi
+    internal fun beginHierarchyMutation() {
+        hierarchyDepth++
+    }
+
+    @PublishedApi
+    internal fun endHierarchyMutation() {
+        hierarchyDepth--
+        publishHierarchy()
+    }
+
+    internal inline fun <T> mutateHierarchy(block: () -> T): T {
+        beginHierarchyMutation()
+        var failure: Throwable? = null
+        try {
+            return block()
+        } catch (error: Throwable) {
+            failure = error
+            throw error
+        } finally {
+            try {
+                endHierarchyMutation()
+            } catch (notification: Throwable) {
+                if (failure == null) throw notification
+                if (notification !== failure) failure.addSuppressed(notification)
+            }
+        }
+    }
+
+    private fun publishHierarchy() {
+        if (hierarchyDepth != 0 || publishingHierarchy) return
+        publishingHierarchy = true
+        try {
+            while (hierarchyDirty) {
+                hierarchyDirty = false
+                hierarchyRevision?.update { it + 1 }
+            }
+        } finally {
+            publishingHierarchy = false
+        }
+    }
+
     private var sceneManagerBuilder: SceneManager.() -> Unit = {}
 
     /** Dedicated subsystem logger (routable + consistent). */
@@ -40,6 +100,8 @@ class SceneManager(val physicsStep: Float = 1f / 60f, private val block: SceneMa
 
     /** Node equality is final identity equality; paths do not define membership. */
     private val indexedNodes = linkedSetOf<Node<*>>()
+    private val drawingNodes = linkedSetOf<Node<*>>()
+    internal val hasDrawables: Boolean get() = drawingNodes.any { it.isValid && it.isInsideTree }
     private val ownedStates = mutableMapOf<Long, NodeState>()
     internal val retainedStateCount: Int get() = ownedStates.size
     internal val indexedNodeCount: Int get() = indexedNodes.size
@@ -82,8 +144,13 @@ class SceneManager(val physicsStep: Float = 1f / 60f, private val block: SceneMa
     private var flushing = false
     internal var pauseState: () -> Boolean = { false }
 
-    /** Application pause state. Standalone scene managers default to running. */
-    val isPaused: Boolean get() = pauseState()
+    private var physicsPauseSnapshot: Boolean? = null
+
+    /**
+     * Application pause state, held at the tick's starting value during physics traversal.
+     * Standalone scene managers default to running.
+     */
+    val isPaused: Boolean get() = physicsPauseSnapshot ?: pauseState()
 
     private var _currScene: Node<*>? = null
 
@@ -145,7 +212,7 @@ class SceneManager(val physicsStep: Float = 1f / 60f, private val block: SceneMa
      * 2) Swap pointer and emit [onSceneReplaced]
      * 3) Register + build new subtree
      */
-    private fun replaceScene(newScene: Node<*>?) {
+    private fun replaceScene(newScene: Node<*>?): Unit = mutateHierarchy {
         newScene?.requireValid("replace scene")
         newScene?.requireSceneRootTransfer()
         val oldScene = _currScene
@@ -170,6 +237,7 @@ class SceneManager(val physicsStep: Float = 1f / 60f, private val block: SceneMa
         }
 
         _currScene = newScene
+        hierarchyChanged()
         onSceneReplaced.emit(_currScene)
 
         newScene?.let { scene ->
@@ -202,7 +270,8 @@ class SceneManager(val physicsStep: Float = 1f / 60f, private val block: SceneMa
             if (!node.isInsideTree) continue
             val children = node.childSnapshot()
             for (i in children.indices.reversed()) pending.addLast(children[i])
-            indexedNodes.add(node)
+            if (indexedNodes.add(node)) hierarchyChanged()
+            if (node.draws) drawingNodes.add(node)
 
             systemsFor(node).toList().forEach { sys ->
                 if (
@@ -243,7 +312,11 @@ class SceneManager(val physicsStep: Float = 1f / 60f, private val block: SceneMa
         traverseNodes(root) { nodes += it }
         val failures = CleanupFailures()
         for (node in nodes) {
-            if (indexedNodes.remove(node)) indexRemovalCount++
+            if (indexedNodes.remove(node)) {
+                indexRemovalCount++
+                hierarchyChanged()
+            }
+            drawingNodes.remove(node)
             groupsByNode.remove(node)?.forEach { group ->
                 groups[group]?.remove(node)
                 if (groups[group].isNullOrEmpty()) groups.remove(group)
@@ -400,27 +473,29 @@ class SceneManager(val physicsStep: Float = 1f / 60f, private val block: SceneMa
 
     internal fun queryGroup(group: String): List<Node<*>> = groups[group].orEmpty().filter { it.isInsideTree }
 
-    fun addToGroup(group: String, node: Node<*>) {
+    fun addToGroup(group: String, node: Node<*>): Unit = mutateHierarchy {
         node.requireValid("add group")
         if (!node.isInsideTree || node in groups[group].orEmpty()) return
         groups.computeIfAbsent(group) { linkedSetOf() }.add(node)
         groupsByNode.computeIfAbsent(node) { linkedSetOf() }.add(group)
+        hierarchyChanged()
 
         log.trace("event" to "group.add", "group" to group, "nodePath" to node.path) {
             "Added node to group"
         }
     }
 
-    fun removeFromGroup(group: String, node: Node<*>) {
+    fun removeFromGroup(group: String, node: Node<*>): Unit = mutateHierarchy {
         groups[group]?.remove(node) ?: error("Node $node does not exist in group $group")
         groupsByNode[node]?.remove(group) ?: error("Group $group does not exist")
+        hierarchyChanged()
 
         log.trace("event" to "group.remove", "group" to group, "nodePath" to node.path) {
             "Removed node from group"
         }
     }
 
-    fun updateGroups(node: Node<*>) {
+    fun updateGroups(node: Node<*>): Unit = mutateHierarchy {
         // Get or create entry
         val oldGroups = groupsByNode.computeIfAbsent(node) { linkedSetOf() }
 
@@ -431,6 +506,7 @@ class SceneManager(val physicsStep: Float = 1f / 60f, private val block: SceneMa
         oldGroups.clear()
 
         // Add new entries
+        hierarchyChanged()
         oldGroups.addAll(node.groups)
         node.groups.forEach { group ->
             groups.computeIfAbsent(group) { linkedSetOf() }.add(node)
@@ -485,18 +561,27 @@ class SceneManager(val physicsStep: Float = 1f / 60f, private val block: SceneMa
         }
     }
 
-    /** Dispatches a complete physics traversal, then drains queued destruction even if callbacks fail. */
-    override fun onPhysicsUpdate(delta: Float) = updateBoundary {
-        val root = currScene ?: return@updateBoundary
+    /**
+     * Dispatches a complete physics traversal with pause eligibility fixed at entry, then drains queued destruction.
+     * Pause changes during callbacks affect the next traversal; the current tick is never split or replayed.
+     */
+    override fun onPhysicsUpdate(delta: Float) = physicsUpdate(delta, isPaused)
 
-        LogContext.with("scene" to root.name, "delta" to delta) {
-            log.trace("event" to "tick.physics") { "Physics tick" }
-
-            runPhase(TreeSystem.UpdatePhase.PhysicsPre, delta)
-
-            NodeLifetime.withOwner(root) { root.dispatchPhysicsUpdate(delta) }
-
-            runPhase(TreeSystem.UpdatePhase.PhysicsPost, delta)
+    internal fun physicsUpdate(delta: Float, paused: Boolean) {
+        val previous = physicsPauseSnapshot
+        physicsPauseSnapshot = paused
+        try {
+            updateBoundary {
+                val root = currScene ?: return@updateBoundary
+                LogContext.with("scene" to root.name, "delta" to delta) {
+                    log.trace("event" to "tick.physics") { "Physics tick" }
+                    runPhase(TreeSystem.UpdatePhase.PhysicsPre, delta)
+                    NodeLifetime.withOwner(root) { root.dispatchPhysicsUpdate(delta) }
+                    runPhase(TreeSystem.UpdatePhase.PhysicsPost, delta)
+                }
+            }
+        } finally {
+            physicsPauseSnapshot = previous
         }
     }
 
@@ -544,7 +629,7 @@ class SceneManager(val physicsStep: Float = 1f / 60f, private val block: SceneMa
 
     /** Immediately destroys only construction participants, independently of frame/deletion boundaries. */
     @JvmSynthetic
-    internal fun rollbackConstruction(node: Node<*>, participants: Set<Node<*>>) {
+    internal fun rollbackConstruction(node: Node<*>, participants: Set<Node<*>>): Unit = mutateHierarchy {
         if (node.isFreed) return
         val failures = CleanupFailures()
         // Existing nodes moved beneath failed constructors remain reusable rather than becoming owned rollback work.
@@ -559,7 +644,7 @@ class SceneManager(val physicsStep: Float = 1f / 60f, private val block: SceneMa
         failures.rethrow()
     }
 
-    private fun destroySubtree(root: Node<*>, failures: CleanupFailures) {
+    private fun destroySubtree(root: Node<*>, failures: CleanupFailures): Unit = mutateHierarchy {
         if (root.isFreed) return
         val nodes = mutableListOf<Node<*>>()
         traverseNodes(root) { nodes += it }
@@ -592,7 +677,7 @@ class SceneManager(val physicsStep: Float = 1f / 60f, private val block: SceneMa
      * ============================================================ */
 
     /** Initializes systems before matching nodes. Configuration blocks run only on the first entry. */
-    override fun onEnter() {
+    override fun onEnter(): Unit = mutateHierarchy {
         if (entered) return
         entered = true
         systemsByClass.values.toList().forEach { initializeSystem(it) }
@@ -614,9 +699,10 @@ class SceneManager(val physicsStep: Float = 1f / 60f, private val block: SceneMa
      * Retains scene structure and system configuration. Re-entry calls node entry callbacks without
      * rebuilding DSL blocks; recreate resources in entry callbacks when they must survive re-entry.
      */
-    override fun onExit() {
+    override fun onExit(): Unit = mutateHierarchy {
         if (!entered) return
         entered = false
+        hierarchyChanged()
         log.info("event" to "sceneManager.teardown") { "Teardown" }
         // One failing cleanup hook must not leave the other systems holding scene nodes.
         val sceneFailures = CleanupFailures()

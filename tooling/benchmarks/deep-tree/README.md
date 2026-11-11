@@ -35,8 +35,9 @@ removes the root's child subtree; renaming refreshes every descendant path.
 attributed to the correct stage.
 
 Frame, physics, input and readiness run 30 warmup traversals followed by 30
-measured traversals. Readiness is repeated readiness of already entered nodes,
-not their first initialization. Entry, exit, destruction, detach and rename are
+measured traversals. Readiness is now idempotent within one entry: its repeated samples measure the
+guard rather than another traversal. Historical results below predate this change;
+use entry samples when comparing complete current lifecycle traversal. Entry, exit, destruction, detach and rename are
 single cold operations: their allocation samples can include first-call class
 initialization/JIT effects. Construction and attachment are excluded from every
 allocation interval. Input also allocates one fresh event per traversal. Paths

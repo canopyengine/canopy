@@ -18,7 +18,7 @@ class AnimationSystem :
     private val queuedUpdates = mutableListOf<() -> Unit>()
 
     override fun processNode(node: Node<*>, delta: Float) {
-        val player = node as io.canopy.platforms.desktop.graphics.nodes.animation.AnimationPlayer
+        val player = node as io.canopy.platforms.desktop.graphics.nodes.animation.AnimationPlayer<*>
         val anim = player.currentAnimation ?: return
 
         val prevTime = player.normalizedTime

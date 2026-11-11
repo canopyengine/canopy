@@ -25,16 +25,14 @@ class CanopyScreenTests {
             }
         }.launchAsync()
 
-        // Wait until the app finished booting
-        assertTrue(
-            handle.awaitStarted(10.seconds),
-            "App failed to start in time"
-        )
-
-        // Now setup() should have run
-        assertTrue(screenWasCreated)
-
-        handle.requestExit()
-        handle.join()
+        try {
+            assertTrue(handle.awaitStarted(10.seconds), "App did not start")
+            assertTrue(screenWasCreated)
+            handle.requestExit()
+            assertTrue(handle.join(5.seconds), "App did not stop gracefully")
+        } finally {
+            handle.forceClose()
+            assertTrue(handle.join(5.seconds), "App cleanup did not complete")
+        }
     }
 }

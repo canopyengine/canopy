@@ -4,16 +4,22 @@ import kotlin.test.*
 import kotlin.time.Duration.Companion.seconds
 import io.canopy.engine.core.managers.Manager
 import io.canopy.engine.core.managers.ManagersRegistry
+import io.canopy.engine.ui.UiBackend
+import io.canopy.engine.ui.UiManager
 import kotlinx.coroutines.runBlocking
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.BeforeEach
 
 class AppFailureTests {
     private class TestApp : App<AppConfig>() {
+        var presentation: () -> UiBackend? = { null }
+        var provided: List<Manager> = emptyList()
         var afterEntry: () -> Unit = {}
         var beforeShutdown: () -> Unit = {}
         override fun defaultConfig() = AppConfig()
         override fun internalLaunch(config: AppConfig, vararg args: String) = Unit
+        override fun provideUiBackend() = presentation()
+        override fun provideManagers() = provided
         override fun afterEnter() = afterEntry()
         override fun beforeExit() = beforeShutdown()
     }
@@ -28,6 +34,35 @@ class AppFailureTests {
 
     @AfterEach
     fun cleanup() = ManagersRegistry.exit()
+
+    @Test
+    fun `failed presentation binding cleans unentered host services and permits a fresh headless run`() = runBlocking {
+        // Arrange
+        val failure = IllegalStateException("presentation")
+        val events = mutableListOf<String>()
+        val app = TestApp().apply {
+            provided = listOf(Service(enter = { events += "unexpected entry" }, close = { events += "service" }))
+            presentation = { throw failure }
+            beforeShutdown = { events += "host" }
+            onEnter { events += "unexpected app entry" }
+            onExit { events += "app" }
+        }
+
+        // Act / Assert
+        assertSame(failure, assertFailsWith<IllegalStateException> { app.enter() })
+        assertEquals(listOf("host", "service", "app"), events)
+        assertNull(ManagersRegistry.getManagerOrNull(Service::class))
+        assertEquals(failure.message, assertFailsWith<IllegalStateException> { app.handle.awaitStarted() }.message)
+        assertEquals(failure.message, assertFailsWith<IllegalStateException> { app.handle.join() }.message)
+        val next = TestApp()
+        try {
+            next.enter()
+            assertNull(ManagersRegistry.getManager(UiManager::class).backend)
+        } finally {
+            next.exit()
+        }
+        next.handle.join()
+    }
 
     @Test
     fun `failed startup rolls back managers and fails both completions before returning`() = runBlocking {

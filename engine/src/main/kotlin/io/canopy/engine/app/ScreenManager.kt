@@ -14,6 +14,7 @@ class ScreenManager : Manager {
      * Registry
      * ============================================================ */
     internal val screenRegistry = ScreenRegistry()
+    internal var configure: ScreenRegistry.() -> Unit = {}
 
     private val screens = linkedMapOf<KClass<out Screen>, Screen>()
     private var leaving = false
@@ -94,7 +95,7 @@ class ScreenManager : Manager {
      * ============================================================ */
 
     override fun onEnter() {
-        screenManagerBuilder()
+        screenRegistry.apply(configure)
     }
 
     override fun onUpdate(delta: Float) {
@@ -165,13 +166,12 @@ class ScreenManager : Manager {
         }
         failures.rethrow()
     }
-
-    companion object {
-        internal var screenManagerBuilder: ScreenManager.() -> Unit = {}
-    }
 }
 
-/** Installs the screen registration block used by ScreenManager during application initialization. */
+/**
+ * Configures this app's screens during startup. A later call replaces this app's block without navigating;
+ * it does not affect other apps. Use runtime navigation shortcuts after startup.
+ */
 fun App<*>.screens(handler: ScreenRegistry.() -> Unit) {
-    ScreenManager.screenManagerBuilder = { screenRegistry.apply(handler) }
+    screenBuilder = handler
 }

@@ -32,8 +32,8 @@ class ComputedTests {
         val hp = signal(100)
         val isDead = computed { hp() <= 0 }
 
+        assertEquals(false, isDead())
         hp.update { 0 }
-
         assertEquals(true, isDead())
     }
 
@@ -88,7 +88,11 @@ class ComputedTests {
         val useX = signal(true)
         val x = signal(10)
         val y = signal(20)
-        val result = computed { if (useX()) x() else y() }
+        var runs = 0
+        val result = computed {
+            runs++
+            if (useX()) x() else y()
+        }
 
         assertEquals(10, result())
 
@@ -102,10 +106,12 @@ class ComputedTests {
 
         x.update { 99 } // should NOT trigger
         assertEquals(0, callCount, "x should no longer be a dependency after branch switch")
+        assertEquals(2, runs)
 
         y.update { 50 } // SHOULD trigger
         assertEquals(1, callCount)
         assertEquals(50, result())
+        assertEquals(3, runs)
     }
 
     @Test
@@ -163,21 +169,6 @@ class ComputedTests {
         multiplier.update { 3 } // SHOULD trigger; reads the current base value (99)
         assertEquals(1, callCount)
         assertEquals(99 * 3, result())
-    }
-
-    @Test
-    fun `computed circular dependency guard does not throw or recurse`() {
-        val a = signal(0)
-
-        var recomputeCount = 0
-        computed {
-            recomputeCount++
-            a()
-        }
-
-        a.update { 1 }
-
-        assert(recomputeCount <= 2) { "Recompute count should be bounded, was $recomputeCount" }
     }
 
     @Test

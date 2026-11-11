@@ -1,11 +1,11 @@
 package io.canopy.engine.data.core.parsers
 
+import kotlin.test.assertFailsWith
 import io.canopy.engine.data.parsers.Toml
 import kotlinx.serialization.Serializable
 import org.junit.jupiter.api.Assertions.*
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Test
-import org.junit.jupiter.api.assertThrows
 
 /**
  * Tests for [io.canopy.engine.data.parsers.Toml].
@@ -70,41 +70,14 @@ class TomlTests {
         }
 
         @Test
-        fun `fromString rejects invalid toml null literal`() {
-            // TOML has no null literal; `name = null` should fail parsing/decoding.
-            val toml = """
-                name = null
-                enabled = true
-                retries = 1
-            """.trimIndent()
-
-            assertThrows<Exception> {
-                Toml.fromString<SimpleConfig>(toml)
-            }
-        }
-
-        @Test
-        fun `fromString rejects mixed-type arrays`() {
-            // TOML arrays must be homogeneous.
-            val toml = """values = [1, "two", 3]"""
-
-            assertThrows<Exception> {
-                Toml.fromString<WithArray>(toml)
-            }
-        }
-
-        @Test
-        fun `fromString rejects duplicate keys`() {
-            // Duplicate keys should not be allowed in a single table.
-            val toml = """
-                name = "a"
-                name = "b"
-                enabled = true
-                retries = 0
-            """.trimIndent()
-
-            assertThrows<Exception> {
-                Toml.fromString<SimpleConfig>(toml)
+        fun `malformed TOML propagates decoding failures`() {
+            val invalidInputs = listOf(
+                "null literal" to { Toml.fromString<SimpleConfig>("name = null") },
+                "mixed array" to { Toml.fromString<WithArray>("values = [1, \"two\", 3]") },
+                "duplicate keys" to { Toml.fromString<SimpleConfig>("name = \"a\"\nname = \"b\"") }
+            )
+            invalidInputs.forEach { (label, decode) ->
+                assertFailsWith<Exception>(label) { decode() }
             }
         }
 
@@ -164,7 +137,7 @@ class TomlTests {
     // that missing keys can map to nullable properties / defaults.
 
     @org.junit.jupiter.api.Nested
-    @DisplayName("Custom config behavior")
+    @DisplayName("Nullable values and caller configuration")
     inner class CustomTomlParsingTests {
 
         @Test
@@ -179,6 +152,16 @@ class TomlTests {
             assertEquals(null, cfg.name)
             assertTrue(cfg.enabled)
             assertEquals(1, cfg.retries)
+        }
+
+        @Test
+        fun `caller configuration can reject unknown keys accepted by default`() {
+            val input = "name = \"canopy\"\nextra = 1"
+            assertEquals("canopy", Toml.fromString<SimpleConfig>(input).name)
+
+            assertFailsWith<Exception> {
+                Toml.fromString<SimpleConfig>(input, config = { ignoreUnknownKeys = false })
+            }
         }
     }
 }

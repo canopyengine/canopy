@@ -17,11 +17,11 @@ public final class MembershipAllocationProbe {
             SceneManager manager = new SceneManager();
             ManagersRegistry.INSTANCE.register(manager);
             manager.onEnter();
-            EmptyNode root = new EmptyNode("a", node -> Unit.INSTANCE);
+            EmptyNode<?> root = new EmptyNode<>("a", node -> Unit.INSTANCE);
             manager.setCurrScene(root);
-            EmptyNode cursor = root;
+            EmptyNode<?> cursor = root;
             for (int index = 1; index < count; index++) {
-                EmptyNode child = new EmptyNode("x", node -> Unit.INSTANCE);
+                EmptyNode<?> child = new EmptyNode<>("x", node -> Unit.INSTANCE);
                 cursor.addChild(child);
                 cursor = child;
             }

@@ -15,13 +15,15 @@ import io.canopy.engine.core.nodes.NodeLifetime
  *
  * ## Lifecycle
  *
- * The block runs immediately on construction. Call [dispose] to permanently stop
+ * The block runs immediately, or on first entry when created for a not-yet-entered Node.
+ * Call [dispose] to permanently stop
  * the effect. After disposal, no further runs occur and all dependency subscriptions
  * are removed.
  *
- * Effects created during managed node callbacks are retained until that node exits, then disposed.
+ * Effects created in Node methods/callbacks infer that Node through the matching compiler.
+ * They are retained until that Node exits, then disposed.
  * Ownership is captured at construction; later reruns do not open a node ownership scope. Use
- * explicit owners for resources created during those reruns.
+ * the matching compiler for Node operations, or explicit owners in standalone helper code.
  *
  * **Important:** Outside a node ownership scope, hold a strong reference to the returned [Effect] for as long as you
  * need it to remain active. If the only reference is dropped, the effect and its
@@ -51,11 +53,28 @@ class Effect(block: () -> Unit) {
     private var rerunRequested = false
 
     private var cancelOwnership: (() -> Unit)? = null
+    private var cancelActivation: (() -> Unit)? = null
 
     init {
         cancelOwnership = NodeLifetime.own(::dispose)
         try {
-            run()
+            val owner = NodeLifetime.current()
+            if (owner != null && !owner.isInsideTree) {
+                cancelActivation = owner.observeActivity({
+                    cancelActivation?.invoke()
+                    cancelActivation = null
+                    if (!disposed) {
+                        try {
+                            run()
+                        } catch (error: Throwable) {
+                            dispose()
+                            throw error
+                        }
+                    }
+                }, {})
+            } else {
+                run()
+            }
         } catch (error: Throwable) {
             dispose()
             throw error
@@ -76,6 +95,8 @@ class Effect(block: () -> Unit) {
         action = null
         cancelOwnership?.invoke()
         cancelOwnership = null
+        cancelActivation?.invoke()
+        cancelActivation = null
         subscriptions.clear()
     }
 
@@ -115,7 +136,7 @@ class Effect(block: () -> Unit) {
  * ------------------------------------------------------------------ */
 
 /**
- * Creates an [Effect] that runs [block] immediately and re-runs it whenever
+ * Creates an [Effect] that runs [block] immediately (or on its owning Node's first entry) and re-runs it whenever
  * any [Signal] (or [Computed]) accessed via `signal()` / `computed()` inside
  * [block] changes.
  *

@@ -23,7 +23,7 @@ class CommandContext internal constructor(
     /** Owning terminal application's existing lifecycle controls and manager utilities. */
     val app: App<*>,
     /** Prompt owning this invocation. Gameplay access keeps the node's normal lifetime guards. */
-    val prompt: CommandPrompt,
+    val prompt: CommandPrompt<*>,
 ) {
     internal var active = true
 

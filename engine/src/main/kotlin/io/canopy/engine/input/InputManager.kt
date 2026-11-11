@@ -3,13 +3,15 @@ package io.canopy.engine.input
 import java.util.ArrayDeque
 import io.canopy.engine.app.App
 import io.canopy.engine.core.managers.Manager
-import io.canopy.engine.core.managers.manager
-import io.canopy.engine.core.managers.managerOrNull
+import io.canopy.engine.core.managers.getManager
+import io.canopy.engine.core.managers.getManagerOrNull
 import io.canopy.engine.data.saving.registerSaveModule
 import io.canopy.engine.input.binds.InputBind
 import io.canopy.engine.input.binds.InputData
 import io.canopy.engine.input.events.InputEvent
 import io.canopy.engine.input.events.InputState
+import io.canopy.engine.input.events.MouseButtonEvent
+import io.canopy.engine.input.events.MouseMoveEvent
 import io.canopy.engine.math.Vector2
 
 /**
@@ -25,7 +27,7 @@ abstract class InputManager : Manager {
     /** Returns copied mapped states, or an empty map while command editing owns this frame's input. */
     val actionStates get() = if (blocksGameplay) emptyMap() else _actionStates.toMap()
 
-    private fun focus(): InputFocus? = managerOrNull<InputFocus>()
+    private fun focus(): InputFocus? = getManagerOrNull<InputFocus>()
 
     internal val blocksGameplay: Boolean get() = focus()?.blocksGameplay == true
 
@@ -40,6 +42,7 @@ abstract class InputManager : Manager {
      */
     private val _eventsThisFrame = mutableListOf<InputEvent>()
     private var eventsConsumedThisFrame = false
+    private val capturedMouseButtons = mutableSetOf<String>()
 
     /** Read-only view of raw events, cleared and repopulated by the next processEvents call. */
     val eventsThisFrame: List<InputEvent> get() = _eventsThisFrame
@@ -86,7 +89,24 @@ abstract class InputManager : Manager {
         while (true) {
             val event = synchronized(queueLock) { eventQueue.pollFirst() } ?: break
             handleEvent(event)
-            if (host?.route(event) != true) _eventsThisFrame += event
+            val captured = when (event) {
+                is MouseButtonEvent -> event.action in capturedMouseButtons
+                is MouseMoveEvent -> capturedMouseButtons.isNotEmpty()
+                else -> false
+            }
+            val consumed = host?.route(event) == true || captured
+            if (consumed) event.consume()
+            if (event is MouseButtonEvent) {
+                // A UI-owned press stays out of gameplay mappings until release, even if its UI is removed.
+                if (consumed &&
+                    event.state == InputState.JustPressed &&
+                    InputBind.entries.any { it.type == InputBind.Type.Mouse && it.name == event.action }
+                ) {
+                    capturedMouseButtons += event.action
+                }
+                if (event.state == InputState.JustReleased) capturedMouseButtons -= event.action
+            }
+            if (!consumed) _eventsThisFrame += event
         }
 
         // 3. Recompute action states
@@ -100,7 +120,7 @@ abstract class InputManager : Manager {
      */
     fun updateActions() {
         mapper.forEachAction { action, binds ->
-            val rawPressed = !blocksGameplay && binds.any(::pollPressed)
+            val rawPressed = !blocksGameplay && binds.any(::pollUncaptured)
             val previousState = _actionStates[action] ?: InputState.Released
 
             val nextState = getNextState(
@@ -135,7 +155,13 @@ abstract class InputManager : Manager {
     }
 
     /** Polls a physical binding, suppressed while command editing owns this frame's input. */
-    fun isPressed(bind: InputBind): Boolean = !blocksGameplay && pollPressed(bind)
+    fun isPressed(bind: InputBind): Boolean = !blocksGameplay && pollUncaptured(bind)
+
+    private fun pollUncaptured(bind: InputBind): Boolean = bind.name !in capturedMouseButtons && pollPressed(bind)
+
+    override fun onExit() {
+        capturedMouseButtons.clear()
+    }
 
     /** Returns -1 or 1 when only one action is pressed, otherwise zero. */
     fun getAxis(negativeAction: String, positiveAction: String): Float {
@@ -240,5 +266,5 @@ abstract class InputManager : Manager {
  * DSL helper
  */
 fun App<*>.inputs(vararg mappings: Pair<String, List<InputBind>>) {
-    manager<InputManager>().mapActions(*mappings)
+    getManager<InputManager>().mapActions(*mappings)
 }

@@ -5,8 +5,6 @@ package io.canopy.tooling.compiler
 import org.jetbrains.kotlin.backend.common.extensions.IrGenerationExtension
 import org.jetbrains.kotlin.backend.common.extensions.IrPluginContext
 import org.jetbrains.kotlin.backend.common.lower.DeclarationIrBuilder
-import org.jetbrains.kotlin.cli.common.messages.CompilerMessageLocation
-import org.jetbrains.kotlin.cli.common.messages.CompilerMessageSeverity
 import org.jetbrains.kotlin.cli.common.messages.MessageCollector
 import org.jetbrains.kotlin.descriptors.DescriptorVisibilities
 import org.jetbrains.kotlin.ir.IrElement
@@ -66,17 +64,54 @@ internal class NodeConstructionTransform(private val messages: MessageCollector)
             }
 
             private fun report(expression: IrExpression, id: String, explanation: String) {
-                val offset = expression.startOffset.coerceAtLeast(0)
-                messages.report(
-                    CompilerMessageSeverity.ERROR,
-                    "$id: $explanation",
-                    CompilerMessageLocation.create(
-                        file.fileEntry.name,
-                        file.fileEntry.getLineNumber(offset) + 1,
-                        file.fileEntry.getColumnNumber(offset) + 1,
+                val title = when (id) {
+                    "CANOPY_NODE_CONSTRUCTION_REFERENCE" -> "Create Nodes through a lambda"
+                    "CANOPY_NODE_CONSTRUCTION_SUSPEND" -> "Finish suspension before constructing this Node"
+                    else -> "Engine and compiler builds are incompatible"
+                }
+                val help = when (id) {
+                    "CANOPY_NODE_CONSTRUCTION_REFERENCE" -> "Use a lambda that calls the constructor."
+                    "CANOPY_NODE_CONSTRUCTION_SUSPEND" ->
+                        "Store the suspend result first, then call the constructor."
+                    else -> "Publish the engine and compiler from the same checkout, then rebuild your project."
+                }
+                if (id.endsWith("_ABI")) {
+                    checks.diagnostics.legacy(id, explanation)
+                } else {
+                    val reference = expression as? IrFunctionReference
+                    val constructor = reference?.symbol?.owner as? IrConstructor
+                    val spelling = checks.diagnostics.source(file)?.let { text ->
+                        if (expression.startOffset >= 0 &&
+                            expression.endOffset in expression.startOffset..text.length
+                        ) {
+                            text.substring(expression.startOffset, expression.endOffset)
+                        } else {
+                            null
+                        }
+                    }
+                    val replacement = if (constructor != null &&
+                        constructor.parameters.none { it.kind == IrParameterKind.Regular } &&
+                        spelling?.matches(Regex("::[A-Za-z_][A-Za-z0-9_]*")) == true
+                    ) {
+                        "{ ${spelling.drop(2)}() }"
+                    } else {
                         null
+                    }
+                    checks.diagnostics.emit(
+                        id,
+                        title,
+                        file,
+                        expression,
+                        label = if (reference != null) {
+                            "A constructor reference cannot clean up failed initialization."
+                        } else {
+                            "Suspension would leave a construction scope open."
+                        },
+                        help = help,
+                        length = (expression.endOffset - expression.startOffset).coerceIn(1, 80),
+                        replacement = replacement
                     )
-                )
+                }
             }
 
             private fun suspendingEvaluation(expression: IrElement): IrCall? {

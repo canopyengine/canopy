@@ -6,14 +6,29 @@ import kotlin.test.assertTrue
 import java.io.ByteArrayOutputStream
 import java.io.PrintStream
 import java.nio.file.Files
+import java.util.concurrent.TimeUnit
 import java.util.jar.JarEntry
 import java.util.jar.JarFile
 import java.util.jar.JarOutputStream
 import org.jetbrains.kotlin.cli.common.ExitCode
 import org.jetbrains.kotlin.cli.jvm.K2JVMCompiler
+import org.junit.jupiter.api.AfterAll
+import org.junit.jupiter.api.TestInstance
 
 /** Compiles consumer declarations and provider fixtures to verify safety rules, general traversal and diagnostics. */
+@TestInstance(TestInstance.Lifecycle.PER_CLASS)
 class CanopyCompilerTests {
+    private val fixtureDirectory = Files.createTempDirectory("canopy-compiler-api").toFile()
+    private var defaultApiOutput: java.io.File? = null
+    private val standardLibrary = java.io.File(
+        kotlin.Unit::class.java.protectionDomain.codeSource.location.toURI()
+    ).path
+
+    @AfterAll
+    fun cleanupFixture() {
+        fixtureDirectory.deleteRecursively()
+    }
+
     private val api = """
         package io.canopy.engine.core.nodes
         import kotlin.reflect.KProperty
@@ -31,6 +46,9 @@ class CanopyCompilerTests {
                 if (slots.containsKey(key)) slots[key] as T else default
             protected fun <T> compilerPropertySet(key: String, value: T) { slots[key] = value }
             protected fun <T> nodeProperty(initial: T): NodeProperty<T> = NodeProperty.create(initial)
+            protected inline fun <T> compilerOwned(block: () -> T): T = block()
+            fun <T> signal(initial: T) = io.canopy.engine.core.flows.events.Signal(initial)
+            fun <T> computed(block: () -> T) = io.canopy.engine.core.flows.events.Computed(block)
         }
         class NodeProperty<T> private constructor(private var value: T) {
             companion object { fun <T> create(value: T) = NodeProperty(value) }
@@ -194,7 +212,102 @@ class CanopyCompilerTests {
     }
 
     @Test
-    fun `consumer typed dependency delegates and automatic descriptor storage compile`() {
+    fun `native reactive properties use Kotlin typing and reject accidental value initializers`() {
+        // Arrange / Act / Assert
+        compileConsumer(
+            """
+            class Fish : Node<Fish>() {
+                var hunger by signal(100)
+                    private set
+                val hungry by computed { hunger < 20 }
+                fun swim() { hunger -= 50 }
+            }
+            fun verify(): Boolean {
+                val fish = Fish()
+                check(!fish.hungry)
+                fish.swim()
+                fish.swim()
+                return fish.hungry && fish.hunger == 0
+            }
+            """.trimIndent(),
+            execute = { loader -> assertEquals(true, loader.loadClass("GameKt").getMethod("verify").invoke(null)) }
+        ) { code, output -> assertEquals(ExitCode.OK, code, output) }
+        listOf(
+            "class Fish : Node<Fish>() { val hunger = signal(100) }",
+            "class Fish : Node<Fish>() { val hungry = computed { true } }",
+            "import io.canopy.engine.core.flows.events.signal as state; " +
+                "class Fish : Node<Fish>() { val hunger = state(100) }"
+        ).forEach { declaration ->
+            compileConsumer(declaration) { code, output ->
+                assertEquals(ExitCode.COMPILATION_ERROR, code, declaration + output)
+                assertTrue("CANOPY_PROPERTY_DELEGATION" in output, output)
+            }
+        }
+        compileConsumer(
+            """
+            import io.canopy.engine.core.flows.events.Signal
+            class Fish : Node<Fish>() { val source = Signal(100) }
+            fun local() { val source = io.canopy.engine.core.flows.events.signal(1) }
+            """.trimIndent()
+        ) { code, output -> assertEquals(ExitCode.OK, code, output) }
+    }
+
+    @Test
+    fun `delegation errors highlight the assignment token and propose a compiling edit`() {
+        val wrong = "class Aquarium : Node<Aquarium>() { val fishNum = computed { 1 } }"
+        compileConsumer(wrong) { code, output ->
+            assertEquals(ExitCode.COMPILATION_ERROR, code, output)
+            assertTrue("[CANOPY_PROPERTY_DELEGATION]: Use `by` for a computed property" in output, output)
+            assertTrue("help: Replace `=` with `by`" in output, output)
+            assertTrue("2 - $wrong" in output, output)
+            assertTrue("2 + ${wrong.replace("fishNum =", "fishNum by")}" in output, output)
+            assertTrue("-> Game.kt:2:${wrong.indexOf('=') + 1}" in output, output)
+            assertTrue('\u001B' !in output, output)
+        }
+        compileConsumer(wrong.replace("fishNum =", "fishNum by")) { code, output ->
+            assertEquals(ExitCode.OK, code, output)
+        }
+    }
+
+    @Test
+    fun `explicit wrapper types receive guidance instead of a misleading single-token edit`() {
+        compileConsumer(
+            "class Fish : Node<Fish>() { val hunger: io.canopy.engine.core.flows.events.Signal<Int> = signal(1) }"
+        ) {
+                code,
+                output,
+            ->
+            assertEquals(ExitCode.COMPILATION_ERROR, code, output)
+            assertTrue("remove the explicit wrapper type" in output, output)
+            assertTrue("2 +" !in output, output)
+        }
+    }
+
+    @Test
+    fun `CRLF and tabbed source keep the assignment location and suggested edit aligned`() {
+        compileConsumer("class Aquarium : Node<Aquarium>() {\r\n\tval fishNum = computed { 1 }\r\n}") { code, output ->
+            assertEquals(ExitCode.COMPILATION_ERROR, code, output)
+            assertTrue("Game.kt:3:14" in output, output)
+            assertTrue("3 +     val fishNum by computed { 1 }" in output, output)
+        }
+    }
+
+    @Test
+    fun `one missing runtime build produces one compatibility error without a field error cascade`() {
+        compileConsumer(
+            "class Enemy : Node<Enemy>() { var first = 1; var second = 2; var third = 3 }",
+            apiSource = "package io.canopy.engine.core.nodes; abstract class Node<N : Node<N>>"
+        ) { code, output ->
+            assertEquals(ExitCode.COMPILATION_ERROR, code, output)
+            assertEquals(1, Regex("\\[CANOPY_NODE_PROPERTY_ABI]").findAll(output).count(), output)
+            assertTrue("Engine and compiler builds are incompatible" in output, output)
+            assertTrue("Publish the engine and compiler from the same checkout" in output, output)
+            assertTrue("CANOPY_UNMANAGED_NODE_STATE" !in output, output)
+        }
+    }
+
+    @Test
+    fun `consumer typed dependencies require delegation instead of storing descriptors`() {
         // Arrange / Act / Assert
         compileConsumer(
             """
@@ -207,11 +320,14 @@ class CanopyCompilerTests {
             import io.canopy.engine.core.queries.child
             class Enemy : Node<Enemy>() { val query = child<Enemy>() }
             """.trimIndent()
-        ) { code, output -> assertEquals(ExitCode.OK, code, output) }
+        ) { code, output ->
+            assertEquals(ExitCode.COMPILATION_ERROR, code, output)
+            assertTrue("CANOPY_PROPERTY_DELEGATION" in output, output)
+        }
     }
 
     @Test
-    fun `global delegates compile in node and ordinary scopes alongside stored descriptors`() {
+    fun `global delegates compile in all supported scopes and reject accidental descriptor storage`() {
         // Arrange / Act / Assert
         compileConsumer(
             """
@@ -232,7 +348,10 @@ class CanopyCompilerTests {
             import io.canopy.engine.core.queries.manager
             class Enemy : Node<Enemy>() { val descriptor = manager<Any>() }
             """.trimIndent()
-        ) { code, output -> assertEquals(ExitCode.OK, code, output) }
+        ) { code, output ->
+            assertEquals(ExitCode.COMPILATION_ERROR, code, output)
+            assertTrue("CANOPY_PROPERTY_DELEGATION" in output, output)
+        }
     }
 
     @Test
@@ -254,7 +373,7 @@ class CanopyCompilerTests {
     }
 
     @Test
-    fun `consumer asset delegates and automatic descriptors compile while non asset types fail`() {
+    fun `consumer assets require delegation and reject non asset types`() {
         // Arrange / Act / Assert
         compileConsumer(
             """
@@ -269,7 +388,10 @@ class CanopyCompilerTests {
             class Rules : CanopyAsset { override fun close() = Unit }
             class Level : Node<Level>() { val rules = asset<Rules>("rules") }
             """.trimIndent()
-        ) { code, output -> assertEquals(ExitCode.OK, code, output) }
+        ) { code, output ->
+            assertEquals(ExitCode.COMPILATION_ERROR, code, output)
+            assertTrue("CANOPY_PROPERTY_DELEGATION" in output, output)
+        }
         compileConsumer(
             """
             import io.canopy.engine.data.assets.*
@@ -506,6 +628,83 @@ class CanopyCompilerTests {
         }
     }
 
+    private fun compileApi(directory: java.io.File, apiSource: String): java.io.File {
+        val apiFile = directory.resolve("Api.kt").apply { writeText(apiSource) }
+        val apiOutput = directory.resolve("api")
+        val bytes = ByteArrayOutputStream()
+        val compiler = K2JVMCompiler()
+        val common = arrayOf("-no-stdlib", "-no-reflect", "-classpath", standardLibrary)
+        val queryFile = directory.resolve("Queries.kt").apply {
+            writeText(
+                """
+                package io.canopy.engine.core.queries
+                import kotlin.reflect.KProperty
+                import io.canopy.engine.core.nodes.Node
+                sealed class Dependency<T>
+                class NodeDependency<T> : Dependency<T>() {
+                    operator fun getValue(owner: Node<*>, property: KProperty<*>): T = TODO()
+                }
+                class GlobalDependency<T> : Dependency<T>() {
+                    operator fun getValue(owner: Any?, property: KProperty<*>): T = TODO()
+                }
+                inline fun <reified T : Any> manager(): GlobalDependency<T> = GlobalDependency()
+                inline fun <reified T : Any> managerOrNull(): GlobalDependency<T?> = GlobalDependency()
+                inline fun <reified T : Node<*>> child(): NodeDependency<T> = NodeDependency()
+                """.trimIndent()
+            )
+        }
+        val assetFile = directory.resolve("Assets.kt").apply {
+            writeText(
+                """
+                package io.canopy.engine.data.assets
+                import kotlin.reflect.KProperty
+                import io.canopy.engine.core.nodes.Node
+                interface CanopyAsset : AutoCloseable
+                class AssetDelegate<T : CanopyAsset> {
+                    operator fun getValue(owner: Node<*>, property: KProperty<*>): T = TODO()
+                }
+                inline fun <reified T : CanopyAsset> asset(path: String): AssetDelegate<T> = AssetDelegate()
+                """.trimIndent()
+            )
+        }
+        val reactiveFile = directory.resolve("Reactive.kt").apply {
+            writeText(
+                """
+                package io.canopy.engine.core.flows.events
+                import kotlin.reflect.KProperty
+                import io.canopy.engine.core.nodes.Node
+                class Signal<T>(var value: T) {
+                    operator fun provideDelegate(owner: Node<*>, property: KProperty<*>) = SignalProperty(this)
+                    operator fun invoke(): T = value
+                }
+                class SignalProperty<T>(private val source: Signal<T>) {
+                    operator fun getValue(owner: Node<*>, property: KProperty<*>): T = source.value
+                    operator fun setValue(owner: Node<*>, property: KProperty<*>, value: T) { source.value = value }
+                }
+                class Computed<T>(val block: () -> T) {
+                    operator fun provideDelegate(owner: Node<*>, property: KProperty<*>) = ComputedProperty(this)
+                }
+                class ComputedProperty<T>(private val source: Computed<T>) {
+                    operator fun getValue(owner: Node<*>, property: KProperty<*>): T = source.block()
+                }
+                fun <T> signal(initial: T) = Signal(initial)
+                """.trimIndent()
+            )
+        }
+        val apiCode = compiler.exec(
+            PrintStream(bytes),
+            *common,
+            "-d",
+            apiOutput.path,
+            apiFile.path,
+            queryFile.path,
+            assetFile.path,
+            reactiveFile.path
+        )
+        assertEquals(ExitCode.OK, apiCode, bytes.toString())
+        return apiOutput
+    }
+
     private fun compileConsumer(
         source: String,
         additionalPlugin: String? = null,
@@ -516,62 +715,18 @@ class CanopyCompilerTests {
     ) {
         val directory = Files.createTempDirectory("canopy-consumer-compiler").toFile()
         try {
-            val apiFile = directory.resolve("Api.kt").apply { writeText(apiSource) }
-            val apiOutput = directory.resolve("api")
-            val standardLibrary = java.io.File(
-                kotlin.Unit::class.java.protectionDomain.codeSource.location.toURI()
-            ).path
+            val apiOutput = if (apiSource == api) {
+                defaultApiOutput ?: compileApi(fixtureDirectory, apiSource).also { defaultApiOutput = it }
+            } else {
+                compileApi(directory, apiSource)
+            }
             val bytes = ByteArrayOutputStream()
             val compiler = K2JVMCompiler()
-            val common = arrayOf("-no-stdlib", "-no-reflect", "-classpath", standardLibrary)
-            val queryFile = directory.resolve("Queries.kt").apply {
-                writeText(
-                    """
-                    package io.canopy.engine.core.queries
-                    import kotlin.reflect.KProperty
-                    import io.canopy.engine.core.nodes.Node
-                    sealed class Dependency<T>
-                    class NodeDependency<T> : Dependency<T>() {
-                        operator fun getValue(owner: Node<*>, property: KProperty<*>): T = TODO()
-                    }
-                    class GlobalDependency<T> : Dependency<T>() {
-                        operator fun getValue(owner: Any?, property: KProperty<*>): T = TODO()
-                    }
-                    inline fun <reified T : Any> manager(): GlobalDependency<T> = GlobalDependency()
-                    inline fun <reified T : Any> managerOrNull(): GlobalDependency<T?> = GlobalDependency()
-                    inline fun <reified T : Node<*>> child(): NodeDependency<T> = NodeDependency()
-                    """.trimIndent()
-                )
-            }
-            val assetFile = directory.resolve("Assets.kt").apply {
-                writeText(
-                    """
-                    package io.canopy.engine.data.assets
-                    import kotlin.reflect.KProperty
-                    import io.canopy.engine.core.nodes.Node
-                    interface CanopyAsset : AutoCloseable
-                    class AssetDelegate<T : CanopyAsset> {
-                        operator fun getValue(owner: Node<*>, property: KProperty<*>): T = TODO()
-                    }
-                    inline fun <reified T : CanopyAsset> asset(path: String): AssetDelegate<T> = AssetDelegate()
-                    """.trimIndent()
-                )
-            }
-            val apiCode = compiler.exec(
-                PrintStream(bytes),
-                *common,
-                "-d",
-                apiOutput.path,
-                apiFile.path,
-                queryFile.path,
-                assetFile.path
-            )
-            assertEquals(ExitCode.OK, apiCode, bytes.toString())
-            bytes.reset()
             val game = directory.resolve("Game.kt").apply {
                 writeText("import io.canopy.engine.core.nodes.*\n" + source)
             }
             val arguments = arrayOf(
+                "-Xverify-ir=error",
                 "-no-stdlib",
                 "-no-reflect",
                 "-classpath",
@@ -588,6 +743,7 @@ class CanopyCompilerTests {
                 // Isolate plugin loading from the test worker, which already loads our main classes.
                 val executable = if (System.getProperty("os.name").startsWith("Windows")) "java.exe" else "java"
                 val java = java.io.File(System.getProperty("java.home"), "bin/$executable").path
+                val output = directory.resolve("compiler-output.txt")
                 val process = ProcessBuilder(
                     listOf(
                         java,
@@ -595,10 +751,17 @@ class CanopyCompilerTests {
                         System.getProperty("canopy.compiler.runtime"),
                         "org.jetbrains.kotlin.cli.jvm.K2JVMCompiler"
                     ) + arguments
-                ).redirectErrorStream(true).start()
-                process.inputStream.use { it.copyTo(bytes) }
-                val result = process.waitFor()
-                ExitCode.entries.first { it.code == result }
+                ).redirectErrorStream(true).redirectOutput(output).start()
+                try {
+                    assertTrue(process.waitFor(60, TimeUnit.SECONDS), "Compiler provider process timed out")
+                    bytes.write(output.readBytes())
+                    ExitCode.entries.first { it.code == process.exitValue() }
+                } finally {
+                    if (process.isAlive) {
+                        process.destroyForcibly()
+                        assertTrue(process.waitFor(5, TimeUnit.SECONDS), "Compiler process did not stop")
+                    }
+                }
             }
             assertResult(code, bytes.toString())
             if (code == ExitCode.OK) inspectOutput?.invoke(directory.resolve("game"), apiOutput)

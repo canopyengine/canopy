@@ -19,13 +19,15 @@ the compiler-specific capability when resolving the compiler dependency.
 
 ## Compilation pipeline
 
-The registrar installs four ordered Kotlin IR passes before JVM bytecode generation:
+One compilation-local pipeline runs these ordered stages before JVM bytecode generation:
 
-1. **Node storage:** supported instance properties become guarded NodeState slots.
-2. **Validation:** mandatory NodeState checks and rule providers inspect declarations.
-3. **UI expression capture:** supported declarative expressions become reevaluable
+1. **Source validation:** diagnose accidental non-delegated observable/reference properties and unsupported storage.
+2. **Node storage:** supported instance properties become guarded NodeState slots.
+3. **Stored-state validation:** mandatory NodeState checks and providers inspect immutable declaration facts.
+4. **Ownership:** infer the listening/creating Node for implicit Canopy operations.
+5. **UI expression capture:** supported declarative expressions become reevaluable
    bindings and structural regions.
-4. **Construction protection:** supported Node constructor calls receive synchronous
+6. **Construction protection:** supported Node constructor calls receive synchronous
    rollback boundaries.
 
 The plugin generates calls to runtime helpers; it does not implement the engine loop
@@ -49,17 +51,38 @@ explicit binding/structural APIs where appropriate. Refer to the
 [shared UI guide](https://github.com/canopyengine/canopy-docs/blob/main/markdown/manuals/concepts/app/declarative-ui.md)
 for supported syntax and extension contracts.
 
+## Diagnostic presentation
+
+Canopy reports one structured compiler error per problem, retaining Kotlin's canonical
+source location for IDE navigation. The message contains a short title, a bounded source
+excerpt, a caret label and concrete help. Safe suggestions show `-`/`+` source lines.
+Compatibility failures produce one build-level error rather than repeated field errors.
+Existing diagnostic IDs and the legacy rule-provider `report` API remain available.
+
+Colors use standard ANSI terminal colors; they never determine meaning on their own.
+For Gradle, `--console=rich` enables automatic diagnostic colors. `--console=plain`,
+`NO_COLOR` and recognized IDE builds keep Canopy messages uncolored. CI stays plain
+in automatic mode. `-Pcanopy.diagnostics.color=auto|always|never` controls the preference;
+plain-console, IDE and NO_COLOR safeguards take priority. Automatic mode is conservative
+when Gradle has not confirmed rich-console output. Kotlin and Gradle retain their own
+prefixes, task summaries and native diagnostics.
+
+The formatter has no compiler/Gradle dependencies and is compiled independently into
+each host artifact from `src/shared/kotlin`. No renderer prints a second copy beside
+the compiler message. Source text is cached only for the current compilation and mapped
+to Kotlin's normalized offsets, including CRLF files. Missing or synthetic source text
+falls back to the structured location and help. This does not add live IDE inspections.
+
 ## Consumer setup
 
 Apply the plugin to every Kotlin game module declaring custom nodes.
-The example uses this source's proposed alpha.2 version; publish it locally until
-it is available on Central. For the published alpha.1 runtime, use the matching
-alpha.1 plugin instead.
+The example uses the checked-in source version; publish matching artifacts locally
+until that version is available from your configured repository.
 
 ```kotlin
 plugins {
     kotlin("jvm") version "2.4.10"
-    id("io.github.canopyengine.compiler") version "0.1.0-alpha.2"
+    id("io.github.canopyengine.compiler") version "0.1.0-dev4"
 }
 ```
 
@@ -78,7 +101,7 @@ Automatic storage needs no annotation and applies to direct and indirect custom
 ```kotlin
 class Enemy(name: String, val initialHealth: Int = 100) : Node<Enemy>(name) {
     var health = initialHealth
-    val status = signal(this, "idle")
+    var status by signal("idle")
     val alive get() = health > 0
 }
 ```
@@ -153,42 +176,88 @@ Test-only publication writes into the module's build directory, not Maven Local.
 
 ## Adding a rule
 
-Implement `CanopyCompilerRule` with a public no-argument constructor and a unique
-`id`. `check` receives every source declaration, including classes, properties and functions. Use
-a declaration type check and `context.isNodeSubclass` when a rule applies only to custom nodes, and
-`context.report(id, declaration, explanation)` for source-located errors. The shared
-context caches Node symbol resolution for the compilation. The internal storage transformation runs before mandatory checks and providers. Rules validate IR;
-they must not transform it or retain compilation objects between builds.
+Use `io.canopy.tooling.compiler.rules`. A rule declares its identity, validation phase,
+target and diagnostics. A provider supplies rules; it does not install compiler passes.
+For example, a studio can reserve a class name without receiving mutable compiler IR:
 
 ```kotlin
-/** Checks a reserved name on custom node classes. */
-class NamingRule : CanopyCompilerRule {
-    override val id = "CANOPY_RESERVED_NODE_NAME"
+class ReservedNameRule : ClassRule {
+    override val id = "studio.naming.reserved"
+    override val phase = ValidationPhase.Source
+    private val reserved = DiagnosticSpec("STUDIO_RESERVED_NAME", DiagnosticSeverity.Warning)
+    override val diagnostics = setOf(reserved)
 
-    override fun check(declaration: IrDeclaration, context: CanopyRuleContext) {
-        if (declaration is IrClass && context.isNodeSubclass(declaration) && declaration.name.asString() == "Reserved") {
-            context.report(id, declaration, "Choose a different node class name")
+    override fun check(declaration: ClassInfo, context: RuleContext) {
+        if (declaration.isNodeSubclass && declaration.name == "Reserved") {
+            context.report(reserved, declaration.span,
+                "Choose a different Node name", help = "Use a name describing its role in the game.")
         }
+    }
+}
+
+class StudioRules : RuleProvider {
+    override val id = "studio.rules"
+    override fun rules() = listOf(ReservedNameRule())
+}
+```
+
+Build the provider with the pinned Kotlin version and a compiler-only API dependency:
+
+```kotlin
+dependencies {
+    compileOnly("io.github.canopyengine:canopy-compiler:0.1.0-dev4") {
+        capabilities { requireCapability("io.github.canopyengine:canopy-compiler-checks") }
     }
 }
 ```
 
-Add the implementation's fully qualified name, one per line, to
-`src/compiler/resources/META-INF/services/io.canopy.tooling.compiler.CanopyCompilerRule`.
-The registrar discovers these providers automatically. Providers must be visible
-to the Canopy compiler plugin classloader. Registering
-additional source rules in this module requires only their implementation and the
-service entry; separately loaded Kotlin plugin jars do not automatically share
-rule providers.
-Duplicate IDs fail plugin initialization, rather than silently replacing a rule.
-`NodeStateRule` is always installed and cannot be disabled or replaced by providers.
-There is no application opt-out from the cleanup storage guarantee.
+The capability selects the compiler host variant, including in composite builds.
+Do not apply Canopy's game compiler plugin to the provider itself. Add `StudioRules`' fully qualified name to
+`src/main/resources/META-INF/services/io.canopy.tooling.compiler.rules.RuleProvider`.
+The provider needs a public no-argument constructor. Install its independent JAR in the game:
 
-The SPI depends on Kotlin compiler IR APIs and must be built against the pinned
-Kotlin version; it is not a version-independent binary API. Consumer compilation
-fixtures verify supported automatic properties, unsupported declarations, payload-free JVM classes,
-managed delegates and an independent provider
-running alongside the mandatory rule.
+```kotlin
+dependencies {
+    canopyCompilerRules("com.example:studio-canopy-rules:1.0.0")
+}
+```
+
+`canopyCompilerRules` feeds compiler plugin classpaths, including test compilations;
+it never adds the provider to the game's runtime dependencies. A file dependency works too:
+`canopyCompilerRules(files("studio-rules.jar"))`. No registrar or traversal edits are needed.
+The existing compiler artifact supplies the rule API; there is no extra SDK module.
+
+`PropertyRule`, `ClassRule` and `DeclarationRule` select the target. Implement exactly
+one per rule. `Source` runs before storage rewriting; `StoredState` runs afterwards.
+Class storage/capture observations are populated in `StoredState` only. Facts and
+source spans contain no IR or compiler services and must not be retained between
+compilations. Collections supplied by the compiler are immutable. Rules can report
+only their declared diagnostics at source spans from the current compilation.
+
+Registration checks provider API revisions, duplicate identities, supported targets
+and diagnostic ownership before reading declarations. Diagnostic severity is separate
+from the rule ID. Providers cannot redefine mandatory Canopy diagnostics or downgrade
+them to warnings. Metadata is copied once, and rules run in deterministic ID order
+inside each phase. Every applicable rule completes that phase; errors then prevent
+dependent transformations, while warnings allow them. A failed provider reports a
+build error once per phase without preventing independent checks in that phase.
+
+Storage, ownership, UI capture and construction remain trusted, explicitly ordered
+transformations. Their existing runtime ABI checks stay conditional on actual use.
+Checks that require transformation-local analysis remain beside that transformation;
+there is no general transformation plugin SDK or automatic dependency graph.
+The formatter presents diagnostics; it does not decide which validation phases run.
+Tests cover registration conflicts, error/warning behavior, real independent JAR loading,
+mandatory checks alongside providers, and the existing transformation interactions.
+Node and UI compilation fixtures enable Kotlin's `-Xverify-ir=error` to catch invalid
+IR links after the pipeline, alongside executing generated code.
+
+The earlier `CanopyCompilerRule` service remains a **trusted compatibility API**, running
+in `StoredState`. It exposes Kotlin IR and must not modify it. New providers should use
+the read-only API above. Neither API is a security sandbox for arbitrary JVM code.
+Rule API revision 1 is explicitly checked, but providers should still target the same
+Canopy release and pinned Kotlin version; no cross-release binary compatibility is promised.
+Compiler validation cannot prove that arbitrary third-party semantic policies agree.
 
 ## Maven namespace migration
 

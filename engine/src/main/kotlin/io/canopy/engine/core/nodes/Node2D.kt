@@ -9,8 +9,8 @@ import io.canopy.engine.math.Vector2
  * [globalPosition], [globalScale], and [globalRotation] properties combine
  * those local values with the corresponding values of 2D parents.
  *
- * [Vector2] values are immutable, so transform components are changed by
- * assigning a new vector:
+ * Local [Vector2] components can be edited or replaced. Arithmetic returns
+ * new vectors; assign the result when moving a node:
  * ```
  * position = Vector2(12f, 8f)
  * ```
@@ -34,7 +34,7 @@ abstract class Node2D<N : Node2D<N>> protected constructor(name: String, block: 
         }
 
     /**
-     * Scale in world space (local scale + parent global scale).
+     * Scale in world space (local scale multiplied by parent global scale).
      */
     val globalScale: Vector2
         get() {
@@ -63,7 +63,7 @@ abstract class Node2D<N : Node2D<N>> protected constructor(name: String, block: 
     /**
      * Local scale in 2D space.
      */
-    var scale: Vector2 by nodeProperty(Vector2(1f, 1f))
+    open var scale: Vector2 by nodeProperty(Vector2(1f, 1f))
 
     /**
      * Local rotation in radians.

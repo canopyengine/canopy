@@ -2,8 +2,11 @@ package io.canopy.engine.core.nodes
 
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
+import kotlin.test.assertSame
 import kotlin.test.assertTrue
+import io.canopy.engine.core.exceptions.NodeCallbackException
 import io.canopy.engine.core.managers.ManagersRegistry
 import io.canopy.engine.core.managers.SceneManager
 import io.canopy.engine.core.nodes.types.empty.EmptyNode
@@ -170,6 +173,27 @@ class NodePauseTests {
 
         // Assert
         assertEquals(listOf("before:0.1", "after:0.1"), calls)
+    }
+
+    @Test
+    fun `physics failure restores the live pause state after a callback changes it`() {
+        // Arrange
+        val failure = IllegalStateException("physics")
+        scenes.currScene = EmptyNode("menu") {
+            processMode = ProcessMode.WhenPaused
+            behavior(onPhysicsUpdate = {
+                paused = false
+                throw failure
+            })
+        }
+        paused = true
+
+        // Act
+        val thrown = assertFailsWith<NodeCallbackException> { scenes.onPhysicsUpdate(0.1f) }
+
+        // Assert
+        assertSame(failure, thrown.cause)
+        assertFalse(scenes.isPaused)
     }
 
     @Test

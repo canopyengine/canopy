@@ -1,7 +1,7 @@
 package io.canopy.engine.data.assets
 
 import kotlin.reflect.KProperty
-import io.canopy.engine.core.managers.manager
+import io.canopy.engine.core.managers.getManager
 import io.canopy.engine.core.nodes.Behavior
 import io.canopy.engine.core.nodes.Node
 
@@ -60,4 +60,4 @@ fun Behavior<*>.resources(block: ResourcePreloader.() -> Unit) {
 private data class ResourceSlotKey(val key: AssetKey<*>)
 
 private fun <T : CanopyAsset> ownedAsset(owner: Node<*>, key: AssetKey<T>): T =
-    owner.lifetimeSlot(ResourceSlotKey(key)) { manager<ResourceManager>().acquire(key) }.value
+    owner.lifetimeSlot(ResourceSlotKey(key)) { getManager<ResourceManager>().acquire(key) }.value

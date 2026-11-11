@@ -7,8 +7,12 @@ import io.canopy.engine.core.reactive.event
 import io.canopy.engine.physics.nodes.body.PhysicsBody2D
 import io.canopy.engine.physics.nodes.shape.PhysicsShape2D
 
-/** Creates a collision fixture on its parent physics body and emits body contact events. */
-class Collider2D(
+/**
+ * Extensible node that creates a collision fixture on its parent physics body and emits body contact events.
+ * @param N Concrete node type exposed to its initialization block.
+ * @param block Runs once after nodeInit, before entry callbacks; not replayed on reentry.
+ */
+open class Collider2D<N : Collider2D<N>>(
     name: String,
     // Specific props
     var shape: PhysicsShape2D,
@@ -18,16 +22,16 @@ class Collider2D(
     var density: Float = 0.0f,
     val filter: Filter = Filter(),
     // DSL
-    block: Node<*>.() -> Unit = {},
-) : Node<Collider2D>(
+    block: N.() -> Unit = {},
+) : Node<N>(
     name,
     block
 ) {
     private var fixture: Fixture? = null
 
     // Signals
-    val bodyEntered = event<Collider2D>()
-    val bodyExited = event<Collider2D>()
+    val bodyEntered = event<Collider2D<*>>()
+    val bodyExited = event<Collider2D<*>>()
 
     override fun nodeEnterTree() {
         val parentBody = (parent as? PhysicsBody2D)?.body ?: return
