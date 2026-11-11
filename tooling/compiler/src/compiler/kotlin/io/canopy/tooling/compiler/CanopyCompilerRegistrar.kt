@@ -1,4 +1,7 @@
-@file:OptIn(org.jetbrains.kotlin.compiler.plugin.ExperimentalCompilerApi::class)
+@file:OptIn(
+    org.jetbrains.kotlin.compiler.plugin.ExperimentalCompilerApi::class,
+    org.jetbrains.kotlin.config.MessageCollectorAccess::class
+)
 
 package io.canopy.tooling.compiler
 
@@ -21,6 +24,7 @@ class CanopyCompilerRegistrar : CompilerPluginRegistrar() {
     override val supportsK2: Boolean = true
 
     override fun ExtensionStorage.registerExtensions(configuration: CompilerConfiguration) {
+        // The rule SPI deliberately shares Kotlin's collector to preserve source locations and error state.
         val messages = configuration.get(CommonConfigurationKeys.MESSAGE_COLLECTOR_KEY, MessageCollector.NONE)
         val rules = listOf(NodeStateRule()) +
             ServiceLoader.load(

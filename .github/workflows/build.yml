@@ -31,6 +31,9 @@ jobs:
       - name: Make Gradle wrapper executable
         run: chmod +x ./gradlew
 
+      - name: Verify publication helpers offline
+        run: python3 -m unittest discover -s tooling/central -p 'test_*.py'
+
       - name: Build with Gradle Wrapper
         run: ./gradlew test ktlintCheck build coverageReport --no-daemon --stacktrace
 
