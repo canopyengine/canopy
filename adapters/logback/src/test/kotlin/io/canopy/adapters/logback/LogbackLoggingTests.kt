@@ -478,6 +478,10 @@ class LogbackLoggingTests {
         app.exit()
 
         // Assert
+        assertTrue(
+            host.list.none { it.loggerName.startsWith("io.canopy.engine.") },
+            "Engine lifecycle messages leaked to host output: ${host.list}"
+        )
         assertTrue("application-final-message" in directory.resolve("app/app.log").readText())
         assertTrue("session.end" in directory.resolve("app/engine.log").readText())
         assertEquals(before, appenders())

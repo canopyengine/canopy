@@ -244,6 +244,7 @@ object ManagersRegistry {
      * The first failure is rethrown with later distinct failures suppressed. Nested shutdown is harmless;
      * registration, removal and other lifecycle dispatch are rejected until shutdown completes.
      * Lookup remains available during callbacks so managers can finish dependent cleanup.
+     * An empty registry is cleared silently; no teardown callbacks or lifecycle log events are needed.
      */
     fun exit() {
         check(scope === standalone) { "Stop the running App before exiting standalone managers" }
@@ -253,6 +254,10 @@ object ManagersRegistry {
     private fun exitScope() {
         if (exiting) return
         checkCanExit()
+        if (managers.isEmpty()) {
+            invalidateCache()
+            return
+        }
         exiting = true
         val failures = CleanupFailures()
         try {
