@@ -6,6 +6,7 @@ import org.gradle.api.component.SoftwareComponentFactory
 plugins {
     alias(libs.plugins.kotlin.jvm)
     alias(libs.plugins.ktlint)
+    alias(libs.plugins.dokka)
     `java-gradle-plugin`
     `maven-publish`
     jacoco
@@ -14,6 +15,9 @@ val canopyProperties = Properties().apply { file("../../gradle.properties").inpu
 group = "io.github.canopyengine"
 version = canopyProperties.getProperty("canopyVersion").trim()
 kotlin { jvmToolchain(17) }
+java {
+    withSourcesJar()
+}
 
 // Compiler and Gradle entry points run in separate hosts; keep their classes and dependencies isolated.
 val compiler = sourceSets.create("compiler")
@@ -65,6 +69,17 @@ val compilerJar = tasks.register<Jar>("compilerJar") {
     archiveBaseName.set("canopy-compiler")
     from(compiler.output)
 }
+val compilerSourcesJar = tasks.register<Jar>("compilerSourcesJar") {
+    archiveBaseName.set("canopy-compiler")
+    archiveClassifier.set("sources")
+    from(compiler.allSource)
+}
+val compilerJavadocJar = tasks.register<Jar>("compilerJavadocJar") {
+    archiveBaseName.set("canopy-compiler")
+    archiveClassifier.set("javadoc")
+    dependsOn("dokkaGeneratePublicationHtml")
+    from(layout.buildDirectory.dir("dokka/html"))
+}
 tasks.assemble { dependsOn(compilerJar) }
 // Composite builds select this capability instead of placing the Gradle host jar on the compiler classpath.
 val compilerElements = configurations.create("compilerElements") {
@@ -86,6 +101,11 @@ abstract class CompilerComponentFactory @Inject constructor(val factory: Softwar
 val compilerComponent = objects.newInstance<CompilerComponentFactory>().factory.adhoc("compiler")
 components.add(compilerComponent)
 compilerComponent.addVariantsFromConfiguration(compilerElements) { mapToMavenScope("runtime") }
+val gradleJavadocJar = tasks.register<Jar>("gradleJavadocJar") {
+    archiveClassifier.set("javadoc")
+    dependsOn("dokkaGeneratePublicationHtml")
+    from(layout.buildDirectory.dir("dokka/html"))
+}
 publishing {
     repositories {
         mavenLocal()
@@ -98,9 +118,14 @@ publishing {
         create<MavenPublication>("compiler") {
             artifactId = "canopy-compiler"
             from(compilerComponent)
+            artifact(compilerSourcesJar)
+            artifact(compilerJavadocJar)
         }
         withType<MavenPublication>().configureEach {
-            if (name == "pluginMaven") artifactId = "canopy-compiler-gradle"
+            if (name == "pluginMaven") {
+                artifactId = "canopy-compiler-gradle"
+                artifact(gradleJavadocJar)
+            }
         }
     }
 }
@@ -116,5 +141,19 @@ tasks.test {
     systemProperty("canopy.gradle.jar", tasks.jar.get().archiveFile.get().asFile.absolutePath)
     doFirst {
         systemProperty("canopy.compiler.runtime", classpath.filter { it.extension == "jar" }.asPath)
+    }
+}
+
+apply(from = file("../../gradle/central-publication.gradle.kts"))
+
+// Include the compiler-host API as well as the Gradle-host entry point in published API documentation.
+dokka {
+    dokkaSourceSets.configureEach {
+        enableJdkDocumentationLink.set(false)
+        enableKotlinStdLibDocumentationLink.set(false)
+    }
+    dokkaSourceSets.named("main") {
+        sourceRoots.from(file("src/compiler/kotlin"))
+        classpath.from(compiler.compileClasspath)
     }
 }
