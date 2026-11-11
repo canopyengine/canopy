@@ -28,11 +28,11 @@ sealed class InputEvent(open val action: String, open val state: InputState) {
 
     fun isActionJustReleased(action: String) = this.action == action && state == InputState.JustReleased
 
-    fun isAnyActionPressed() = state == InputState.Pressed
+    fun isAnyActionPressed() = isPressedEvent()
 
     fun isAnyActionJustPressed() = state == InputState.JustPressed
 
-    fun isAnyActionReleased() = state == InputState.Released
+    fun isAnyActionReleased() = isReleasedEvent()
 
     fun isAnyActionJustReleased() = state == InputState.JustReleased
 
