@@ -19,13 +19,15 @@ the compiler-specific capability when resolving the compiler dependency.
 
 ## Compilation pipeline
 
-The registrar installs four ordered Kotlin IR passes before JVM bytecode generation:
+The registrar installs six ordered Kotlin IR passes before JVM bytecode generation:
 
-1. **Node storage:** supported instance properties become guarded NodeState slots.
-2. **Validation:** mandatory NodeState checks and rule providers inspect declarations.
-3. **UI expression capture:** supported declarative expressions become reevaluable
+1. **Declarations:** diagnose accidental non-delegated observable/reference properties.
+2. **Node storage:** supported instance properties become guarded NodeState slots.
+3. **Validation:** mandatory NodeState checks and rule providers inspect declarations.
+4. **Ownership:** infer the listening/creating Node for implicit Canopy operations.
+5. **UI expression capture:** supported declarative expressions become reevaluable
    bindings and structural regions.
-4. **Construction protection:** supported Node constructor calls receive synchronous
+6. **Construction protection:** supported Node constructor calls receive synchronous
    rollback boundaries.
 
 The plugin generates calls to runtime helpers; it does not implement the engine loop
@@ -49,17 +51,38 @@ explicit binding/structural APIs where appropriate. Refer to the
 [shared UI guide](https://github.com/canopyengine/canopy-docs/blob/main/markdown/manuals/concepts/app/declarative-ui.md)
 for supported syntax and extension contracts.
 
+## Diagnostic presentation
+
+Canopy reports one structured compiler error per problem, retaining Kotlin's canonical
+source location for IDE navigation. The message contains a short title, a bounded source
+excerpt, a caret label and concrete help. Safe suggestions show `-`/`+` source lines.
+Compatibility failures produce one build-level error rather than repeated field errors.
+Existing diagnostic IDs and the rule-provider `report` API remain available.
+
+Colors use standard ANSI terminal colors; they never determine meaning on their own.
+For Gradle, `--console=rich` enables automatic diagnostic colors. `--console=plain`,
+`NO_COLOR` and recognized IDE builds keep Canopy messages uncolored. CI stays plain
+in automatic mode. `-Pcanopy.diagnostics.color=auto|always|never` controls the preference;
+plain-console, IDE and NO_COLOR safeguards take priority. Automatic mode is conservative
+when Gradle has not confirmed rich-console output. Kotlin and Gradle retain their own
+prefixes, task summaries and native diagnostics.
+
+The formatter has no compiler/Gradle dependencies and is compiled independently into
+each host artifact from `src/shared/kotlin`. No renderer prints a second copy beside
+the compiler message. Source text is cached only for the current compilation and mapped
+to Kotlin's normalized offsets, including CRLF files. Missing or synthetic source text
+falls back to the structured location and help. This does not add live IDE inspections.
+
 ## Consumer setup
 
 Apply the plugin to every Kotlin game module declaring custom nodes.
-The example uses this source's proposed alpha.2 version; publish it locally until
-it is available on Central. For the published alpha.1 runtime, use the matching
-alpha.1 plugin instead.
+The example uses the checked-in source version; publish matching artifacts locally
+until that version is available from your configured repository.
 
 ```kotlin
 plugins {
     kotlin("jvm") version "2.4.10"
-    id("io.github.canopyengine.compiler") version "0.1.0-alpha.2"
+    id("io.github.canopyengine.compiler") version "0.1.0-dev4"
 }
 ```
 
@@ -78,7 +101,7 @@ Automatic storage needs no annotation and applies to direct and indirect custom
 ```kotlin
 class Enemy(name: String, val initialHealth: Int = 100) : Node<Enemy>(name) {
     var health = initialHealth
-    val status = signal(this, "idle")
+    var status by signal("idle")
     val alive get() = health > 0
 }
 ```
