@@ -108,7 +108,7 @@ internal class NodeConstructionTransform(private val messages: MessageCollector)
                             "Suspension would leave a construction scope open."
                         },
                         help = help,
-                        length = (expression.endOffset - expression.startOffset).coerceIn(1, 80),
+                        length = (expression.endOffset - expression.startOffset).coerceAtLeast(1),
                         replacement = replacement
                     )
                 }

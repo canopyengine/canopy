@@ -74,6 +74,13 @@ jobs:
             }
           }
 
+      - name: Verify compiler diagnostic formatting and Gradle output on Windows
+        shell: pwsh
+        run: >-
+          .\gradlew.bat -p tooling/compiler test
+          --tests '*DiagnosticFormatTests' --tests '*ConsumerGradleTests'
+          --max-workers=2 --console=plain
+
   dependency-submission:
     name: Dependency submission
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'

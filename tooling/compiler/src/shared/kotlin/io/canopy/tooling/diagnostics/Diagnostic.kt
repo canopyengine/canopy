@@ -32,14 +32,15 @@ internal object DiagnosticFormat {
         val source = diagnostic.source
         if (source != null) {
             val rawStart = (source.column - 1).coerceIn(0, source.text.length)
-            val rawEnd = (rawStart + source.length.coerceAtLeast(1)).coerceAtMost(source.text.length)
+            val rawEnd = rawStart + source.length.coerceAtLeast(1).coerceAtMost(source.text.length - rawStart)
             val left = if (source.text.length <= 110) 0 else (rawStart - 35).coerceAtLeast(0)
             val right = (left + 110).coerceAtMost(source.text.length)
             val prefix = if (left > 0) "..." else ""
             val suffix = if (right < source.text.length) "..." else ""
-            val shown = prefix + expand(source.text.substring(left, right)) + suffix
-            val before = prefix + expand(source.text.substring(left, rawStart))
-            val underline = expand(source.text.substring(rawStart, rawEnd.coerceAtMost(right)))
+            val leftWidth = width(expand(source.text.substring(0, left)))
+            val before = prefix + expand(source.text.substring(left, rawStart), leftWidth)
+            val startWidth = leftWidth + width(before.removePrefix(prefix))
+            val underline = expand(source.text.substring(rawStart, rawEnd.coerceAtMost(right)), startWidth)
             val gutter = source.number.toString().length
             appendLine()
             append(styled("  --> ${clean(source.path)}:${source.number}:${source.column}", "34"))
@@ -47,12 +48,9 @@ internal object DiagnosticFormat {
             append(" ".repeat(gutter + 1)).append(styled("|", "34"))
             appendLine()
             append(source.number).append(styled(" | ", "34"))
-            if (color) {
-                append(before).append(styled(underline, severityColor))
-                append(expand(source.text.substring(rawEnd.coerceAtMost(right), right))).append(suffix)
-            } else {
-                append(shown)
-            }
+            append(before).append(styled(underline, severityColor))
+            append(expand(source.text.substring(rawEnd.coerceAtMost(right), right), startWidth + width(underline)))
+                .append(suffix)
             appendLine()
             append(" ".repeat(gutter + 1)).append(styled("| ", "34"))
             append(" ".repeat(width(before)))
@@ -70,7 +68,15 @@ internal object DiagnosticFormat {
             appendLine()
             append(styled("help", "36")).append(": ").append(clean(it))
         }
-        if (source != null && diagnostic.replacement != null) {
+        // A one-line preview must represent the entire edit. Keep help without inventing a partial correction.
+        if (source != null &&
+            diagnostic.replacement != null &&
+            source.column >= 1 &&
+            source.length >= 0 &&
+            source.column - 1 <= source.text.length &&
+            source.length <= source.text.length - (source.column - 1) &&
+            diagnostic.replacement.none { it == '\n' || it == '\r' }
+        ) {
             val start = (source.column - 1).coerceIn(0, source.text.length)
             val end = (start + source.length).coerceIn(start, source.text.length)
             val updated = source.text.replaceRange(start, end, diagnostic.replacement)
@@ -79,9 +85,10 @@ internal object DiagnosticFormat {
             val right = (left + 110).coerceAtMost(source.text.length)
             val prefix = if (left > 0) "..." else ""
             val suffix = if (right < source.text.length) "..." else ""
-            val oldLine = prefix + expand(source.text.substring(left, right)) + suffix
+            val leftWidth = width(expand(source.text.substring(0, left)))
+            val oldLine = prefix + expand(source.text.substring(left, right), leftWidth) + suffix
             val newRight = (right + diagnostic.replacement.length - (end - start)).coerceIn(left, updated.length)
-            val newLine = prefix + expand(updated.substring(left, newRight)) + suffix
+            val newLine = prefix + expand(updated.substring(left, newRight), leftWidth) + suffix
             append(styled("${source.number} - $oldLine", "31"))
             appendLine()
             append(styled("${source.number} + $newLine", "32"))
@@ -103,9 +110,12 @@ internal object DiagnosticFormat {
         }
     }
 
-    private fun expand(text: String): String = buildString {
+    private fun expand(text: String, initialWidth: Int = 0): String = buildString {
+        var column = initialWidth
         text.forEach { char ->
-            if (char == '\t') append(" ".repeat(4 - width(toString()) % 4)) else append(clean(char.toString()))
+            val expanded = if (char == '\t') " ".repeat(4 - column % 4) else clean(char.toString())
+            append(expanded)
+            column += width(expanded)
         }
     }
 

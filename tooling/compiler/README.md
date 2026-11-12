@@ -71,7 +71,13 @@ The formatter has no compiler/Gradle dependencies and is compiled independently 
 each host artifact from `src/shared/kotlin`. No renderer prints a second copy beside
 the compiler message. Source text is cached only for the current compilation and mapped
 to Kotlin's normalized offsets, including CRLF files. Missing or synthetic source text
-falls back to the structured location and help. This does not add live IDE inspections.
+falls back to the structured location and help. Tabs retain their source columns in both
+plain and colored excerpts. A change preview is shown only when the complete edit fits
+on the displayed source line; otherwise the explanation and help remain available.
+
+Checks run after Kotlin's frontend analysis. Kotlin may therefore report an ordinary
+type error before Canopy can explain the declaration. Source locations support navigation
+from build output; this does not add live IDE underlines or automatic quick fixes.
 
 ## Consumer setup
 
