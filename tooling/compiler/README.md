@@ -86,8 +86,7 @@ an App. A dependency on the engine does not install compiler support.
 
 The compiler routes `App.launch()` and `launchAsync()` calls to matching internal
 runtime startup entries. Unprocessed calls still compile as Kotlin, but fail with
-`CANOPY_COMPILER_REQUIRED` before reserving an App, opening a terminal or starting
-a host thread. The error gives setup and clean-rebuild instructions. A compiled
+`CANOPY_COMPILER_REQUIRED` before reserving an App or starting a platform host thread. The error gives setup and clean-rebuild instructions. A compiled
 engine dependency or an earlier successfully launched App cannot satisfy this check
 for an unprocessed startup call. Missing runtime entries instead produce the single
 build-time compatibility diagnostic `CANOPY_APP_ABI`.
