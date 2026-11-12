@@ -59,6 +59,12 @@ No fresh local Gradle, native terminal or site run is claimed. Verify Actions
 on the refreshed integration heads before starting the live baseline pass.
 Windows pointer/console and macOS GUI behavior still need physical checks.
 
+## Current feature and experience audit
+
+The [12 November feature/experience audit](feature-and-experience-audit.md) identifies
+remaining implementation, setup, learning and release gates against the newer
+integration baselines. Earlier verification tables above remain historical snapshots.
+
 ## Release workstreams
 
 | Work | Tracking | Current state and next action |

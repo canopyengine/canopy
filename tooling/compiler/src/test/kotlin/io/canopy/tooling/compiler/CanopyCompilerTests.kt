@@ -57,6 +57,74 @@ class CanopyCompilerTests {
         }
     """.trimIndent()
 
+    private val appApi = """
+        package io.canopy.engine.app
+        open class App {
+            var starts = 0
+            var received = emptyList<String>()
+            fun launch(vararg args: String): Unit = error("CANOPY_COMPILER_REQUIRED")
+            fun launchAsync(threadName: String = "canopy-app", vararg args: String): String =
+                error("CANOPY_COMPILER_REQUIRED")
+            fun compilerLaunch(vararg args: String) { starts++; received = args.toList() }
+            fun compilerLaunchAsync(threadName: String = "canopy-app", vararg args: String): String {
+                compilerLaunch(*args)
+                return threadName
+            }
+        }
+    """.trimIndent()
+
+    @Test
+    fun `processed startup preserves defaults varargs references and single receiver evaluation`() {
+        compileConsumer(
+            """
+            import io.canopy.engine.app.App
+            class Game : App()
+            fun verify(): Boolean {
+                val app = Game()
+                var evaluated = 0
+                fun receiver(): Game { evaluated++; return app }
+                receiver().launch("first")
+                val bound = app::launch
+                bound(arrayOf("second"))
+                val unbound = App::launch
+                unbound(app, arrayOf("third"))
+                val name = app.launchAsync(args = arrayOf("last"))
+                return evaluated == 1 && app.starts == 4 && app.received == listOf("last") && name == "canopy-app"
+            }
+            """.trimIndent(),
+            execute = { loader -> assertEquals(true, loader.loadClass("GameKt").getMethod("verify").invoke(null)) }
+        ) { code, output -> assertEquals(ExitCode.OK, code, output) }
+    }
+
+    @Test
+    fun `unprocessed startup still compiles but reports the missing compiler at execution`() {
+        compileConsumer(
+            """
+            import io.canopy.engine.app.App
+            fun verify(): Boolean = try {
+                App().launch()
+                false
+            } catch (failure: IllegalStateException) {
+                failure.message == "CANOPY_COMPILER_REQUIRED"
+            }
+            """.trimIndent(),
+            withPlugin = false,
+            execute = { loader -> assertEquals(true, loader.loadClass("GameKt").getMethod("verify").invoke(null)) }
+        ) { code, output -> assertEquals(ExitCode.OK, code, output) }
+    }
+
+    @Test
+    fun `old runtime without startup helpers receives one compatibility diagnostic`() {
+        compileConsumer(
+            "import io.canopy.engine.app.App; fun start(app: App) { app.launch(); app.launchAsync() }",
+            appApiSource = appApi.replace("compilerLaunch", "oldLaunch")
+        ) { code, output ->
+            assertEquals(ExitCode.COMPILATION_ERROR, code, output)
+            assertEquals(1, Regex("\\[CANOPY_APP_ABI]").findAll(output).count(), output)
+            assertTrue("Engine and compiler builds are incompatible" in output, output)
+        }
+    }
+
     @Test
     fun `consumer node state declarations fail with actionable diagnostic`() {
         listOf(
@@ -660,8 +728,9 @@ class CanopyCompilerTests {
         }
     }
 
-    private fun compileApi(directory: java.io.File, apiSource: String): java.io.File {
+    private fun compileApi(directory: java.io.File, apiSource: String, appApiSource: String): java.io.File {
         val apiFile = directory.resolve("Api.kt").apply { writeText(apiSource) }
+        val appFile = directory.resolve("App.kt").apply { writeText(appApiSource) }
         val apiOutput = directory.resolve("api")
         val bytes = ByteArrayOutputStream()
         val compiler = K2JVMCompiler()
@@ -729,6 +798,7 @@ class CanopyCompilerTests {
             "-d",
             apiOutput.path,
             apiFile.path,
+            appFile.path,
             queryFile.path,
             assetFile.path,
             reactiveFile.path
@@ -741,16 +811,18 @@ class CanopyCompilerTests {
         source: String,
         additionalPlugin: String? = null,
         apiSource: String = api,
+        appApiSource: String = appApi,
+        withPlugin: Boolean = true,
         inspectOutput: ((java.io.File, java.io.File) -> Unit)? = null,
         execute: ((ClassLoader) -> Unit)? = null,
         assertResult: (ExitCode, String) -> Unit,
     ) {
         val directory = Files.createTempDirectory("canopy-consumer-compiler").toFile()
         try {
-            val apiOutput = if (apiSource == api) {
-                defaultApiOutput ?: compileApi(fixtureDirectory, apiSource).also { defaultApiOutput = it }
+            val apiOutput = if (apiSource == api && appApiSource == appApi) {
+                defaultApiOutput ?: compileApi(fixtureDirectory, apiSource, appApiSource).also { defaultApiOutput = it }
             } else {
-                compileApi(directory, apiSource)
+                compileApi(directory, apiSource, appApiSource)
             }
             val bytes = ByteArrayOutputStream()
             val compiler = K2JVMCompiler()
@@ -770,7 +842,12 @@ class CanopyCompilerTests {
                 game.path
             )
             val code = if (additionalPlugin == null) {
-                compiler.exec(PrintStream(bytes), *arguments)
+                compiler.exec(
+                    PrintStream(bytes),
+                    *arguments.filter {
+                        withPlugin || !it.startsWith("-Xplugin=")
+                    }.toTypedArray()
+                )
             } else {
                 // Isolate plugin loading from the test worker, which already loads our main classes.
                 val executable = if (System.getProperty("os.name").startsWith("Windows")) "java.exe" else "java"

@@ -6,6 +6,7 @@ import java.util.concurrent.atomic.AtomicLong
 import java.util.concurrent.atomic.AtomicReference
 import io.canopy.engine.core.CanopyBuildInfo
 import io.canopy.engine.core.CleanupFailures
+import io.canopy.engine.core.exceptions.CompilerSetupException
 import io.canopy.engine.core.managers.ExecutionMode
 import io.canopy.engine.core.managers.InjectionManager
 import io.canopy.engine.core.managers.Manager
@@ -386,14 +387,34 @@ abstract class App<C : AppConfig> protected constructor() {
      * Launch
      * ============================================================ */
 
-    /** Launches the platform on the calling thread; blocking behavior depends on the backend. */
-    fun launch(vararg args: String) {
+    /**
+     * Launches the platform on the calling thread; blocking behavior depends on the backend.
+     * Requires the matching Canopy compiler plugin on the module containing this call.
+     * Unprocessed calls fail before host startup with compiler setup instructions.
+     */
+    @Suppress("UNUSED_PARAMETER")
+    fun launch(vararg args: String): Unit = throw CompilerSetupException()
+
+    /**
+     * Launches the platform on a non-daemon thread and returns lifecycle controls.
+     * Requires the matching Canopy compiler plugin on the module containing this call.
+     * Unprocessed calls fail synchronously, before creating a thread or reserving this App.
+     */
+    @Suppress("UNUSED_PARAMETER")
+    fun launchAsync(threadName: String = "canopy-app", vararg args: String): AppHandle = throw CompilerSetupException()
+
+    /** Compiler-only synchronous startup entry; callers use [launch]. */
+    @PublishedApi
+    @JvmSynthetic
+    internal fun compilerLaunch(vararg args: String) {
         reserveLaunch()
         launchHost(args)
     }
 
-    /** Launches the platform on a non-daemon thread and returns lifecycle controls. */
-    fun launchAsync(threadName: String = "canopy-app", vararg args: String): AppHandle {
+    /** Compiler-only asynchronous startup entry; callers use [launchAsync]. */
+    @PublishedApi
+    @JvmSynthetic
+    internal fun compilerLaunchAsync(threadName: String = "canopy-app", vararg args: String): AppHandle {
         reserveLaunch()
         val thread = Thread({
             try {

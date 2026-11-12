@@ -20,6 +20,7 @@ internal class CompilerPipeline(private val messages: DiagnosticMessages, privat
         validate(ValidationPhase.StoredState, moduleFragment, pluginContext)
         if (messages.errorCount > 0) return
         for (stage in listOf(
+            AppLaunchTransform(messages),
             NodeOwnershipTransform(messages),
             UiExpressionTransform(messages),
             NodeConstructionTransform(messages)
