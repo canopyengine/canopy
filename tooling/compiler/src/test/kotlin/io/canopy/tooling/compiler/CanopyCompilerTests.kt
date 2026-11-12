@@ -78,9 +78,29 @@ class CanopyCompilerTests {
                     "CANOPY_UNMANAGED_NODE_STATE" in output || "CANOPY_UNSUPPORTED_NODE_PROPERTY" in output,
                     output
                 )
-                assertTrue("nodeProperty" in output, output)
+                assertTrue("help:" in output, output)
                 assertTrue(Regex("Game\\.kt:[0-9]+:[0-9]+").containsMatchIn(output), output)
             }
+        }
+    }
+
+    @Test
+    fun `field annotation guidance fixes the declaration without requiring a delegate`() {
+        // Arrange
+        val wrong = "class Fish : Node<Fish>() { @JvmField var hunger = 100 }"
+
+        // Act / Assert
+        compileConsumer(wrong) { code, output ->
+            assertEquals(ExitCode.COMPILATION_ERROR, code, output)
+            assertTrue(
+                "Remove the field annotation; ordinary Node properties are stored automatically." in output,
+                output
+            )
+            assertEquals(1, Regex("\\[CANOPY_UNSUPPORTED_NODE_PROPERTY]").findAll(output).count(), output)
+            assertTrue("CANOPY_UNMANAGED_NODE_STATE" !in output, output)
+        }
+        compileConsumer(wrong.replace("@JvmField ", "")) { code, output ->
+            assertEquals(ExitCode.OK, code, output)
         }
     }
 
@@ -281,6 +301,9 @@ class CanopyCompilerTests {
             assertTrue("remove the explicit wrapper type" in output, output)
             assertTrue("2 +" !in output, output)
         }
+        compileConsumer("class Fish : Node<Fish>() { val hunger by signal(1) }") { code, output ->
+            assertEquals(ExitCode.OK, code, output)
+        }
     }
 
     @Test
@@ -350,7 +373,7 @@ class CanopyCompilerTests {
             """.trimIndent()
         ) { code, output ->
             assertEquals(ExitCode.COMPILATION_ERROR, code, output)
-            assertTrue("CANOPY_PROPERTY_DELEGATION" in output, output)
+            assertTrue("Use `by` for a manager reference property" in output, output)
         }
     }
 
@@ -513,11 +536,20 @@ class CanopyCompilerTests {
     }
 
     @Test
-    fun `constructor references report an actionable source diagnostic`() {
-        compileConsumer("class Leaf : Node<Leaf>(); val factory = ::Leaf") { code, output ->
-            assertEquals(ExitCode.COMPILATION_ERROR, code, output)
-            assertTrue("CANOPY_NODE_CONSTRUCTION_REFERENCE" in output, output)
-            assertTrue(Regex("Game\\.kt:[0-9]+:[0-9]+").containsMatchIn(output), output)
+    fun `constructor reference suggestions replace the entire reference and compile`() {
+        // Arrange
+        listOf("Leaf", "Aquarium".repeat(11)).forEach { name ->
+            val wrong = "class $name : Node<$name>()\nval factory = ::$name"
+            val corrected = wrong.replace("::$name", "{ $name() }")
+
+            // Act / Assert
+            compileConsumer(wrong) { code, output ->
+                assertEquals(ExitCode.COMPILATION_ERROR, code, output)
+                assertTrue("CANOPY_NODE_CONSTRUCTION_REFERENCE" in output, output)
+                assertTrue("3 + val factory = { $name() }" in output, output)
+                assertTrue("Game.kt:3:15" in output, output)
+            }
+            compileConsumer(corrected) { code, output -> assertEquals(ExitCode.OK, code, output) }
         }
     }
 

@@ -96,6 +96,53 @@ class DiagnosticFormatTests {
     }
 
     @Test
+    fun `tabs retain their source columns across highlights and clipped excerpts`() {
+        // Arrange
+        val lines = listOf("\tval\tfishNum\t=\tcomputed { 1 }", "x".repeat(119) + "\t=\tvalue")
+        lines.forEach { line ->
+            val diagnostic = Diagnostic(
+                "C",
+                "Fix",
+                SourceLine("Game.kt", 2, line.indexOf('=') + 1, line),
+                replacement = "by"
+            )
+
+            // Act
+            val plain = DiagnosticFormat.render(diagnostic)
+            val colored = DiagnosticFormat.render(diagnostic, color = true)
+                .replace(Regex("\u001B\\[[0-9;]+m"), "")
+
+            // Assert
+            assertEquals(plain, colored)
+            assertTrue("=   " in plain, plain)
+            assertEquals(
+                plain.lineSequence().first { it.startsWith("2 | ") }.removePrefix("2 | "),
+                plain.lineSequence().first { it.startsWith("2 - ") }.removePrefix("2 - ")
+            )
+        }
+        val tab = Diagnostic("C", "Fix", SourceLine("Game.kt", 1, 2, "x\t= value"))
+        assertTrue("1 | x   = value\n  |  ^^^" in DiagnosticFormat.render(tab))
+    }
+
+    @Test
+    fun `incomplete or multiline edits keep help without displaying a misleading correction`() {
+        // Arrange
+        val source = SourceLine("Game.kt", 1, 1, "::Fish")
+        val edits = listOf(
+            Diagnostic("C", "Fix", source.copy(length = 20), replacement = "{ Fish() }", help = "Use a lambda"),
+            Diagnostic("C", "Fix", source, replacement = "{\nFish()\n}", help = "Use a lambda"),
+            Diagnostic("C", "Fix", source.copy(column = 0), replacement = "by", help = "Use a delegate")
+        )
+
+        // Act / Assert
+        edits.forEach { diagnostic ->
+            val output = DiagnosticFormat.render(diagnostic)
+            assertTrue("help:" in output, output)
+            assertFalse("1 +" in output || "1 -" in output, output)
+        }
+    }
+
+    @Test
     fun `automatic color respects plain console no color ci and ide signals`() {
         fun enabled(
             mode: String = "auto",

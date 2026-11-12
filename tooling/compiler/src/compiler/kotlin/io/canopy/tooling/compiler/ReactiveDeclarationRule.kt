@@ -24,12 +24,14 @@ internal class ReactiveDeclarationRule : PropertyRule {
         val kind = when (type) {
             "io.canopy.engine.core.flows.events.Signal" -> "signal"
             "io.canopy.engine.core.flows.events.Computed" -> "computed"
-            else -> "reference or asset"
+            "io.canopy.engine.data.assets.AssetDelegate" -> "asset"
+            "io.canopy.engine.core.queries.GlobalDependency" -> "manager reference"
+            else -> "reference"
         }
         context.report(
             delegation,
             property.assignmentSpan ?: property.span,
-            "Use `by` for a $kind property",
+            "Use `by` for ${if (kind == "asset") "an" else "a"} $kind property",
             label = "`=` stores the ${type?.substringAfterLast('.')} object.",
             help = if (property.hasExplicitType) {
                 "Use `by` and remove the explicit wrapper type so Kotlin can infer the value type."
