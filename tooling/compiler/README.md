@@ -79,6 +79,31 @@ Checks run after Kotlin's frontend analysis. Kotlin may therefore report an ordi
 type error before Canopy can explain the declaration. Source locations support navigation
 from build output; this does not add live IDE underlines or automatic quick fixes.
 
+## Missing compiler setup
+
+Apply the Gradle plugin in every Kotlin module that declares custom Nodes or starts
+an App. A dependency on the engine does not install compiler support.
+
+The compiler routes `App.launch()` and `launchAsync()` calls to matching internal
+runtime startup entries. Unprocessed calls still compile as Kotlin, but fail with
+`CANOPY_COMPILER_REQUIRED` before reserving an App, opening a terminal or starting
+a host thread. The error gives setup and clean-rebuild instructions. A compiled
+engine dependency or an earlier successfully launched App cannot satisfy this check
+for an unprocessed startup call. Missing runtime entries instead produce the single
+build-time compatibility diagnostic `CANOPY_APP_ABI`.
+
+This verifies the startup call, not every dependency in a multi-module game. Other
+modules declaring Nodes still need the plugin; existing runtime state guards remain.
+Direct calls, varargs, defaults and typed callable invocations are supported. Java
+or reflective startup should call a Kotlin startup wrapper compiled with Canopy;
+reflectively calling the public methods bypasses compilation and reaches the guard.
+Low-level host drivers may continue to forward lifecycle events through `engineLoop`;
+that embedding interface is not proof of game compiler configuration.
+
+Gradle is the supported automated setup. Maven Central is the artifact repository,
+not a Maven build plugin: other build tools must supply the matching compiler JAR to
+Kotlin themselves. No global classpath marker or class-by-class presence check is used.
+
 ## Consumer setup
 
 Apply the plugin to every Kotlin game module declaring custom nodes.
