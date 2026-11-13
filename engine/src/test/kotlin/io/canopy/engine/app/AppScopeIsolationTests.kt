@@ -20,7 +20,7 @@ class AppScopeIsolationTests {
             engineLoop.exit()
         }
     }
-    private class TestScreen : Screen()
+    private class TestScreen : io.canopy.engine.core.nodes.Node<TestScreen>("Test")
 
     @Test
     fun `the app reservation and diagnostic mode remain active through shutdown callbacks`() {
@@ -50,14 +50,14 @@ class AppScopeIsolationTests {
         // Arrange
         val first = TestApp()
         val inactive = TestApp()
-        val screen = TestScreen()
-        first.screens { start(screen) }
+        lateinit var screen: TestScreen
+        first.initialScreen<TestScreen> { TestScreen().also { screen = it } }
         first.enter()
         try {
             // Act / Assert
-            assertFailsWith<IllegalStateException> { inactive.registerScreen(TestScreen()) }
-            assertFailsWith<IllegalStateException> { inactive.startScreen<TestScreen>() }
-            assertFailsWith<IllegalStateException> { inactive.removeScreen<TestScreen>() }
+            assertFailsWith<IllegalStateException> { inactive.navigateTo<TestScreen> { TestScreen() } }
+            assertFailsWith<IllegalStateException> { inactive.reloadScreen() }
+            assertFailsWith<IllegalStateException> { inactive.unloadScreen<TestScreen>() }
             assertSame(screen, getManager<ScreenManager>().current)
         } finally {
             first.exit()

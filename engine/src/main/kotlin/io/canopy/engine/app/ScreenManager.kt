@@ -1,177 +1,222 @@
 package io.canopy.engine.app
 
 import kotlin.reflect.KClass
+import java.lang.reflect.InvocationTargetException
+import java.lang.reflect.Modifier
 import io.canopy.engine.core.CleanupFailures
 import io.canopy.engine.core.managers.Manager
+import io.canopy.engine.core.managers.SceneManager
+import io.canopy.engine.core.managers.getManager
+import io.canopy.engine.core.nodes.Node
 
 /**
- * Registers screens by concrete type and forwards frame callbacks to the current screen. Use on the lifecycle
- * thread. Navigation and registration are rejected inside onInactive/onExit to prevent nested teardown.
+ * Navigates between ordinary Node roots, retaining one instance per requested class in this App.
+ * Requests commit after updates and before painting. The latest request wins; activation requests wait for the
+ * next boundary. All operations belong to the lifecycle thread. No scene or controller registry is required.
  */
 class ScreenManager : Manager {
-
-    /* ============================================================
-     * Registry
-     * ============================================================ */
-    internal val screenRegistry = ScreenRegistry()
-    internal var configure: ScreenRegistry.() -> Unit = {}
-
-    private val screens = linkedMapOf<KClass<out Screen>, Screen>()
+    private lateinit var scenes: SceneManager
+    private class Entry(val factory: () -> Node<*>) {
+        var root: Node<*>? = null
+        var cancelDestruction: (() -> Unit)? = null
+    }
+    private class Request(val type: KClass<out Node<*>>, val factory: (() -> Node<*>)?, val reload: Boolean)
+    private val entries = linkedMapOf<KClass<out Node<*>>, Entry>()
+    private var pending: Request? = null
+    private var activeType: KClass<out Node<*>>? = null
+    private var lifecycleThread: Thread? = null
+    private var closing = false
     private var leaving = false
-    private var visitVersion = 0L
-    private var geometry: Pair<Int, Int>? = null
-    private var resizedVisit: Long? = null
-    private var activatedVisit: Long? = null
-    private var resizingVisit: Long? = null
+    private var committing = false
 
-    /* ============================================================
-     * State
-     * ============================================================ */
-
-    /** The active screen, or null before navigation and after teardown. */
-    var current: Screen? = null
-        private set
-
-    /* ============================================================
-     * Registration
-     * ============================================================ */
+    /** Current screen root, or null before first navigation and after destruction/shutdown. */
+    val current: Node<*>? get() = activeType?.let { entries[it]?.root }
+        ?.takeIf { it.isValid && scenes.currScene === it }
 
     /**
-     * Registers a screen by concrete type. Replacing the active instance ends its visit and clears [current].
-     * Registering the same instance is a no-op; the replacement is started explicitly.
+     * Requests [type], reusing its cached instance or constructing it at the next frame boundary.
+     * [factory] is used only for creation and remembered for reload/unload. A cached instance ignores new arguments.
+     * Without a factory, the class needs a public no-argument constructor. The current screen is a no-op.
      */
-    fun register(screen: Screen) {
-        check(!leaving) { "Cannot register screens from onInactive or onExit" }
-        val previous = screens[screen::class]
-        if (previous === screen) return
-        if (previous != null && current === previous) leaveCurrent()
-        screens[screen::class] = screen
+    fun <T : Node<*>> navigateTo(type: KClass<T>, factory: (() -> T)? = null) {
+        checkOperation()
+        pending = Request(type, factory, false)
     }
 
-    /** Removes a registration and exits it if it is the current screen. */
-    fun <T : Screen> remove(type: KClass<T>) {
-        check(!leaving) { "Cannot remove screens from onInactive or onExit" }
-        val removed = screens.remove(type)
+    /** Opens or resumes [T] without a registration table. */
+    inline fun <reified T : Node<*>> navigateTo(noinline factory: (() -> T)? = null) = navigateTo(T::class, factory)
 
-        if (removed != null && current === removed) leaveCurrent()
+    /** Releases inactive [T] while preserving its factory. */
+    inline fun <reified T : Node<*>> unloadScreen() = unloadScreen(T::class)
+
+    /** Requests a fresh current screen using the factory that created it. Shared manager/context data is unchanged. */
+    fun reloadScreen() {
+        checkOperation()
+        val type = activeType?.takeIf { current != null } ?: error("There is no current screen to reload")
+        pending = Request(type, null, true)
     }
 
-    /* ============================================================
-     * Navigation
-     * ============================================================ */
-
-    /**
-     * Ends the current visit, then calls the target's [Screen.onEnter] and [Screen.onActive].
-     * Replays the latest non-negative host dimensions after activation, if that visit is still current.
-     * Starting the current instance is a no-op unless its resize callback previously failed: only that
-     * pending resize is retried. An unregistered type fails before any callbacks.
-     */
-    fun <T : Screen> start(type: KClass<T>) {
-        check(!leaving) { "Cannot navigate from onInactive or onExit" }
-        val next = screens[type]
-            ?: error("Screen not registered: ${type.qualifiedName}")
-
-        if (current === next) {
-            replayGeometry(next, visitVersion)
-            return
+    /** Destroys an inactive instance but remembers its factory. Never constructs a screen. */
+    fun <T : Node<*>> unloadScreen(type: KClass<T>) {
+        checkOperation()
+        check(!committing) { "Cannot unload screens during a transition" }
+        check(type != activeType || current == null) {
+            "Navigate away or use reloadScreen() before unloading the current screen"
         }
+        entries[type]?.let { discard(it) }
+    }
 
-        leaveCurrent()
-        current = next
-        val visit = ++visitVersion
-        next.onEnter()
-        // onEnter may navigate to another screen; do not activate a screen that already left.
-        if (current === next && visitVersion == visit) {
-            next.onActive()
-            if (current === next && visitVersion == visit) {
-                activatedVisit = visit
-                replayGeometry(next, visit)
+    override fun onEnter() {
+        check(lifecycleThread == null) { "ScreenManager is already entered" }
+        scenes = getManager<SceneManager>()
+        lifecycleThread = Thread.currentThread()
+        closing = false
+    }
+
+    /** Commits at most one request. Requests from destination entry are retained for the next boundary. */
+    internal fun commit() {
+        checkOperation()
+        if (committing) return
+        val request = pending ?: return
+        pending = null
+        val previousEntry = entries[request.type]
+        val cached = previousEntry?.root?.takeIf { it.isValid }
+        if (!request.reload && activeType == request.type && current === cached && cached != null) return
+        committing = true
+        var destination: Entry? = null
+        var created = false
+        var activating = false
+        try {
+            val entry = if (!request.reload && cached != null) {
+                checkNotNull(previousEntry)
+            } else {
+                val factory = request.factory ?: previousEntry?.factory ?: defaultFactory(request.type)
+                Entry(factory).also { fresh ->
+                    fresh.root = Node.constructRoot {
+                        factory().also { root ->
+                            check(root.isValid && !root.isInsideTree && root.parent == null) {
+                                "A screen factory must return a new detached Node root"
+                            }
+                            check(root.owningManager() === scenes && request.type.isInstance(root)) {
+                                "Screen factory returned a root of the wrong type or App"
+                            }
+                            check(
+                                entries.values.none {
+                                    it.root === root
+                                }
+                            ) { "A screen factory must create a fresh root" }
+                        }
+                    }
+                }
+            }
+            destination = entry
+            created = entry !== previousEntry
+            val root = checkNotNull(entry.root)
+            detachCurrent()
+            activeType = null
+            scenes.screenControlled = false
+            if (created) {
+                if (previousEntry != null) discard(previousEntry)
+                entries[request.type] = entry
+                entry.cancelDestruction = root.onDestroy {
+                    if (entry.root === root) {
+                        entry.root = null
+                        entry.cancelDestruction = null
+                        if (activeType == request.type) {
+                            activeType = null
+                            scenes.screenControlled = false
+                        }
+                    }
+                }
+            }
+            activeType = request.type
+            scenes.screenControlled = true
+            activating = true
+            scenes.replaceScreenRoot(root)
+        } catch (failure: Throwable) {
+            pending = null
+            val cleanup = CleanupFailures(failure)
+            destination?.let { entry ->
+                if (created || activating) {
+                    if (entry.root === scenes.currScene) cleanup.attempt { detachCurrent() }
+                    cleanup.attempt { discard(entry) }
+                }
+            }
+            if (scenes.currScene == null) {
+                activeType = null
+                scenes.screenControlled = false
+            }
+            cleanup.rethrow()
+        } finally {
+            committing = false
+        }
+    }
+
+    private fun detachCurrent() {
+        val previous = leaving
+        leaving = true
+        try {
+            scenes.replaceScreenRoot(null)
+        } finally {
+            leaving = previous
+        }
+    }
+
+    private fun defaultFactory(type: KClass<out Node<*>>): () -> Node<*> {
+        val constructor = try {
+            check(Modifier.isPublic(type.java.modifiers) && !Modifier.isAbstract(type.java.modifiers)) {
+                "Automatic screen construction requires a public concrete class"
+            }
+            type.java.getConstructor()
+        } catch (failure: Exception) {
+            throw IllegalStateException(
+                "Cannot create screen ${type.qualifiedName}. Use a public no-argument constructor or " +
+                    "navigateTo<${type.simpleName}> { ${type.simpleName}(...) }.",
+                failure
+            )
+        }
+        return {
+            try {
+                constructor.newInstance()
+            } catch (failure: InvocationTargetException) {
+                throw (failure.cause ?: failure)
             }
         }
     }
 
-    /* ============================================================
-     * Frame lifecycle
-     * ============================================================ */
-
-    override fun onEnter() {
-        screenRegistry.apply(configure)
-    }
-
-    override fun onUpdate(delta: Float) {
-        current?.onUpdate(delta)
-    }
-
-    override fun onPhysicsUpdate(delta: Float) {
-        current?.onPhysicsUpdate(delta)
-    }
-
-    /** Forwards every host notification and retains non-negative dimensions for later screen visits. */
-    override fun onResize(width: Int, height: Int) {
-        if (width >= 0 && height >= 0) geometry = width to height
-        val target = current ?: return
-        val visit = visitVersion
-        resizedVisit = null
-        deliverGeometry(target, visit, width, height)
-        if (current === target && visitVersion == visit && geometry == (width to height)) resizedVisit = visit
-    }
-
-    private fun replayGeometry(target: Screen, visit: Long) {
-        val (width, height) = geometry ?: return
-        if (activatedVisit != visit || resizedVisit == visit || resizingVisit == visit) return
-        deliverGeometry(target, visit, width, height)
-        if (current === target && visitVersion == visit) resizedVisit = visit
-    }
-
-    private fun deliverGeometry(target: Screen, visit: Long, width: Int, height: Int) {
-        val previous = resizingVisit
-        resizingVisit = visit
-        try {
-            target.onResize(width, height)
-        } finally {
-            resizingVisit = previous
-        }
-    }
-
-    /* ============================================================
-     * Teardown
-     * ============================================================ */
-
-    /** Ends only the active visit and clears registrations. Repeated teardown is a no-op. */
-    override fun onExit() {
-        try {
-            leaveCurrent()
-        } finally {
-            screens.clear()
-            geometry = null
-            resizedVisit = null
-            activatedVisit = null
-        }
-    }
-
-    private fun leaveCurrent() {
-        val previous = current ?: return
-        // Clear first so repeated teardown cannot exit the same visit again.
-        current = null
-        visitVersion++
-        resizedVisit = null
-        activatedVisit = null
+    private fun discard(entry: Entry) {
+        val root = entry.root ?: return
+        entry.root = null
+        entry.cancelDestruction?.invoke()
+        entry.cancelDestruction = null
+        val previous = leaving
         leaving = true
-        val failures = CleanupFailures()
         try {
-            failures.attempt { previous.onInactive() }
-            failures.attempt { previous.onExit() }
+            scenes.destroyRetainedRoot(root)
         } finally {
-            leaving = false
+            leaving = previous
         }
+    }
+
+    private fun checkOperation() {
+        check(lifecycleThread === Thread.currentThread() && !closing) {
+            "Screen navigation requires the running App's lifecycle thread"
+        }
+        check(!leaving) { "Cannot navigate during screen exit or destruction" }
+    }
+
+    /** Releases all active/inactive roots exactly once, even if cleanup fails. */
+    override fun onExit() {
+        if (lifecycleThread == null || closing) return
+        closing = true
+        pending = null
+        val failures = CleanupFailures()
+        failures.attempt { scenes.replaceScreenRoot(null) }
+        activeType = null
+        scenes.screenControlled = false
+        entries.values.toList().forEach { entry -> failures.attempt { discard(entry) } }
+        entries.clear()
+        lifecycleThread = null
         failures.rethrow()
     }
-}
-
-/**
- * Configures this app's screens during startup. A later call replaces this app's block without navigating;
- * it does not affect other apps. Use runtime navigation shortcuts after startup.
- */
-fun App<*>.screens(handler: ScreenRegistry.() -> Unit) {
-    screenBuilder = handler
 }
