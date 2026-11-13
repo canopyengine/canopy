@@ -27,6 +27,13 @@ internal class TerminalSurface(
     private var ui = emptyList<TerminalUiSpan>()
     private var prompt: CommandPromptSnapshot? = null
     private val screen = TerminalCellScreen(terminal)
+    private var presentationEnabled = true
+
+    fun setPresentationEnabled(enabled: Boolean) {
+        if (presentationEnabled != enabled) screen.clear()
+        presentationEnabled = enabled
+    }
+
     private var submitted = false
     private var batching = false
     private var previousFrame: FrameContent? = null
@@ -159,7 +166,7 @@ internal class TerminalSurface(
 
     private fun redraw() {
         submitted = true
-        if (lineMode() || batching || sessionManaged && !sessionOpen) return
+        if (!presentationEnabled || lineMode() || batching || sessionManaged && !sessionOpen) return
         val size = viewport()
         val height = size.height.coerceAtLeast(0)
         // Reserve the final column to avoid emulator-dependent autowrap and scrolling.

@@ -116,14 +116,13 @@ class MordantInputManager : InputManager() {
 
     private fun Boolean.toInt(): Int = if (this) 1 else 0
 
-    override fun onExit() {
+    override fun resetInputState() {
         synchronized(mouseLock) {
             mouseButtons = 0
             mousePosition = null
         }
         heldMouse.clear()
         pressedThisFrame.clear()
-        super.onExit()
     }
 
     /**

@@ -24,6 +24,14 @@ object HeadlessHost {
                 app.engineLoop.update(Gdx.graphics.deltaTime)
             }
 
+            override fun pause() = dispatch {
+                app.engineLoop.hostStateChanged(app.hostState.copy(suspended = true))
+            }
+
+            override fun resume() = dispatch {
+                app.engineLoop.hostStateChanged(app.hostState.copy(suspended = false))
+            }
+
             override fun resize(width: Int, height: Int) = dispatch {
                 app.engineLoop.resize(width, height)
             }

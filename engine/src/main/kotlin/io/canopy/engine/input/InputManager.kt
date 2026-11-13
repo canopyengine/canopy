@@ -24,16 +24,36 @@ abstract class InputManager : Manager {
 
     private val _actionStates = mutableMapOf<String, InputState>()
 
-    /** Returns copied mapped states, or an empty map while command editing owns this frame's input. */
+    /** Returns copied mapped states, or an empty map while command editing or host state blocks input. */
     val actionStates get() = if (blocksGameplay) emptyMap() else _actionStates.toMap()
 
     private fun focus(): InputFocus? = getManagerOrNull<InputFocus>()
 
-    internal val blocksGameplay: Boolean get() = focus()?.blocksGameplay == true
+    internal val blocksGameplay: Boolean get() = !hostInputEnabled || focus()?.blocksGameplay == true
 
     /** Async producers publish through one private monitor; consumers invoke hooks after releasing it. */
     private val queueLock = Any()
     private val eventQueue = ArrayDeque<InputEvent>()
+    private var hostInputEnabled = true
+
+    /** Clears backend-held snapshots on host input loss or shutdown. Runs on the lifecycle thread. */
+    protected open fun resetInputState() = Unit
+
+    internal fun setHostInputEnabled(enabled: Boolean) {
+        if (hostInputEnabled == enabled) return
+        synchronized(queueLock) {
+            hostInputEnabled = enabled
+        }
+        clearInput()
+    }
+
+    private fun clearInput() {
+        synchronized(queueLock) { eventQueue.clear() }
+        _eventsThisFrame.clear()
+        _actionStates.clear()
+        capturedMouseButtons.clear()
+        resetInputState()
+    }
 
     /**
      * Per-frame snapshot of raw events not consumed by command focus.
@@ -132,7 +152,7 @@ abstract class InputManager : Manager {
         }
     }
 
-    /** Returns Released for unknown actions and while command editing owns this frame's input. */
+    /** Returns Released for unknown actions and while command editing or host state blocks input. */
     fun getActionState(action: String): InputState =
         if (blocksGameplay) InputState.Released else _actionStates[action] ?: InputState.Released
 
@@ -154,13 +174,16 @@ abstract class InputManager : Manager {
         return state == InputState.Released || state == InputState.JustReleased
     }
 
-    /** Polls a physical binding, suppressed while command editing owns this frame's input. */
+    /** Polls a physical binding, suppressed while command editing or host state blocks input. */
     fun isPressed(bind: InputBind): Boolean = !blocksGameplay && pollUncaptured(bind)
 
     private fun pollUncaptured(bind: InputBind): Boolean = bind.name !in capturedMouseButtons && pollPressed(bind)
 
+    override fun onEnter() = setHostInputEnabled(true)
+
     override fun onExit() {
         capturedMouseButtons.clear()
+        resetInputState()
     }
 
     /** Returns -1 or 1 when only one action is pressed, otherwise zero. */
@@ -211,7 +234,7 @@ abstract class InputManager : Manager {
 
     /** Publishes one event in FIFO order; safe for concurrent producers. */
     fun enqueue(event: InputEvent) {
-        synchronized(queueLock) { eventQueue.addLast(event) }
+        synchronized(queueLock) { if (hostInputEnabled) eventQueue.addLast(event) }
     }
 
     /**
@@ -223,7 +246,7 @@ abstract class InputManager : Manager {
      */
     fun enqueueBatch(events: Iterable<InputEvent>) {
         val snapshot = events.toList()
-        synchronized(queueLock) { eventQueue.addAll(snapshot) }
+        synchronized(queueLock) { if (hostInputEnabled) eventQueue.addAll(snapshot) }
     }
 
     /** Registers input mapping serialization with the current SaveManager; loading resets states to Released. */

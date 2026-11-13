@@ -14,7 +14,9 @@ import io.canopy.engine.core.managers.ManagerScope
 import io.canopy.engine.core.managers.ManagersRegistry
 import io.canopy.engine.core.managers.SceneManager
 import io.canopy.engine.core.managers.getManager
+import io.canopy.engine.core.managers.getManagerOrNull
 import io.canopy.engine.input.InputFocus
+import io.canopy.engine.input.InputManager
 import io.canopy.engine.logging.EngineLogs
 import io.canopy.engine.logging.LogContext
 import io.canopy.engine.logging.LoggingPolicy
@@ -69,8 +71,28 @@ abstract class App<C : AppConfig> protected constructor() {
     private val gameplayFrames = AtomicLong(0)
 
     @Volatile
-    var isPaused: Boolean = false
-        private set
+    private var manuallyPaused = false
+    private var lifecyclePolicy = LifecyclePolicy()
+    private var hostStateCallback: App<C>.(HostState) -> Unit = {}
+
+    /** Effective gameplay pause: manual pause or the configured host policy. */
+    val isPaused: Boolean get() = manuallyPaused || lifecyclePolicy.pauses(hostState)
+
+    /** Latest host notification; unsupported host states retain their defaults. */
+    val hostState: HostState get() = engineLoop.hostState
+
+    /** Configures automatic host pausing before startup. The supplied configuration is copied. */
+    fun lifecycle(block: LifecyclePolicy.() -> Unit) {
+        check(!launchRequested.get() && !onStarted.isCompleted && loggingSession == null) {
+            "Configure lifecycle before App startup"
+        }
+        lifecyclePolicy = lifecyclePolicy.copy().apply(block).copy()
+    }
+
+    /** Replaces the host-state callback, invoked after input, pause policy and presentation have been updated. */
+    fun onHostStateChanged(block: App<C>.(HostState) -> Unit) {
+        hostStateCallback = block
+    }
 
     /** Number of app updates processed while the app was not paused. */
     val frameCount: Long
@@ -81,15 +103,15 @@ abstract class App<C : AppConfig> protected constructor() {
      * A physics tick in progress retains its starting eligibility until it completes.
      */
     fun pause() {
-        isPaused = true
+        manuallyPaused = true
     }
 
     /**
-     * Resumes gameplay updates, preserving earned running physics time.
+     * Clears manual pause, preserving earned running physics time. Host policy may still pause gameplay.
      * A physics tick in progress retains its starting eligibility until it completes.
      */
     fun resume() {
-        isPaused = false
+        manuallyPaused = false
     }
 
     private val onStarted = CompletableDeferred<Unit>()
@@ -120,6 +142,7 @@ abstract class App<C : AppConfig> protected constructor() {
         isPaused = { isPaused },
         onBeginFrame = ::prepareFrame,
         onPresentFrame = ::presentFrame,
+        onHostStateChanged = ::performHostStateChange,
         onAbortFrame = ::abortFrame
     ).also { it.validateExit = ManagersRegistry::checkCanExit }
 
@@ -202,6 +225,9 @@ abstract class App<C : AppConfig> protected constructor() {
      * Null selects a host without presentation. Native resources remain owned by the platform's shutdown hooks.
      */
     protected open fun provideUiBackend(): UiBackend? = null
+
+    /** Updates native input/presentation state after a host notification, without changing screen membership. */
+    protected open fun afterHostStateChanged(previous: HostState, current: HostState) = Unit
 
     protected open fun afterEnter() = Unit
 
@@ -296,8 +322,19 @@ abstract class App<C : AppConfig> protected constructor() {
         }
     }
 
+    private fun performHostStateChange(previous: HostState, current: HostState) = withLoggingContext {
+        getManagerOrNull<InputManager>()?.setHostInputEnabled(current.acceptsInput)
+        getManager<UiManager>().apply {
+            presentationEnabled = current.canPresent
+            if (!current.acceptsInput) clearPointer()
+        }
+        if (!previous.canPresent && current.canPresent) notifiedFrameSize = null
+        afterHostStateChanged(previous, current)
+        hostStateCallback(current)
+    }
+
     private fun prepareFrame() {
-        val size = beginFrame()
+        val size = if (hostState.canPresent) beginFrame() else null
         if (size != null && size != notifiedFrameSize) {
             performResize(size.width, size.height)
             notifiedFrameSize = size
