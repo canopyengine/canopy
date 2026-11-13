@@ -23,6 +23,7 @@ class EngineLoop(
     private val onBeginFrame: () -> Unit = {},
     private val onPresentFrame: () -> Unit = {},
     private val onAbortFrame: () -> Unit = {},
+    private val onHostStateChanged: (HostState, HostState) -> Unit = { _, _ -> },
 ) {
     private var entering = false
     private var dispatching = false
@@ -30,6 +31,12 @@ class EngineLoop(
     private var exited = false
     private var runningPhysicsAccumulator = 0f
     private var pausedPhysicsAccumulator = 0f
+    private var discardResumeDelta = false
+
+    /** Latest host notification. A state change does not enter, exit or replace the active screen. */
+    @Volatile
+    var hostState: HostState = HostState()
+        private set
 
     internal var failure: Throwable? = null
         private set
@@ -73,10 +80,13 @@ class EngineLoop(
         checkActive()
         require(delta.isFinite() && delta >= 0f) { "delta must be finite and non-negative" }
         dispatch {
+            if (hostState.suspended) return@dispatch
+            val frameDelta = if (discardResumeDelta) 0f else delta
+            discardResumeDelta = false
             try {
                 onBeginFrame()
                 val paused = isPaused()
-                if (paused) pausedPhysicsAccumulator += delta else runningPhysicsAccumulator += delta
+                if (paused) pausedPhysicsAccumulator += frameDelta else runningPhysicsAccumulator += frameDelta
                 var accumulated = if (paused) pausedPhysicsAccumulator else runningPhysicsAccumulator
                 var steps = 0
                 while (
@@ -91,8 +101,8 @@ class EngineLoop(
                     steps++
                 }
 
-                onUpdate(delta)
-                onPresentFrame()
+                onUpdate(frameDelta)
+                if (hostState.canPresent) onPresentFrame()
             } catch (error: Throwable) {
                 try {
                     onAbortFrame()
@@ -110,7 +120,26 @@ class EngineLoop(
         checkDispatchAllowed()
         checkActive()
         require(delta.isFinite() && delta >= 0f) { "delta must be finite and non-negative" }
-        dispatch { onPhysicsUpdate(delta) }
+        dispatch { if (!hostState.suspended) onPhysicsUpdate(delta) }
+    }
+
+    /**
+     * Reports host state on the lifecycle thread after entry, outside frame/entry/exit callbacks.
+     * Equal notifications are ignored. Suspension stops frames without accumulating elapsed time; the first
+     * resumed frame uses zero delta to exclude time spent in the background, retaining prior physics remainders.
+     * Notification failures use the same failure reporting as frame callbacks.
+     */
+    @Synchronized
+    fun hostStateChanged(state: HostState) {
+        checkDispatchAllowed()
+        checkActive()
+        if (state == hostState) return
+        dispatch {
+            val previous = hostState
+            hostState = state
+            if (previous.suspended && !state.suspended) discardResumeDelta = true
+            onHostStateChanged(previous, state)
+        }
     }
 
     @Synchronized

@@ -14,6 +14,7 @@ import io.canopy.adapters.mordant.input.MordantInputManager
 import io.canopy.engine.app.App
 import io.canopy.engine.app.AppConfig
 import io.canopy.engine.app.FrameSize
+import io.canopy.engine.app.HostState
 import io.canopy.engine.commands.CommandPromptHost
 import io.canopy.engine.core.managers.SceneManager
 import io.canopy.engine.core.managers.getManager
@@ -130,11 +131,15 @@ class TerminalApp internal constructor(
 
     override fun processFrameInput() {
         processedLine = lineInput.processEvents()
+        if (!hostState.canPresent) {
+            processedLine?.complete(Unit)
+            processedLine = null
+        }
     }
 
     override fun presentFrame() {
         surface.endFrame()
-        trackMouseMovement.set(getManager<UiManager>().needsMouseMovement)
+        trackMouseMovement.set(hostState.acceptsInput && getManager<UiManager>().needsMouseMovement)
         processedLine?.complete(Unit)
         processedLine = null
     }
@@ -167,6 +172,11 @@ class TerminalApp internal constructor(
 
     override fun provideUiBackend(): UiBackend = TerminalUiBackend(terminal, surface::renderUi)
 
+    override fun afterHostStateChanged(previous: HostState, current: HostState) {
+        surface.setPresentationEnabled(current.canPresent)
+        trackMouseMovement.set(current.acceptsInput && getManager<UiManager>().needsMouseMovement)
+    }
+
     override fun beforeExit() {
         appScope.cancel()
         lineInput.cancel()
@@ -184,7 +194,7 @@ class TerminalApp internal constructor(
 
         surface.openSession()
         engineLoop.enter()
-        trackMouseMovement.set(getManager<UiManager>().needsMouseMovement)
+        trackMouseMovement.set(hostState.acceptsInput && getManager<UiManager>().needsMouseMovement)
         withLoggingContext { log.info { "Starting terminal runtime" } }
 
         // Native reads run on IO and periodically return so cancellation can close raw mode.

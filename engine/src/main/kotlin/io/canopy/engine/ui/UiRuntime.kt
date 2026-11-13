@@ -273,6 +273,18 @@ open class UiManager(var backend: UiBackend? = null) : Manager {
     private var lastFrame = ArrayList<Any?>()
     private var nextFrame = ArrayList<Any?>()
     private var hasFrame = false
+    internal var presentationEnabled = true
+        set(value) {
+            if (field != value) hasFrame = false
+            field = value
+        }
+
+    internal fun clearPointer() {
+        pointer = null
+        val previous = hovered.toList()
+        hovered.clear()
+        previous.forEach { if (it.isValid) it.hover(false) }
+    }
     private var updating = false
     private var mouseLease: AutoCloseable? = null
     private var pointer: Vector2? = null
@@ -390,7 +402,7 @@ open class UiManager(var backend: UiBackend? = null) : Manager {
 
     /** Paints the current retained tree immediately without dispatching gameplay or reactive updates. */
     fun renderNow() {
-        if (updating) return
+        if (updating || !presentationEnabled) return
         backend?.let { renderer ->
             val scene = getManager<SceneManager>()
             val logicalViewport = renderer.viewport(viewport)
@@ -466,6 +478,7 @@ open class UiManager(var backend: UiBackend? = null) : Manager {
         element.content?.forEachElement { snapshot(it, snapshot) }
     }
     override fun onExit() {
+        presentationEnabled = true
         mouseLease?.close()
         mouseLease = null
         pointer = null
