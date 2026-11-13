@@ -3,8 +3,8 @@ package io.canopy.devtools.app
 import kotlin.test.Test
 import kotlin.test.assertTrue
 import kotlin.time.Duration.Companion.seconds
-import io.canopy.engine.app.Screen
-import io.canopy.engine.app.screens
+import io.canopy.engine.app.initialScreen
+import io.canopy.engine.core.nodes.types.empty.EmptyNode
 import kotlinx.coroutines.runBlocking
 
 class CanopyScreenTests {
@@ -13,15 +13,9 @@ class CanopyScreenTests {
     fun `screen setup should run when screen starts`() = runBlocking {
         var screenWasCreated = false
 
-        val screen = object : Screen() {
-            override fun onEnter() {
-                screenWasCreated = true
-            }
-        }
-
         val handle = testHeadlessApp {
-            screens {
-                start(screen)
+            initialScreen<EmptyNode<*>> {
+                EmptyNode("Test screen") { screenWasCreated = true }
             }
         }.launchAsync()
 

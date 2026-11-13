@@ -159,10 +159,28 @@ class SceneManager(val physicsStep: Float = 1f / 60f, private val block: SceneMa
      * - exit/unregister on the previous scene subtree
      * - register/build on the new scene subtree
      * - [onSceneReplaced] emission
+     *
+     * Direct assignment is rejected while ScreenManager owns an active screen; use screen navigation instead.
      */
     var currScene: Node<*>?
         get() = _currScene
-        set(value) = replaceScene(value)
+        set(value) {
+            check(!screenControlled) { "Use ScreenManager navigation while a screen is active" }
+            replaceScene(value)
+        }
+
+    internal var screenControlled = false
+
+    internal fun replaceScreenRoot(root: Node<*>?) = replaceScene(root)
+
+    /** Destroys an inactive navigation root without draining unrelated queued deletion. */
+    internal fun destroyRetainedRoot(root: Node<*>) {
+        if (root.isFreed) return
+        check(root.owningManager() === this && currScene !== root) { "Screen root must be detached before destruction" }
+        val failures = CleanupFailures()
+        destroySubtree(root, failures)
+        failures.rethrow()
+    }
 
     /* ============================================================
      * Systems

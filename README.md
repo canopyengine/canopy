@@ -120,30 +120,33 @@ When migrating an existing project, replace the `io.canopy` Maven group with
 `io.github.canopyengine.compiler`. Kotlin packages/imports remain unchanged.
 See the [compiler migration notes](tooling/compiler/README.md#maven-namespace-migration).
 
+The foundation integration uses ordinary Node roots for screen navigation:
+
 ```kotlin
-import io.canopy.engine.app.Screen
-import io.canopy.engine.app.screens
+import io.canopy.engine.app.initialScreen
+import io.canopy.engine.core.nodes.Node
 import io.canopy.engine.core.nodes.behavior
 import io.canopy.engine.core.nodes.types.empty.EmptyNode2D
 import io.canopy.engine.math.Vector2
 import io.canopy.platforms.terminal.app.terminalApp
 
-class ExampleScreen : Screen() {
-    override fun onEnter() {
-        EmptyNode2D("Root") {
-            EmptyNode2D("Moving") {
-                behavior(onUpdate = { delta ->
-                    position = position + Vector2(delta, 0f)
-                })
-            }
-        }.asSceneRoot()
+class ExampleScreen : Node<ExampleScreen>("Example") {
+    override fun nodeInit() {
+        EmptyNode2D("Moving") {
+            behavior(onUpdate = { delta ->
+                position = position + Vector2(delta, 0f)
+            })
+        }
     }
 }
 
 fun main() = terminalApp {
-    screens { start(ExampleScreen()) }
+    initialScreen<ExampleScreen>()
 }.launch()
 ```
+
+Use matching integration source artifacts for this API; older published snapshots
+still use Screen controllers. See the [navigation migration notes](docs/release/0.1.0/screen-navigation.md).
 
 This updates a transform; it does not render a sprite. Use TerminalApp's
 `renderFrame(lines)` for text output. Terminal input is installed by the host.

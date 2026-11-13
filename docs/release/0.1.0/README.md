@@ -59,6 +59,12 @@ No fresh local Gradle, native terminal or site run is claimed. Verify Actions
 on the refreshed integration heads before starting the live baseline pass.
 Windows pointer/console and macOS GUI behavior still need physical checks.
 
+## Screen navigation update
+
+The [class-based screen migration](screen-navigation.md) describes the new Node-root
+API, retained instances and frame-boundary navigation. It supersedes the Screen
+controller behavior described in older verification/audit snapshots.
+
 ## Current feature and experience audit
 
 The [12 November feature/experience audit](feature-and-experience-audit.md) identifies

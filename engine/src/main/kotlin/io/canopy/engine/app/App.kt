@@ -127,7 +127,7 @@ abstract class App<C : AppConfig> protected constructor() {
      * Builder hooks
      * ============================================================ */
     protected var managerBuilder: ManagersRegistry.() -> Unit = {}
-    internal var screenBuilder: ScreenRegistry.() -> Unit = {}
+    internal var initialScreenBuilder: ScreenManager.() -> Unit = {}
 
     /* ============================================================
      * Public handle
@@ -260,22 +260,25 @@ abstract class App<C : AppConfig> protected constructor() {
                 LogContext.with("backend" to backendName) {
                     EngineLogs.lifecycle.info { "Booting Canopy..." }
 
-                    var sceneManager: SceneManager? = null
                     ManagersRegistry.apply {
                         provideManagers().forEach(::register)
                         +InjectionManager()
                         +InputFocus()
-                        +ScreenManager().also { it.configure = screenBuilder }
+                        +ScreenManager()
                         +SceneManager().also {
-                            sceneManager = it
                             it.pauseState = { isPaused }
                             it.configureSceneManager()
                         }
                         +UiManager(provideUiBackend())
                         managerBuilder()
                     }
+                    getManager<SceneManager>().pauseState = { isPaused }
                     ManagersRegistry.enter()
-                    sceneManager?.let { engineLoop.configurePhysicsStep(it.physicsStep) }
+                    engineLoop.configurePhysicsStep(getManager<SceneManager>().physicsStep)
+                    currentScreenManager().apply {
+                        initialScreenBuilder()
+                        commit()
+                    }
 
                     onEnter(this@App)
                     afterEnter()
@@ -314,6 +317,7 @@ abstract class App<C : AppConfig> protected constructor() {
             }
 
             ManagersRegistry.update(delta, isPaused)
+            currentScreenManager().commit()
         }
     }
 
@@ -446,6 +450,14 @@ abstract class App<C : AppConfig> protected constructor() {
     private fun reserveLaunch() {
         check(!onStarted.isCompleted && !onStopped.isCompleted) { "An App can only be launched before entry" }
         check(launchRequested.compareAndSet(false, true)) { "An App can only be launched once" }
+    }
+
+    @PublishedApi
+    internal fun configureInitialScreen(builder: ScreenManager.() -> Unit) {
+        check(!launchRequested.get() && !onStarted.isCompleted && loggingSession == null) {
+            "Configure initialScreen before App startup"
+        }
+        initialScreenBuilder = builder
     }
 
     @PublishedApi

@@ -63,6 +63,17 @@ abstract class Node<N : Node<N>> protected constructor(
     companion object {
         private val identities = AtomicLong()
         private val currentParent = ThreadLocal<Node<*>?>()
+
+        /** Constructs a detached tree without inheriting the caller's builder parent or resource owner. */
+        internal fun <T : Node<*>> constructRoot(factory: () -> T): T {
+            val previous = currentParent.get()
+            currentParent.set(null)
+            try {
+                return NodeLifetime.withOwner(null) { nodeConstruction(factory) }
+            } finally {
+                currentParent.set(previous)
+            }
+        }
     }
 
     init {

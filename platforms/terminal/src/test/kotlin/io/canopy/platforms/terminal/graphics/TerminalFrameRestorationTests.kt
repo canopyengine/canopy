@@ -8,12 +8,14 @@ import com.github.ajalt.mordant.rendering.Whitespace
 import com.github.ajalt.mordant.terminal.Terminal
 import com.github.ajalt.mordant.widgets.Text
 import io.canopy.adapters.mordant.input.MordantInputManager
-import io.canopy.engine.app.Screen
-import io.canopy.engine.app.screens
+import io.canopy.engine.app.ScreenManager
+import io.canopy.engine.app.initialScreen
 import io.canopy.engine.commands.CommandPrompt
 import io.canopy.engine.commands.CommandPromptHost
 import io.canopy.engine.core.managers.ManagersRegistry
 import io.canopy.engine.core.managers.SceneManager
+import io.canopy.engine.core.nodes.behavior
+import io.canopy.engine.core.nodes.types.empty.EmptyNode
 import io.canopy.engine.input.InputFocus
 import io.canopy.engine.input.binds.InputBind
 import io.canopy.engine.math.Vector2
@@ -33,7 +35,6 @@ class TerminalFrameRestorationTests {
 
     @AfterEach
     fun cleanup() {
-        app?.screens { }
         app?.engineLoop?.exit()
         ManagersRegistry.exit()
     }
@@ -320,16 +321,24 @@ class TerminalFrameRestorationTests {
         val sceneSizes = mutableListOf<Vector2>()
         var updates = 0
         lateinit var target: TerminalApp
-        val screen = object : Screen() {
-            override fun onResize(width: Int, height: Int) {
-                geometries.add(Size(width, height))
-                // A responsive screen computes its own layout from full console cell dimensions.
-                target.renderFrame(List(height) { "x".repeat((width / 2).coerceAtLeast(0)) })
+        val makeScreen = {
+            EmptyNode("Responsive") {
+                behavior(onEnterTree = {
+                    fun resized(width: Int, height: Int) {
+                        geometries.add(Size(width, height))
+                        target.renderFrame(List(height) { "x".repeat((width / 2).coerceAtLeast(0)) })
+                    }
+                    val size = ManagersRegistry.getManager(SceneManager::class).sceneSize()
+                    resized(size.x.toInt(), size.y.toInt())
+                    ManagersRegistry.getManager(SceneManager::class).onResize.connect { width, height ->
+                        resized(width, height)
+                    }
+                })
             }
         }
         val (app, _, _) = start(configure = {
             target = this
-            screens { start(screen) }
+            initialScreen<EmptyNode<*>>(makeScreen)
             onUpdate { updates++ }
             onResize { width, height ->
                 assertEquals(
@@ -351,7 +360,7 @@ class TerminalFrameRestorationTests {
         app.update(0f)
         assertEquals(9, rows().size)
         assertEquals("xxxxxx", rows()[8])
-        assertEquals(listOf(20 to 6, 8 to 3, 12 to 9), geometries.map { it.width to it.height })
+        assertEquals(listOf(0 to 0, 20 to 6, 8 to 3, 12 to 9), geometries.map { it.width to it.height })
         assertEquals(listOf(Vector2(20f, 6f), Vector2(8f, 3f), Vector2(12f, 9f)), sceneSizes)
         assertEquals(4, updates)
         assertTrue(app.isPaused)
@@ -497,7 +506,12 @@ class TerminalFrameRestorationTests {
         app.engineLoop.enter()
         val host = ManagersRegistry.getManager(CommandPromptHost::class)
         val prompt = CommandPrompt("Console")
-        ManagersRegistry.getManager(SceneManager::class).currScene = prompt
+        val scenes = ManagersRegistry.getManager(SceneManager::class)
+        if (ManagersRegistry.getManager(ScreenManager::class).current != null) {
+            scenes.currScene!!.addChild(prompt)
+        } else {
+            scenes.currScene = prompt
+        }
         return Triple(app, host, prompt)
     }
 }
