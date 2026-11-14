@@ -2,6 +2,7 @@ package io.canopy.tooling.compiler.gradle
 
 import kotlin.test.*
 import java.nio.file.Files
+import java.nio.file.Path
 import org.gradle.testkit.runner.GradleRunner
 
 /** Verifies the published plugin from a consumer with no copied launcher and no wrapper invocation. */
@@ -74,7 +75,11 @@ class CanopyRunGradleTests {
             assertEquals(1, Regex("GAME=two words").findAll(first.output).count(), first.output)
             assertTrue(first.output.contains("RUN=configured"), first.output)
             assertTrue(first.output.contains("ENV=environment value"), first.output)
-            assertTrue(first.output.contains("DIR=${directory.resolve("game directory").absolutePath}"), first.output)
+            val actualDirectory = first.output.lineSequence().first { it.startsWith("DIR=") }.removePrefix("DIR=")
+            assertTrue(
+                Files.isSameFile(directory.resolve("game directory").toPath(), Path.of(actualDirectory)),
+                first.output
+            )
             assertTrue(first.output.contains("ARG=one"), first.output)
             assertTrue(first.output.contains("ARG=two words"), first.output)
             assertTrue(second.output.contains("Reusing configuration cache"), second.output)
