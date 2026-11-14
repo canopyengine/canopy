@@ -1,4 +1,15 @@
-# Standalone Java game launcher
+# Java game launcher
+
+For integration projects applying Canopy and Gradle `application`, prefer the
+automatically supplied `canopyRun` task. It builds the distribution and uses this
+same launcher implementation from the plugin JAR; no source file needs copying.
+Select **Tasks → application → canopyRun** in the IDE, or use
+`./gradlew canopyRun --args="--seed 42"` (`.\gradlew.bat` on Windows).
+Native IDE Main Run/Debug configurations are not intercepted.
+
+The source-file commands below remain useful for direct terminal/SSH execution.
+The internal `--manifest PATH` mode is used by the Gradle task after `installDist`,
+so it never starts a nested Gradle build.
 
 Use the same command on Linux, Windows and macOS. Requires a JDK 17+ to run the
 launcher and the project's Gradle wrapper JAR/properties. Gradle and the game may

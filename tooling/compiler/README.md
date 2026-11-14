@@ -304,3 +304,23 @@ coordinates prepares publication; this change does not publish to Maven Central.
 Until a release is published, build the matching artifacts with
 `./gradlew publishToMavenLocal` and include `mavenLocal()` in dependency and
 plugin-management repositories.
+
+## Bundled application launcher
+
+When Gradle's `application` plugin is applied, the Canopy plugin automatically adds
+`canopyRun` under the application's tasks. Select it in the IDE's Gradle window or
+run `./gradlew canopyRun` (`.\gradlew.bat canopyRun` on Windows). Terminal games
+open their own terminal window; headless applications stay in the calling console.
+No source launcher file or extra dependency is needed.
+
+The task builds `installDist` first and invokes the same bundled Java launcher as
+`tooling/launcher/CanopyLaunch.java`, without another Gradle invocation. It inherits
+normal `run` main/toolchain/JVM/environment/working-directory settings. Game arguments
+use JavaExec's `--args="--seed 42"`. `--current-terminal` explicitly retains Gradle's
+console streams for automation; it cannot make that console support raw input.
+Use direct installed/source launchers for interactive SSH sessions.
+
+This provides a Gradle run configuration, not an IntelliJ plugin. Native Run/Debug
+beside `main()` is unchanged. Linux window launching needs a desktop session and an
+installed kitty, alacritty, xfce4-terminal or xterm. Windows/macOS reuse the existing
+PowerShell/Terminal handling, including owned-window cleanup and child exit status.

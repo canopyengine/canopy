@@ -80,6 +80,8 @@ public class CanopyLaunch {
         } catch (IllegalArgumentException e) {
             System.err.println("Launcher: " + e.getMessage());
             status = 2;
+        } catch (BuildFailure e) {
+            status = e.status;
         } catch (IOException e) {
             System.err.println("Launcher: " + e.getMessage());
             status = 1;
@@ -96,6 +98,7 @@ public class CanopyLaunch {
         List<String> gradleArgs = new ArrayList<>();
         List<String> gameArgs = List.of();
         Boolean window = null;
+        Path suppliedManifest = null;
         for (int i = 0; i < args.length; i++) {
             String option = args[i];
             if (option.equals("--")) {
@@ -113,13 +116,14 @@ public class CanopyLaunch {
                 window = option.equals("--window");
                 continue;
             }
-            if (!List.of("-p", "--project", "--module", "--gradle-arg").contains(option)) {
+            if (!List.of("-p", "--project", "--module", "--gradle-arg", "--manifest").contains(option)) {
                 throw new IllegalArgumentException("Unknown option: " + option + "; put game arguments after --");
             }
             if (++i >= args.length) throw new IllegalArgumentException("Missing value for " + option);
             switch (option) {
                 case "-p", "--project" -> project = Path.of(args[i]);
                 case "--module" -> module = args[i];
+                case "--manifest" -> suppliedManifest = Path.of(args[i]);
                 case "--gradle-arg" -> gradleArgs.add(args[i]);
                 default -> throw new AssertionError(option);
             }
@@ -127,7 +131,26 @@ public class CanopyLaunch {
         if (!module.equals(":") && !module.matches("(:[A-Za-z0-9_-]+)+")) {
             throw new IllegalArgumentException("Module must be : or a path such as :game");
         }
-        project = project.toRealPath();
+        // Gradle's bundled task has already built the distribution; do not start a nested Gradle invocation.
+        List<String> fields = suppliedManifest == null
+            ? buildManifest(project.toRealPath(), module, gradleArgs) : readManifest(suppliedManifest);
+        List<String> game = new ArrayList<>();
+        game.add(fields.get(1));
+        game.addAll(fields.subList(5, fields.size()));
+        if (fields.get(4).isEmpty()) {
+            // The JVM expands classpath wildcards; Windows Path rejects '*' as a filename.
+            game.addAll(List.of("-cp", fields.get(2) + java.io.File.separator + "*", fields.get(3)));
+        } else {
+            game.addAll(List.of("--module-path", fields.get(2), "--module", fields.get(4) + "/" + fields.get(3)));
+        }
+        game.addAll(gameArgs);
+        if (window == null) window = terminalProject(Path.of(fields.get(2)));
+        if (window) return runInWindow(game, Path.of(fields.get(0)));
+        return run(game, Path.of(fields.get(0)), true);
+    }
+
+    private static List<String> buildManifest(Path project, String module, List<String> gradleArgs)
+            throws IOException, InterruptedException {
         Path wrapper = project.resolve("gradle/wrapper/gradle-wrapper.jar");
         if (!Files.isRegularFile(wrapper)) throw new IOException("No Gradle wrapper JAR in " + project);
         Path temp = Files.createTempDirectory("canopy-launch-");
@@ -144,29 +167,27 @@ public class CanopyLaunch {
             build.addAll(gradleArgs);
             build.add(module.equals(":") ? ":canopyLaunchManifest" : module + ":canopyLaunchManifest");
             int result = run(build, project, false);
-            if (result != 0) return result;
-            fields = Arrays.asList(Files.readString(manifest, StandardCharsets.UTF_8).split("\u0000", -1));
-            if (fields.size() < 5 || fields.subList(0, 4).stream().anyMatch(String::isBlank)) {
-                throw new IOException("Invalid Gradle launcher manifest");
-            }
+            if (result != 0) throw new BuildFailure(result);
+            fields = readManifest(manifest);
         } finally {
             Files.deleteIfExists(manifest);
             Files.deleteIfExists(init);
             Files.deleteIfExists(temp);
         }
-        List<String> game = new ArrayList<>();
-        game.add(fields.get(1));
-        game.addAll(fields.subList(5, fields.size()));
-        if (fields.get(4).isEmpty()) {
-            // The JVM expands classpath wildcards; Windows Path rejects '*' as a filename.
-            game.addAll(List.of("-cp", fields.get(2) + java.io.File.separator + "*", fields.get(3)));
-        } else {
-            game.addAll(List.of("--module-path", fields.get(2), "--module", fields.get(4) + "/" + fields.get(3)));
+        return fields;
+    }
+
+    private static List<String> readManifest(Path manifest) throws IOException {
+        List<String> fields = Arrays.asList(Files.readString(manifest, StandardCharsets.UTF_8).split("\u0000", -1));
+        if (fields.size() < 5 || fields.subList(0, 4).stream().anyMatch(String::isBlank)) {
+            throw new IOException("Invalid Gradle launcher manifest");
         }
-        game.addAll(gameArgs);
-        if (window == null) window = terminalProject(Path.of(fields.get(2)));
-        if (window) return runInWindow(game, Path.of(fields.get(0)));
-        return run(game, Path.of(fields.get(0)), true);
+        return fields;
+    }
+
+    private static final class BuildFailure extends IOException {
+        final int status;
+        BuildFailure(int status) { this.status = status; }
     }
 
     private static boolean terminalProject(Path libraries) throws IOException {
@@ -292,18 +313,20 @@ public class CanopyLaunch {
             if (System.getenv("DISPLAY") == null && System.getenv("WAYLAND_DISPLAY") == null) {
                 throw new IOException("A desktop display is required for a new terminal window; use --current-terminal here");
             }
-            for (String terminal : List.of("kitty", "alacritty", "xterm")) {
+            for (String terminal : List.of("kitty", "alacritty", "xfce4-terminal", "xterm")) {
                 if (terminal.equals("xterm") && System.getenv("DISPLAY") == null) continue;
                 Path executable = findExecutable(terminal);
                 if (executable == null) continue;
                 List<String> command = new ArrayList<>(List.of(executable.toString()));
                 if (terminal.equals("kitty")) command.addAll(List.of("--override", "close_on_child_death=yes", "--title", "Canopy"));
                 else if (terminal.equals("alacritty")) command.addAll(List.of("--title", "Canopy", "-e"));
-                else command.addAll(List.of("-T", "Canopy", "-tn", "xterm-256color", "-e"));
+                else if (terminal.equals("xfce4-terminal")) {
+                    command.addAll(List.of("--disable-server", "--title=Canopy", "--execute"));
+                } else command.addAll(List.of("-T", "Canopy", "-tn", "xterm-256color", "-e"));
                 command.addAll(child);
                 return command;
             }
-            throw new IOException("Install kitty, alacritty or xterm to open the game window, or use --current-terminal");
+            throw new IOException("Install kitty, alacritty, xfce4-terminal or xterm to open the game window, or use --current-terminal");
         }
         throw new IOException("Terminal windows are not supported on " + os + "; use --current-terminal");
     }

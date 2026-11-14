@@ -8,6 +8,8 @@ import org.gradle.api.Project
 import org.gradle.api.artifacts.ModuleDependency
 import org.gradle.api.logging.configuration.ConsoleOutput
 import org.gradle.api.provider.Provider
+import org.gradle.api.tasks.JavaExec
+import org.gradle.api.tasks.Sync
 import org.jetbrains.kotlin.gradle.plugin.KotlinCompilation
 import org.jetbrains.kotlin.gradle.plugin.KotlinCompilerPluginSupportPlugin
 import org.jetbrains.kotlin.gradle.plugin.SubpluginArtifact
@@ -20,6 +22,27 @@ import org.jetbrains.kotlin.gradle.plugin.getKotlinPluginVersion
  */
 class CanopyCompilerPlugin : KotlinCompilerPluginSupportPlugin {
     override fun apply(target: Project) {
+        target.pluginManager.withPlugin("application") {
+            val run = target.tasks.named("run", JavaExec::class.java)
+            val install = target.tasks.named("installDist", Sync::class.java)
+            target.tasks.register("canopyRun", CanopyRun::class.java) { task ->
+                task.group = "application"
+                task.description = "Run the game directly, opening terminal games in a separate window."
+                task.dependsOn(install)
+                task.currentTerminal.convention(false)
+                task.libraries.set(target.layout.dir(install.map { it.destinationDir.resolve("lib") }))
+                task.launcherDirectory.set(target.layout.buildDirectory.dir("canopy/launcher"))
+                task.mainClass.convention(run.flatMap { it.mainClass })
+                task.mainModule.convention(run.flatMap { it.mainModule })
+                task.javaLauncher.convention(run.flatMap { it.javaLauncher })
+                task.classpath = run.get().classpath
+                task.setJvmArgs(run.get().allJvmArgs)
+                task.workingDir(run.get().workingDir)
+                task.setEnvironment(run.get().environment)
+                task.setArgs(run.get().args)
+                task.standardInput = System.`in`
+            }
+        }
         val rules = target.configurations.create("canopyCompilerRules") {
             it.isCanBeConsumed = false
             it.isCanBeResolved = false
