@@ -69,6 +69,10 @@ internal const val CANOPY_KOTLIN_VERSION = "${libs.versions.kotlin.get()}"
 kotlin.sourceSets.main { kotlin.srcDir(coordinates) }
 tasks.named("compileKotlin") { dependsOn(coordinates) }
 base { archivesName.set("canopy-compiler-gradle") }
+// One launcher implementation serves copied source launchers and the published Gradle task.
+tasks.processResources {
+    from("../launcher/CanopyLaunch.java") { into("io/canopy/tooling/compiler/gradle/launcher") }
+}
 val compilerJar = tasks.register<Jar>("compilerJar") {
     archiveBaseName.set("canopy-compiler")
     from(compiler.output)

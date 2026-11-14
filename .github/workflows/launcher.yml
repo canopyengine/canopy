@@ -71,6 +71,11 @@ jobs:
         run: >-
           ./gradlew stageCentralPublication --max-workers=2
           "-Dorg.gradle.java.installations.paths=${{ steps.jdk17.outputs.path }},${{ steps.jdk25.outputs.path }}"
+      - name: Verify bundled Gradle launcher from an external consumer
+        shell: bash
+        run: >-
+          ./gradlew -p tooling/compiler test --tests '*CanopyRunGradleTests' --max-workers=2 --console=plain
+          "-Dorg.gradle.java.installations.paths=${{ steps.jdk17.outputs.path }},${{ steps.jdk25.outputs.path }}"
       - name: Verify terminal acceptance harness
         run: python -m unittest discover -s tooling/launcher/tests -p 'test_*.py'
       - name: Test native terminal input and restoration through the launcher
