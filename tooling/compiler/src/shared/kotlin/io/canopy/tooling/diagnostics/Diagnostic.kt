@@ -138,8 +138,24 @@ internal object DiagnosticFormat {
     }.sum()
 }
 
-/** Conservative automatic color selection: a rich terminal must be confirmed by the execution host. */
+/** Automatic color selection from host console settings and terminal capabilities. */
 internal object DiagnosticColor {
+    // System.console() belongs to the Gradle daemon, not the client terminal.
+    fun terminal(
+        term: String?,
+        colorTerm: String?,
+        windowsTerminal: String?,
+        ansiCon: String?,
+        conEmu: String?,
+    ): Boolean {
+        if (term.equals("dumb", ignoreCase = true)) return false
+        return !term.isNullOrBlank() ||
+            !colorTerm.isNullOrBlank() ||
+            !windowsTerminal.isNullOrBlank() ||
+            ansiCon != null ||
+            conEmu.equals("ON", ignoreCase = true)
+    }
+
     fun enabled(mode: String, rich: Boolean, plain: Boolean, noColor: Boolean, ci: Boolean, ide: Boolean): Boolean {
         require(mode in setOf("auto", "always", "never")) { "Choose auto, always or never" }
         if (plain || noColor || ide) return false

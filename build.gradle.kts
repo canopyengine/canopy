@@ -1,9 +1,9 @@
+import org.gradle.api.tasks.SourceSetContainer
+import org.gradle.api.tasks.testing.Test
 import org.gradle.jvm.tasks.Jar
 import org.gradle.plugins.ide.eclipse.model.EclipseModel
 import org.gradle.plugins.ide.idea.model.IdeaModel
 import org.gradle.testing.jacoco.tasks.JacocoReport
-import org.gradle.api.tasks.SourceSetContainer
-import org.gradle.api.tasks.testing.Test
 
 val canopyVersion = project.property("canopyVersion") ?: ""
 
@@ -67,7 +67,6 @@ subprojects {
             sourceCompatibility = JavaVersion.VERSION_25
             targetCompatibility = JavaVersion.VERSION_25
             withSourcesJar()
-
         }
     }
 
@@ -201,7 +200,17 @@ subprojects {
 
 val allTests = tasks.register("test") { group = "verification" }
 val allLint = tasks.register("ktlintCheck") { group = "verification" }
+val allBuilds = tasks.named("build")
+tasks.register("buildAll") {
+    group = "build"
+    description = "Builds and checks all enabled Canopy modules and the included compiler tooling."
+    dependsOn(allBuilds)
+}
 subprojects {
+    plugins.withType<BasePlugin> {
+        val moduleBuild = tasks.named("build")
+        allBuilds.configure { dependsOn(moduleBuild) }
+    }
     plugins.withId("java") {
         val moduleTests = tasks.named("test")
         allTests.configure { dependsOn(moduleTests) }
@@ -217,10 +226,12 @@ coverageReport.configure {
     executionData(file("tooling/compiler/build/jacoco/test.exec"))
     listOf("main", "compiler").forEach { sourceSet ->
         sourceDirectories.from(file("tooling/compiler/src/$sourceSet/kotlin"))
-        classDirectories.from(fileTree("tooling/compiler/build/classes/kotlin/$sourceSet") {
-            // Both isolated hosts compile this same source. Analyze the tested main copy once.
-            if (sourceSet == "compiler") exclude("io/canopy/tooling/diagnostics/**")
-        })
+        classDirectories.from(
+            fileTree("tooling/compiler/build/classes/kotlin/$sourceSet") {
+                // Both isolated hosts compile this same source. Analyze the tested main copy once.
+                if (sourceSet == "compiler") exclude("io/canopy/tooling/diagnostics/**")
+            }
+        )
     }
     sourceDirectories.from(file("tooling/compiler/src/shared/kotlin"))
 }

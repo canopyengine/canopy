@@ -2,8 +2,6 @@ package io.canopy.engine.ui
 
 import kotlin.math.max
 import kotlin.math.min
-import io.canopy.engine.graphics.GridContent
-import io.canopy.engine.graphics.GridStyle
 
 /** Logical dimensions: cells for a terminal backend, pixels for a graphical backend. */
 data class UiSize(val width: Double, val height: Double) {
@@ -39,6 +37,13 @@ sealed interface UiLength {
     /** Receives remaining space, shared evenly with fill siblings. */
     data object Fill : UiLength
 
+    /** Positive proportional share of remaining space in a flow container. */
+    data class Weight(val value: Double) : UiLength {
+        init {
+            require(value.isFinite() && value > 0.0)
+        }
+    }
+
     /** Fixed logical units. */
     data class Fixed(val value: Double) : UiLength {
         init {
@@ -54,25 +59,35 @@ sealed interface UiLength {
     }
 }
 
-/** Placement on a container's cross axis. */
-enum class UiAlignment { Start, Center, End, Stretch }
-
-/** Universal layout constraints. Padding and gap use backend logical units. */
+/**
+ * Universal component configuration. Padding and gap use backend logical units.
+ * Placement and sizing are also available directly through [UiNode.place] and [UiNode.size].
+ * @property place One parent-relative placement policy; flow parents reject explicit anchors.
+ * @property arrangement Main-axis free-space distribution after sizing and minimum gaps.
+ * @property lineGap Vertical separation between wrapping/grid rows.
+ */
 data class UiStyle(
     val width: UiLength = UiLength.Content,
     val height: UiLength = UiLength.Content,
     val padding: Double = 0.0,
     val gap: Double = 0.0,
-    val alignment: UiAlignment = UiAlignment.Start,
+    val alignment: CrossAlign = CrossAlign.Start,
     val wrap: Boolean = true,
     val clip: Boolean = true,
     val maxWidth: Double? = null,
     val maxHeight: Double? = null,
     val border: UiBorder? = null,
     val appearance: UiAppearance = UiAppearance(),
+    val place: Place = Place.Auto,
+    val arrangement: Arrange = Arrange.Start,
+    val lineGap: Double = gap,
 ) {
-    internal val layoutKey = listOf(width, height, padding, gap, alignment, wrap, clip, maxWidth, maxHeight, border)
+    internal val layoutKey = listOf(
+        width, height, padding, gap, alignment, wrap, clip, maxWidth, maxHeight, border,
+        place, arrangement, lineGap
+    )
     init {
+        require(lineGap.isFinite() && lineGap >= 0.0)
         require(padding.isFinite() && gap.isFinite() && padding >= 0 && gap >= 0)
         require(maxWidth == null || maxWidth.isFinite() && maxWidth >= 0)
         require(maxHeight == null || maxHeight.isFinite() && maxHeight >= 0)
@@ -81,25 +96,66 @@ data class UiStyle(
 
 /** Platform implements metrics and primitives; containers and sizing remain shared engine behavior. */
 interface UiBackend {
-    /** Style-aware natural size; solid grids reserve a line around each cell, including the outside edges. */
-    fun measureGrid(columns: Int, rows: Int, columnGap: Int, gridStyle: GridStyle): UiSize {
-        if (gridStyle == GridStyle.Dotted) return measureGrid(columns, rows, columnGap)
-        val cell = measureText("M", Double.MAX_VALUE, false)
-        return UiSize(
-            (columns.toDouble() * (columnGap.toDouble() + 2) + 1) * cell.width,
-            (rows.toDouble() * 2 + 1) * cell.height
-        )
+    /** Resolves portable grid stroke widths. Terminal backends reserve one cell per enabled line. */
+    fun measureGridLines(lines: GridLines): GridLineMetrics {
+        fun width(line: LineStyle) = if (line.pattern == LinePattern.None) 0.0 else line.width
+        return GridLineMetrics(width(lines.outer), width(lines.horizontalStyle), width(lines.verticalStyle))
     }
 
-    /** Natural grid dimensions using this backend's character metrics; grids clip rather than wrap. */
-    fun measureGrid(columns: Int, rows: Int, columnGap: Int): UiSize {
-        val cell = measureText("M", Double.MAX_VALUE, false)
-        return UiSize((columns.toDouble() * (columnGap.toDouble() + 1) - columnGap) * cell.width, rows * cell.height)
+    /** Draws grid borders/dividers. Backends without line primitives must explicitly reject nonempty lines. */
+    fun drawGridLines(
+        lines: GridLines,
+        geometry: GridGeometry,
+        bounds: UiRect,
+        clip: UiRect,
+        appearance: UiAppearance,
+    ) {
+        require(
+            listOf(lines.outer, lines.horizontalStyle, lines.verticalStyle).all {
+                it.pattern == LinePattern.None
+            }
+        ) {
+            "This UI backend does not support Grid lines"
+        }
     }
 
-    /** Paints grid content synchronously into the pending frame; retaining the live content is unsupported. */
-    fun drawGrid(grid: GridContent, bounds: UiRect, clip: UiRect, appearance: UiAppearance) {
-        error("This UI backend does not support grid drawing")
+    /**
+     * Paints only visible glyph candidates and grid lines. UI controls are painted afterwards using the same
+     * geometry. No logical-board-sized iteration or persistent retention of [grid] is permitted.
+     */
+    fun drawGridCells(
+        grid: GridSurface,
+        geometry: GridGeometry,
+        bounds: UiRect,
+        clip: UiRect,
+        appearance: UiAppearance,
+    ) {
+        if (geometry.rows == 0) return
+        val visible = bounds.intersect(clip)
+        if (visible.width <= 0.0 || visible.height <= 0.0) return
+        drawGridLines(grid.lines, geometry, bounds, visible, appearance)
+        val firstColumn = geometry.columnAt(visible.x - bounds.x)
+        val lastColumn = geometry.columnAt(visible.x + visible.width - bounds.x)
+        val firstRow = geometry.rowAt(visible.y - bounds.y)
+        val lastRow = geometry.rowAt(visible.y + visible.height - bounds.y)
+        for (y in firstRow..lastRow) {
+            for (x in firstColumn..lastColumn) {
+                val cell = geometry.content(x, y)
+                val area = layoutBounds(cell.copy(x = bounds.x + cell.x, y = bounds.y + cell.y))
+                val ownClip = visible.intersect(area)
+                if (ownClip.width <= 0.0 || ownClip.height <= 0.0) continue
+                val symbol = grid[x, y]
+                if (symbol.glyph == ' ' && symbol.color == null) continue
+                drawText(
+                    symbol.glyph.toString(),
+                    area,
+                    ownClip,
+                    false,
+                    false,
+                    appearance.merge(UiAppearance(foreground = symbol.color))
+                )
+            }
+        }
     }
 
     /** Natural horizontal divider size in this backend's logical units. */
@@ -112,6 +168,12 @@ interface UiBackend {
 
     /** Maps host geometry to the backend drawable area, such as reserving a terminal wrap column. */
     fun viewport(size: UiSize): UiSize = size
+
+    /**
+     * Resolves layout rectangles to host geometry before painting and hit testing. Graphical hosts retain
+     * fractional coordinates by default; cell backends snap edges to their cell grid. Must be deterministic.
+     */
+    fun layoutBounds(bounds: UiRect): UiRect = bounds
 
     /** Measures wrapped or unwrapped text using this backend's cell/font metrics. */
     fun measureText(text: String, maxWidth: Double, wrap: Boolean): UiSize
@@ -168,7 +230,7 @@ interface UiBackend {
 }
 
 /** Internal layout/primitive policy; users compose concrete components. */
-internal enum class UiKind { Row, Column, Box, Text, Button }
+internal enum class UiKind { Row, Column, Box, FlowRow, Grid, Text, Button }
 
 /** Portable root composition layers; overlay roots are drawn after ordinary content. */
 enum class UiLayer { Content, Overlay }

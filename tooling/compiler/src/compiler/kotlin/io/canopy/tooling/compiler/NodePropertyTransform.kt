@@ -42,6 +42,8 @@ internal class NodePropertyTransform(private val messages: MessageCollector) : I
             owner.declarations.filterIsInstance<IrProperty>().forEach propertyLoop@{ property ->
                 val field = property.backingField ?: return@propertyLoop
                 if (field.isStatic || property.isDelegated) return@propertyLoop
+                // Source validation already explains these fields. Keep their valid Kotlin IR intact on failure.
+                if (property.unsupportedNodeStorage() != null) return@propertyLoop
                 val ownerKey = owner.fqNameWhenAvailable?.asString()
                     ?: "${owner.file.fileEntry.name}:${owner.startOffset}:${owner.name}"
                 fields[field.symbol] =

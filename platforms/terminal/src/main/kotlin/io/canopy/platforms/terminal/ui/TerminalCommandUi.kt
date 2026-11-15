@@ -8,7 +8,7 @@ import com.github.ajalt.mordant.widgets.Text
 import io.canopy.engine.commands.CommandPrompt
 import io.canopy.engine.commands.CommandPromptSnapshot
 import io.canopy.engine.core.managers.getManager
-import io.canopy.engine.ui.UiAlignment
+import io.canopy.engine.ui.CrossAlign
 import io.canopy.engine.ui.UiLayer
 import io.canopy.engine.ui.UiLength
 import io.canopy.engine.ui.UiManager
@@ -54,7 +54,7 @@ internal class TerminalCommandUi(
         }
         created.zIndex = 1000
         created.layer = UiLayer.Overlay
-        created.verticalAlignment = UiAlignment.End
+        created.verticalAlignment = CrossAlign.End
         created.hide()
         root = created
         prompt.addChild(created)

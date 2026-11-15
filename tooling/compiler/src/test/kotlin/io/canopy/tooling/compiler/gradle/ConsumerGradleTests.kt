@@ -97,6 +97,19 @@ class ConsumerGradleTests {
             ).buildAndFail()
             assertTrue("\u001B[36mhelp" in rich.output, rich.output)
             assertTrue("\u001B[32m2 +" in rich.output, rich.output)
+            val automatic = runner.withEnvironment(
+                System.getenv().filterKeys { it != "NO_COLOR" } +
+                    mapOf("CI" to "false", "TERM" to "xterm-256color")
+            ).withArguments(
+                "compileKotlin",
+                "--offline",
+                "--rerun-tasks",
+                "--console=auto",
+                "--gradle-user-home",
+                System.getProperty("canopy.gradle.home")
+            ).buildAndFail()
+            assertTrue("\u001B[36mhelp" in automatic.output, automatic.output)
+            assertTrue("\u001B[32m2 +" in automatic.output, automatic.output)
             val plain = runner.withArguments(
                 "compileKotlin",
                 "--offline",

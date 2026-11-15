@@ -467,6 +467,12 @@ internal class UiExpressionTransform(private val messages: MessageCollector) : I
                 }
 
                 override fun visitCall(expression: IrCall): IrExpression {
+                    // Configuration lambdas on declarative helpers have the same once-only ownership as constructors.
+                    if ((expression.symbol.owner.parent as? IrClass)?.fqNameWhenAvailable?.asString() ==
+                        "io.canopy.engine.ui.UiScope"
+                    ) {
+                        expression.arguments.forEach(::markNodeInitializer)
+                    }
                     expression.transformChildren(this, null)
                     val target = expression.symbol.owner
                     val receiver = uiReceiver()
@@ -486,6 +492,8 @@ internal class UiExpressionTransform(private val messages: MessageCollector) : I
                     if (receiver != null && isUiComponent) {
                         val hookName = when (target.name.asString()) {
                             "<set-style>" -> "bindStyle"
+                            "<set-place>" -> "bindPlace"
+                            "<set-size>" -> "bindSize"
                             "<set-theme>" -> "bindTheme"
                             "<set-isVisible>" -> "bindVisible"
                             "<set-enabled>" -> "bindEnabled"
@@ -521,19 +529,20 @@ internal class UiExpressionTransform(private val messages: MessageCollector) : I
                         "Row" -> "bindRow"
                         "Column" -> "bindColumn"
                         "Box" -> "bindBox"
+                        "FlowRow" -> "bindFlowRow"
+                        "Grid" -> "bindGrid"
                         else -> return expression
                     }
                     if (uiReceiver() == null) return expression
                     if (owner.file.packageFqName.asString() == "io.canopy.engine.ui") return expression
-                    if (expression.arguments.getOrNull(1) == null) return expression
                     val hook = scope.declarations.filterIsInstance<IrSimpleFunction>().single {
                         it.name.asString() ==
                             name
                     }
                     val builder =
                         DeclarationIrBuilder(pluginContext, owner.symbol, expression.startOffset, expression.endOffset)
-                    val value = expression.arguments.getOrNull(1) ?: return expression
-                    value.acceptVoid(object : IrVisitorVoid() {
+                    val value = expression.arguments.getOrNull(1)
+                    value?.acceptVoid(object : IrVisitorVoid() {
                         override fun visitElement(element: IrElement) {
                             element.acceptChildrenVoid(this)
                         }
@@ -553,12 +562,21 @@ internal class UiExpressionTransform(private val messages: MessageCollector) : I
                             }
                         }
                     })
-                    val evaluator = capture(value, hook.parameters[2].type, owner, pluginContext)
                     return builder.irCall(hook.symbol).apply {
                         arguments[0] = expression.arguments.getOrNull(0)
                         arguments[1] = builder.irString("${owner.file.fileEntry.name}:${expression.startOffset}")
-                        arguments[2] = evaluator
-                        if (name != "bindText") arguments[3] = expression.arguments.getOrNull(2)
+                        for (index in 1 until expression.arguments.size) {
+                            val destination = hook.parameters.indexOfFirst { it.name == target.parameters[index].name }
+                            val argument = expression.arguments[index] ?: continue
+                            val parameter = hook.parameters[destination]
+                            val reactive = parameter.type.classFqName?.asString() == "kotlin.Function0" &&
+                                target.parameters[index].type.classFqName?.asString() != "kotlin.Function0"
+                            arguments[destination] = if (reactive) {
+                                capture(argument, parameter.type, owner, pluginContext)
+                            } else {
+                                argument
+                            }
+                        }
                     }
                 }
             },

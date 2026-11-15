@@ -18,7 +18,6 @@ import io.canopy.engine.core.managers.SceneManager
 import io.canopy.engine.core.nodes.*
 import io.canopy.engine.core.nodes.types.empty.EmptyNode
 import io.canopy.engine.core.nodes.types.empty.EmptyNode2D
-import io.canopy.engine.graphics.GridContent
 import io.canopy.engine.input.InputFocus
 import io.canopy.engine.ui.*
 import io.canopy.engine.ui.components.*
@@ -68,14 +67,22 @@ class BuiltinNodeInheritanceTests {
             updates++
         }
     }
-    private class Tank(block: Tank.() -> Unit = {}) : GridNode<Tank>(2, 1, name = "tank", block = block)
+    private class Tank(block: Tank.() -> Unit = {}) : Grid<Tank>(columns = 2, rows = 1, name = "tank", block = block) {
+        override fun nodeInit() {
+            super.nodeInit()
+            empty('.')
+        }
+    }
     private class Separator(block: Separator.() -> Unit = {}) : Divider<Separator>(name = "separator", block = block)
 
-    private open class Habitat<N : Habitat<N>>(block: N.() -> Unit = {}) : GridNode<N>(10, 10, block = block) {
+    private open class Habitat<N : Habitat<N>>(
+        block: N.() -> Unit = {
+        },
+    ) : Grid<N>(columns = 10, rows = 10, block = block) {
         var capacity = 6
         override fun nodeInit() {
             super.nodeInit()
-            gridColor = UiColor.Rgb(0, 100, 200)
+            lines = GridLines(outer = LineStyle.Single.copy(color = UiColor.Rgb(0, 100, 200)))
         }
     }
     private class Reef(block: Reef.() -> Unit = {}) : Habitat<Reef>(block) {
@@ -106,7 +113,13 @@ class BuiltinNodeInheritanceTests {
         ) {
             labels += text
         }
-        override fun drawGrid(grid: GridContent, bounds: UiRect, clip: UiRect, appearance: UiAppearance) {
+        override fun drawGridCells(
+            grid: GridSurface,
+            geometry: GridGeometry,
+            bounds: UiRect,
+            clip: UiRect,
+            appearance: UiAppearance,
+        ) {
             this.grid = (0 until grid.columns).map { grid[it, 0].glyph }.joinToString("")
         }
         override fun drawDivider(bounds: UiRect, clip: UiRect, appearance: UiAppearance) {
@@ -167,7 +180,7 @@ class BuiltinNodeInheritanceTests {
             Separator { configured += "divider" }
             tank = Tank {
                 configured += "grid"
-                columnGap = 0
+                style = style.copy(gap = 0.0)
             }
         }
         assertTrue(configured.isEmpty())
@@ -181,7 +194,7 @@ class BuiltinNodeInheritanceTests {
         assertEquals(listOf("root", "column", "box", "text", "row", "button", "divider", "grid"), configured)
         assertEquals(2, root.zIndex)
         assertEquals(4, feed.updates)
-        assertEquals(0, tank.columnGap)
+        assertEquals(0.0, tank.style.gap)
         assertEquals(listOf("column content", "Food: 1", "Feed"), backend.labels)
         food.dispose()
     }
@@ -198,7 +211,7 @@ class BuiltinNodeInheritanceTests {
                 configured++
                 capacity = desired()
                 corals = 4
-                gridColor = green
+                lines = GridLines(outer = LineStyle.Single.copy(color = green))
             }
         }
         scenes.currScene = root
@@ -207,7 +220,7 @@ class BuiltinNodeInheritanceTests {
 
         // Act / Assert
         assertEquals("3/4", reef.enteredWith)
-        assertEquals(green, reef.gridColor)
+        assertEquals(green, reef.lines.outer.color)
         desired.update { 8 }
         ui.updateFrame()
         assertEquals(1, configured)
@@ -280,16 +293,18 @@ class BuiltinNodeInheritanceTests {
     @Test
     fun `inferred direct grid construction preserves its self returning helpers`() {
         // Arrange
-        val grid = GridNode(10, 10) { columnGap = 0 }
+        val grid = Grid(columns = 10, rows = 10, block = { style = style.copy(gap = 0.0) })
 
         // Act
         val prefab = grid.asPrefab()
-        prefab.buildTree()
+        val root = UiRoot()
+        root.addChild(prefab)
+        scenes.currScene = root
 
         // Assert
         assertSame(grid, prefab)
         assertEquals(10, prefab.columns)
-        assertEquals(0, prefab.columnGap)
+        assertEquals(0.0, prefab.style.gap)
     }
 
     @Test

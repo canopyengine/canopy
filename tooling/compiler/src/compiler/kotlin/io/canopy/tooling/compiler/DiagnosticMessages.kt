@@ -28,6 +28,27 @@ internal class DiagnosticMessages(
     private var errors = 0
     val errorCount: Int get() = errors
     private val spans = IdentityHashMap<SourceSpan, IrFile>()
+    private data class PendingMessage(
+        val severity: CompilerMessageSeverity,
+        val text: String,
+        val location: CompilerMessageLocation?,
+    )
+    private var pending: MutableList<PendingMessage>? = null
+
+    /** Publishes this compilation's diagnostics together, retaining each source location for IDE navigation. */
+    fun collect(action: () -> Unit) {
+        check(pending == null) { "Diagnostic collection is already active" }
+        val collected = mutableListOf<PendingMessage>()
+        pending = collected
+        try {
+            action()
+        } finally {
+            pending = null
+            collected.sortedWith(
+                compareBy({ it.location?.path ?: "" }, { it.location?.line ?: 0 }, { it.location?.column ?: 0 })
+            ).forEach { delegate.report(it.severity, it.text, it.location) }
+        }
+    }
 
     fun source(file: IrFile): String? {
         val name = file.fileEntry.name
@@ -108,7 +129,7 @@ internal class DiagnosticMessages(
                     SourceLine(displayPath(file.fileEntry.name), line, column, it, length)
                 }
         }
-        delegate.report(
+        val message = PendingMessage(
             if (warning) CompilerMessageSeverity.WARNING else CompilerMessageSeverity.ERROR,
             DiagnosticFormat.render(
                 Diagnostic(code, title, sourceLine, label, help, replacement, note, warning),
@@ -117,6 +138,12 @@ internal class DiagnosticMessages(
             ),
             location
         )
+        val collected = pending
+        if (collected == null) {
+            delegate.report(message.severity, message.text, message.location)
+        } else {
+            collected += message
+        }
     }
 
     fun span(file: IrFile, start: Int, length: Int = 1): SourceSpan =

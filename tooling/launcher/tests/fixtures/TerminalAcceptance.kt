@@ -16,7 +16,7 @@ import io.canopy.engine.ui.UiRoot
 import io.canopy.engine.ui.UiStyle
 import io.canopy.engine.ui.UiTheme
 import io.canopy.engine.ui.components.Divider
-import io.canopy.engine.ui.components.GridNode
+import io.canopy.engine.ui.components.Grid
 import io.canopy.platforms.terminal.app.terminalApp
 
 /** External-consumer fixture for real terminal input, geometry and lifecycle acceptance. */
@@ -85,16 +85,17 @@ private class AcceptanceMap : UiNode<AcceptanceMap>(
     var ticks by signal(0)
     val displayedTicks by computed { ticks }
     private var elapsed = 0f
-    private var map: GridNode<*>? = null
+    private var map: Grid<*>? = null
 
     override fun nodeInit() {
         super.nodeInit()
         ui {
-            map = GridNode(columns = 12, rows = 2) {
-                style = UiStyle(appearance = UiAppearance(bold = true))
+            map = Grid(columns = 12, rows = 2, block = {
+                style = UiStyle(gap = 1.0, lineGap = 0.0, appearance = UiAppearance(bold = true))
+                empty('.')
                 set(0, 0, 'r', UiColor.Rgb(120, 240, 120))
                 set(0, 1, 'f', UiColor.Rgb(255, 140, 70))
-            }
+            })
         }
     }
 

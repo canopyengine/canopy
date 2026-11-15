@@ -66,6 +66,40 @@ class NodeVisibilityTests {
         scenes.onUpdate(0f)
         assertFailsWith<CanopyException> { child.isVisible }
         assertFailsWith<CanopyException> { child.show() }
+        assertFailsWith<CanopyException> { child.toggleVisibility() }
+    }
+
+    @Test
+    fun `toggling visibility flips local state while preserving hidden ancestors and descendants`() {
+        // Arrange
+        val parent = EmptyNode("parent")
+        val child = CountingNode("child")
+        val descendant = EmptyNode("descendant")
+        parent.addChild(child)
+        child.addChild(descendant)
+        descendant.hide()
+
+        // Act / Assert
+        child.toggleVisibility()
+        assertFalse(child.isVisible)
+        child.toggleVisibility()
+        assertTrue(child.isVisible)
+        assertTrue(child.isVisibleInTree)
+        assertFalse(descendant.isVisible)
+
+        scenes.currScene = parent
+        parent.hide()
+        child.toggleVisibility()
+        child.toggleVisibility()
+        assertTrue(child.isVisible)
+        assertFalse(child.isVisibleInTree)
+        assertFalse(parent.isVisible)
+        child.nodeUpdate(0.1f)
+        assertEquals(1, child.updates)
+
+        parent.toggleVisibility()
+        assertTrue(child.isVisibleInTree)
+        assertFalse(descendant.isVisibleInTree)
     }
 
     @Test

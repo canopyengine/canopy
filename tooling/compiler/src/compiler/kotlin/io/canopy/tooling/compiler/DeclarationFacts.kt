@@ -47,13 +47,7 @@ internal class DeclarationFacts(
                     !field.isStatic &&
                     !declaration.isDelegated
                 ) {
-                    when {
-                        declaration.isLateinit -> UnsupportedStorage.Lateinit
-                        field.annotations.isNotEmpty() || declaration.hasAnnotation(FqName("kotlin.jvm.JvmField")) ->
-                            UnsupportedStorage.FieldAnnotation
-                        field.type.classOrNull?.owner?.isValue == true -> UnsupportedStorage.ValueClass
-                        else -> null
-                    }
+                    declaration.unsupportedNodeStorage()
                 } else {
                     null
                 }
@@ -67,5 +61,17 @@ internal class DeclarationFacts(
             }
             else -> DeclarationInfo(name, span)
         }
+    }
+}
+
+/** Storage exclusions shared by source validation and error-recovering lowering. */
+internal fun IrProperty.unsupportedNodeStorage(): UnsupportedStorage? {
+    val field = backingField ?: return null
+    return when {
+        isLateinit -> UnsupportedStorage.Lateinit
+        field.annotations.isNotEmpty() || hasAnnotation(FqName("kotlin.jvm.JvmField")) ->
+            UnsupportedStorage.FieldAnnotation
+        field.type.classOrNull?.owner?.isValue == true -> UnsupportedStorage.ValueClass
+        else -> null
     }
 }

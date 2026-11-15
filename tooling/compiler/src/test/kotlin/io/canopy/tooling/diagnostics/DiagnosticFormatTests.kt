@@ -143,6 +143,19 @@ class DiagnosticFormatTests {
     }
 
     @Test
+    fun `automatic terminal detection supports Windows and Unix shells without assuming a daemon console`() {
+        // Arrange / Act / Assert
+        assertTrue(DiagnosticColor.terminal("xterm-256color", null, null, null, null))
+        assertTrue(DiagnosticColor.terminal(null, "truecolor", null, null, null))
+        assertTrue(DiagnosticColor.terminal(null, null, "session", null, null))
+        assertTrue(DiagnosticColor.terminal(null, null, null, "", null))
+        assertTrue(DiagnosticColor.terminal(null, null, null, null, "ON"))
+        assertFalse(DiagnosticColor.terminal(null, null, null, null, null))
+        assertFalse(DiagnosticColor.terminal("", "", "", null, "OFF"))
+        assertFalse(DiagnosticColor.terminal("dumb", "truecolor", "session", "", "ON"))
+    }
+
+    @Test
     fun `automatic color respects plain console no color ci and ide signals`() {
         fun enabled(
             mode: String = "auto",

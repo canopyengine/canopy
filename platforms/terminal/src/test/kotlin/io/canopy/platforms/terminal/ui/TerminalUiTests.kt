@@ -30,6 +30,25 @@ class TerminalUiTests {
     private val terminal = Terminal(ansiLevel = AnsiLevel.TRUECOLOR, interactive = true)
     private var app: TerminalApp? = null
 
+    @Test
+    fun `centered canvas components expose snapped bounds matching terminal drawing cells`() {
+        // Arrange
+        val output = mutableListOf<String>()
+        val host = TerminalApp(terminal, output::add, { Size(22, 8) }).also { app = it }
+        host.engineLoop.enter()
+        lateinit var label: UiNode<*>
+        ManagersRegistry.getManager(SceneManager::class).currScene = io.canopy.engine.ui.Canvas {
+            label = Text("even", place = io.canopy.engine.ui.Place.At(io.canopy.engine.ui.Anchor.Center))
+        }
+
+        // Act
+        host.update(0f)
+
+        // Assert
+        assertEquals(UiRect(8.0, 3.0, 4.0, 1.0), label.bounds)
+        assertTrue(output.isNotEmpty())
+    }
+
     @AfterEach
     fun cleanup() {
         app?.engineLoop?.exit()

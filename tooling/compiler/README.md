@@ -59,12 +59,24 @@ excerpt, a caret label and concrete help. Safe suggestions show `-`/`+` source l
 Compatibility failures produce one build-level error rather than repeated field errors.
 Existing diagnostic IDs and the legacy rule-provider `report` API remain available.
 
+Diagnostics are collected across the compilation and emitted together in source-path,
+line and column order, retaining a separate navigable compiler location for each problem.
+Source errors do not hide independent stored-state, startup, ownership, UI or construction
+diagnostics. Unsupported storage is left intact after its source diagnostic; a missing
+storage runtime ABI skips dependent stored-state validation to avoid cascading errors.
+The compilation still fails when any error is reported. Kotlin frontend errors can prevent
+the IR plugin from running, so this collection covers Canopy diagnostics from a single
+compilation rather than promising every possible error in a broken program.
+
 Colors use standard ANSI terminal colors; they never determine meaning on their own.
-For Gradle, `--console=rich` enables automatic diagnostic colors. `--console=plain`,
+For Gradle, `--console=rich` enables automatic diagnostic colors. The default `--console=auto`
+also enables colors when `TERM` (except `dumb`), `COLORTERM`, `WT_SESSION`, `ANSICON` or
+`ConEmuANSI=ON` identifies an ANSI-capable terminal. `--console=plain`,
 `NO_COLOR` and recognized IDE builds keep Canopy messages uncolored. CI stays plain
 in automatic mode. `-Pcanopy.diagnostics.color=auto|always|never` controls the preference;
 plain-console, IDE and NO_COLOR safeguards take priority. Automatic mode is conservative
-when Gradle has not confirmed rich-console output. Kotlin and Gradle retain their own
+when no terminal capability is advertised. For redirected output, use `--console=plain`
+or `-Pcanopy.diagnostics.color=never`. Kotlin and Gradle retain their own
 prefixes, task summaries and native diagnostics.
 
 The formatter has no compiler/Gradle dependencies and is compiled independently into
@@ -193,6 +205,17 @@ provide this version's inline boundary; incompatible runtimes produce
 
 ## Verification
 
+In IntelliJ, reload the Gradle project, then run **canopy > Tasks > build > buildAll**
+from the Gradle tool window. This explicitly builds all enabled engine modules and
+the included compiler tooling, including tests and lint. The root `:build` task
+aggregates the same builds. IntelliJ's **Build Project** action is a separate IDE
+action and is not the `buildAll` Gradle task.
+
+From a terminal, use `gradlew.bat buildAll` (Windows) or `./gradlew buildAll`.
+For a forced rebuild without separate compiler cleaning, add `--rerun-tasks`.
+To install matching artifacts for a separate game project, run
+`gradlew.bat buildAll publishToMavenLocal`.
+
 From the engine root run:
 
 ```text
@@ -268,9 +291,10 @@ Registration checks provider API revisions, duplicate identities, supported targ
 and diagnostic ownership before reading declarations. Diagnostic severity is separate
 from the rule ID. Providers cannot redefine mandatory Canopy diagnostics or downgrade
 them to warnings. Metadata is copied once, and rules run in deterministic ID order
-inside each phase. Every applicable rule completes that phase; errors then prevent
-dependent transformations, while warnings allow them. A failed provider reports a
-build error once per phase without preventing independent checks in that phase.
+inside each phase. Every applicable rule completes that phase; independent later checks
+continue after errors, while failed storage ABI checks prevent dependent validation.
+A failed provider reports a build error once per phase without preventing independent
+checks in that phase.
 
 Storage, ownership, UI capture and construction remain trusted, explicitly ordered
 transformations. Their existing runtime ABI checks stay conditional on actual use.

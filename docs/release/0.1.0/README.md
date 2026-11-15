@@ -67,6 +67,16 @@ controller behavior described in older verification/audit snapshots.
 
 ## Current feature and experience audit
 
+The [Canvas and layout implementation notes](canvas-layout.md) describe the
+0.1.0 Canvas subtree, component placement, sizing, platform boundary and companion
+documentation work. They do not change the pinned acceptance baseline above.
+
+The [unified Grid notes](unified-grid.md) extend that work with sparse glyph and
+retained UI cells and independent outer/internal lines.
+
+The [UI cleanup and migration notes](ui-cleanup.md) supersede those transitional
+wrappers and compatibility APIs with UiNode measurement hooks, Box and unified Grid.
+
 The [12 November feature/experience audit](feature-and-experience-audit.md) identifies
 remaining implementation, setup, learning and release gates against the newer
 integration baselines. Earlier verification tables above remain historical snapshots.

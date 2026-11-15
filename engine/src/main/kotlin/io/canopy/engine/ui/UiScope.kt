@@ -27,6 +27,7 @@ class UiScope internal constructor(private val root: UiRoot<*>, private val pare
         var observer: UiObserver? = null
         var remembered: Any? = null
         var hasRemembered = false
+        var configured = false
         fun dispose() {
             observer?.dispose()
             scope?.dispose()
@@ -95,6 +96,8 @@ class UiScope internal constructor(private val root: UiRoot<*>, private val pare
                     UiKind.Row -> RowNode(name = name)
                     UiKind.Column -> ColumnNode(name = name)
                     UiKind.Box -> BoxNode(name = name)
+                    UiKind.FlowRow -> io.canopy.engine.ui.components.FlowRow(name = name)
+                    UiKind.Grid -> io.canopy.engine.ui.components.Grid(name = name)
                 }
             }
         }
@@ -124,7 +127,7 @@ class UiScope internal constructor(private val root: UiRoot<*>, private val pare
                     require(
                         added == listOf(it) &&
                             untrack { it.parent === parent } &&
-                            it !is UiRoot<*> &&
+                            (it !is UiRoot<*> || it is Canvas<*>) &&
                             it !is UiRegion
                     ) {
                         "A node declaration must construct exactly one fresh child in this scope"
@@ -142,19 +145,91 @@ class UiScope internal constructor(private val root: UiRoot<*>, private val pare
     }
     private fun slot(prefix: String) = "$prefix:${counter++}"
 
+    /** Local Canvas boundary, retained with this scope; it does not register another global overlay. */
+    fun Canvas(
+        size: CanvasSize = CanvasSize.Viewport,
+        anchor: Anchor = Anchor.TopLeft,
+        content: UiScope.() -> Unit,
+    ): Canvas<*> = node(slot("Canvas")) { io.canopy.engine.ui.Canvas(size, anchor, content = content) }
+
     /** Universal horizontal container. */
-    fun Row(style: UiStyle = UiStyle(width = UiLength.Fill), block: UiScope.() -> Unit): RowNode<*> =
-        container(UiKind.Row, style, block) as RowNode<*>
+    fun Row(
+        style: UiStyle = UiStyle(width = UiLength.Fill),
+        place: Place = style.place,
+        size: Size? = null,
+        arrange: Arrange = style.arrangement,
+        align: CrossAlign? = null,
+        gap: Double = style.gap,
+        block: UiScope.() -> Unit,
+    ): RowNode<*> = container(UiKind.Row, style.withLayout(place, size, arrange, align, gap), block) as RowNode<*>
 
     /** Universal vertical container. */
-    fun Column(style: UiStyle = UiStyle(width = UiLength.Fill), block: UiScope.() -> Unit): ColumnNode<*> =
-        container(UiKind.Column, style, block) as ColumnNode<*>
+    fun Column(
+        style: UiStyle = UiStyle(width = UiLength.Fill),
+        place: Place = style.place,
+        size: Size? = null,
+        arrange: Arrange = style.arrangement,
+        align: CrossAlign? = null,
+        gap: Double = style.gap,
+        block: UiScope.() -> Unit,
+    ): ColumnNode<*> =
+        container(UiKind.Column, style.withLayout(place, size, arrange, align, gap), block) as ColumnNode<*>
 
     /** Universal overlapping container. */
     fun Box(
         style: UiStyle = UiStyle(width = UiLength.Fill, height = UiLength.Fill),
+        place: Place = style.place,
+        size: Size? = null,
         block: UiScope.() -> Unit,
-    ): BoxNode<*> = container(UiKind.Box, style, block) as BoxNode<*>
+    ): BoxNode<*> = container(UiKind.Box, style.withLayout(place, size), block) as BoxNode<*>
+
+    /** Wrapping horizontal flow. Line spacing is independent of text wrapping. */
+    fun FlowRow(
+        style: UiStyle = UiStyle(width = UiLength.Fill),
+        place: Place = style.place,
+        size: Size? = null,
+        arrange: Arrange = style.arrangement,
+        align: CrossAlign? = null,
+        gap: Double = style.gap,
+        lineGap: Double = gap,
+        block: UiScope.() -> Unit,
+    ): io.canopy.engine.ui.components.FlowRow<*> = container(
+        UiKind.FlowRow,
+        style.withLayout(place, size, arrange, align, gap).copy(lineGap = lineGap),
+        block
+    ) as io.canopy.engine.ui.components.FlowRow<*>
+
+    /** Equal-width grid cells; each row is as tall as its tallest child. */
+    fun Grid(
+        columns: Int,
+        style: UiStyle? = null,
+        gap: Double? = null,
+        rows: Int? = null,
+        place: Place? = null,
+        size: Size? = null,
+        cellSize: Size? = null,
+        lines: GridLines? = null,
+        cellPadding: Double? = null,
+        block: io.canopy.engine.ui.components.Grid<*>.() -> Unit = {},
+        content: UiScope.() -> Unit = {},
+    ): io.canopy.engine.ui.components.Grid<*> = bindGrid(
+        slot("Grid"), { columns }, style?.let { { it } }, gap?.let { { it } }, { rows },
+        place?.let { { it } }, size?.let { { it } }, cellSize?.let { { it } },
+        lines?.let { { it } }, cellPadding?.let { { it } }, block, content
+    )
+
+    /** Explicit retained cell slot. Use coordinate slots or sequential children within a grid, not both. */
+    fun cell(x: Int, y: Int, content: UiScope.() -> Unit) {
+        var owner: Node<*>? = parent
+        while (owner != null && owner !is UiNode<*>) owner = owner.parent
+        require(owner is io.canopy.engine.ui.components.Grid<*>) { "cell(x, y) requires a Grid parent" }
+        require(x in 0 until owner.columns && y in 0 until (owner.rowLimit ?: Int.MAX_VALUE)) {
+            "Cell ($x, $y) is outside the configured Grid dimensions"
+        }
+        val slot = node("cell:$x:$y") { io.canopy.engine.ui.components.GridCell(GridPosition(x, y)) {} }
+        val scope = slot.content ?: UiScope(root, slot).also { slot.content = it }
+        scope.compose(content)
+    }
     private fun container(kind: UiKind, style: UiStyle, block: UiScope.() -> Unit): UiNode<*> {
         val element = element(slot(kind.name), kind)
         element.style = style
@@ -164,27 +239,57 @@ class UiScope internal constructor(private val root: UiRoot<*>, private val pare
     }
 
     /** Text primitive. With the compiler plugin, signal reads in [value] update this property only. */
-    fun Text(value: String): TextNode<*> = (element(slot("Text"), UiKind.Text) as TextNode<*>).also { it.text = value }
-
-    /** Action primitive, invoked by keyboard focus or explicit activation. */
-    fun Button(label: String, onClick: () -> Unit): ButtonNode<*> =
-        (element(slot("Button"), UiKind.Button) as ButtonNode<*>).also {
-            it.text = label
-            it.action = onClick
+    fun Text(value: String, place: Place = Place.Auto, size: Size = Size.Content): TextNode<*> =
+        (element(slot("Text"), UiKind.Text) as TextNode<*>).also {
+            it.text = value
+            it.style = it.style.withLayout(place, size)
         }
 
+    /** Action primitive, invoked by keyboard focus or explicit activation. */
+    fun Button(
+        label: String,
+        place: Place = Place.Auto,
+        size: Size = Size.Content,
+        onClick: () -> Unit,
+    ): ButtonNode<*> = (element(slot("Button"), UiKind.Button) as ButtonNode<*>).also {
+        it.text = label
+        it.style = it.style.withLayout(place, size)
+        it.action = onClick
+    }
+
     /** Compiler ABI: installs a targeted text expression observer. */
-    fun bindText(site: String, value: () -> String): TextNode<*> = bind(site, UiKind.Text, value, null) as TextNode<*>
+    fun bindText(
+        site: String,
+        place: (() -> Place)? = null,
+        size: (() -> Size)? = null,
+        value: () -> String,
+    ): TextNode<*> = bind(site, UiKind.Text, value, null) {
+        it.withLayout(place?.invoke() ?: it.place, size?.invoke())
+    } as TextNode<*>
 
     /** Compiler ABI: installs a targeted button-label observer while leaving event callbacks unobserved. */
-    fun bindButtonText(site: String, label: () -> String, onClick: () -> Unit): ButtonNode<*> =
-        bind(site, UiKind.Button, label, onClick) as ButtonNode<*>
-    private fun bind(site: String, kind: UiKind, value: () -> String, action: (() -> Unit)?): UiNode<*> {
+    fun bindButtonText(
+        site: String,
+        label: () -> String,
+        place: (() -> Place)? = null,
+        size: (() -> Size)? = null,
+        onClick: () -> Unit,
+    ): ButtonNode<*> = bind(site, UiKind.Button, label, onClick) {
+        it.withLayout(place?.invoke() ?: it.place, size?.invoke())
+    } as ButtonNode<*>
+    private fun bind(
+        site: String,
+        kind: UiKind,
+        value: () -> String,
+        action: (() -> Unit)?,
+        layout: (UiStyle) -> UiStyle,
+    ): UiNode<*> {
         val element = element(site, kind)
         if (element is ButtonNode<*>) element.action = action ?: {}
         val entry = retained[site]!!
         entry.observer?.dispose()
         entry.observer = UiObserver(element) {
+            element.style = layout(element.style)
             val next = value()
             when (element) {
                 is TextNode<*> -> element.text = next
@@ -213,16 +318,59 @@ class UiScope internal constructor(private val root: UiRoot<*>, private val pare
     }
 
     /** Compiler ABI for a targeted reactive row style. */
-    fun bindRow(site: String, style: () -> UiStyle, block: UiScope.() -> Unit): RowNode<*> =
-        bindContainer(site, UiKind.Row, style, block) as RowNode<*>
+    fun bindRow(
+        site: String,
+        style: () -> UiStyle = { UiStyle(width = UiLength.Fill) },
+        place: (() -> Place)? = null,
+        size: (() -> Size)? = null,
+        arrange: (() -> Arrange)? = null,
+        align: (() -> CrossAlign?)? = null,
+        gap: (() -> Double)? = null,
+        block: UiScope.() -> Unit,
+    ): RowNode<*> = bindContainer(site, UiKind.Row, {
+        style().let {
+            it.withLayout(
+                place?.invoke() ?: it.place,
+                size?.invoke(),
+                arrange?.invoke() ?: it.arrangement,
+                align?.invoke(),
+                gap?.invoke() ?: it.gap
+            )
+        }
+    }, block) as RowNode<*>
 
     /** Compiler ABI for a targeted reactive column style. */
-    fun bindColumn(site: String, style: () -> UiStyle, block: UiScope.() -> Unit): ColumnNode<*> =
-        bindContainer(site, UiKind.Column, style, block) as ColumnNode<*>
+    fun bindColumn(
+        site: String,
+        style: () -> UiStyle = { UiStyle(width = UiLength.Fill) },
+        place: (() -> Place)? = null,
+        size: (() -> Size)? = null,
+        arrange: (() -> Arrange)? = null,
+        align: (() -> CrossAlign?)? = null,
+        gap: (() -> Double)? = null,
+        block: UiScope.() -> Unit,
+    ): ColumnNode<*> = bindContainer(site, UiKind.Column, {
+        style().let {
+            it.withLayout(
+                place?.invoke() ?: it.place,
+                size?.invoke(),
+                arrange?.invoke() ?: it.arrangement,
+                align?.invoke(),
+                gap?.invoke() ?: it.gap
+            )
+        }
+    }, block) as ColumnNode<*>
 
     /** Compiler ABI for a targeted reactive box style. */
-    fun bindBox(site: String, style: () -> UiStyle, block: UiScope.() -> Unit): BoxNode<*> =
-        bindContainer(site, UiKind.Box, style, block) as BoxNode<*>
+    fun bindBox(
+        site: String,
+        style: () -> UiStyle = { UiStyle(width = UiLength.Fill, height = UiLength.Fill) },
+        place: (() -> Place)? = null,
+        size: (() -> Size)? = null,
+        block: UiScope.() -> Unit,
+    ): BoxNode<*> = bindContainer(site, UiKind.Box, {
+        style().let { it.withLayout(place?.invoke() ?: it.place, size?.invoke()) }
+    }, block) as BoxNode<*>
     private fun bindContainer(site: String, kind: UiKind, style: () -> UiStyle, block: UiScope.() -> Unit): UiNode<*> {
         val element = element(site, kind)
         val scope = element.content ?: UiScope(root, element).also { element.content = it }
@@ -231,6 +379,74 @@ class UiScope internal constructor(private val root: UiRoot<*>, private val pare
         entry.observer?.dispose()
         entry.observer = UiObserver(element) { element.style = style() }
         return element
+    }
+
+    /** Compiler ABI for reactive wrapping flow configuration, without reconstructing child nodes. */
+    fun bindFlowRow(
+        site: String,
+        style: () -> UiStyle = { UiStyle(width = UiLength.Fill) },
+        place: (() -> Place)? = null,
+        size: (() -> Size)? = null,
+        arrange: (() -> Arrange)? = null,
+        align: (() -> CrossAlign?)? = null,
+        gap: (() -> Double)? = null,
+        lineGap: (() -> Double)? = null,
+        block: UiScope.() -> Unit,
+    ): io.canopy.engine.ui.components.FlowRow<*> = bindContainer(site, UiKind.FlowRow, {
+        style().let {
+            val spacing = gap?.invoke() ?: it.gap
+            it.withLayout(
+                place?.invoke() ?: it.place,
+                size?.invoke(),
+                arrange?.invoke() ?: it.arrangement,
+                align?.invoke(),
+                spacing
+            ).copy(lineGap = lineGap?.invoke() ?: spacing)
+        }
+    }, block) as io.canopy.engine.ui.components.FlowRow<*>
+
+    /** Compiler ABI for reactive column count and grid sizing. */
+    fun bindGrid(
+        site: String,
+        columns: () -> Int,
+        style: (() -> UiStyle?)? = null,
+        gap: (() -> Double?)? = null,
+        rows: (() -> Int?)? = null,
+        place: (() -> Place?)? = null,
+        size: (() -> Size?)? = null,
+        cellSize: (() -> Size?)? = null,
+        lines: (() -> GridLines?)? = null,
+        cellPadding: (() -> Double?)? = null,
+        block: io.canopy.engine.ui.components.Grid<*>.() -> Unit = {},
+        content: UiScope.() -> Unit = {},
+    ): io.canopy.engine.ui.components.Grid<*> {
+        val grid = element(site, UiKind.Grid) as io.canopy.engine.ui.components.Grid<*>
+        val entry = retained.getValue(site)
+        entry.observer?.dispose()
+        entry.observer = UiObserver(grid) {
+            val limit = rows?.invoke()
+            val base = style?.invoke() ?: if (entry.configured) {
+                grid.style
+            } else {
+                UiStyle(width = if (limit == null) UiLength.Fill else UiLength.Content)
+            }
+            val spacing = gap?.invoke() ?: base.gap
+            val columnCount = columns()
+            grid.configureColumns(columnCount)
+            grid.style = base.copy(gap = spacing, lineGap = if (gap != null) spacing else base.lineGap)
+                .withLayout(place?.invoke() ?: base.place, size?.invoke())
+            if (rows != null) grid.rowLimit = limit
+            if (cellSize != null) grid.cellSize = cellSize()
+            lines?.invoke()?.let { grid.lines = it }
+            cellPadding?.invoke()?.let { grid.cellPadding = it }
+            if (!entry.configured) {
+                entry.configured = true
+                untrack { block(grid) }
+            }
+        }
+        val scope = grid.content ?: UiScope(root, grid).also { grid.content = it }
+        untrack { scope.compose(content) }
+        return grid
     }
 
     /** Retains initialization once per stable declaration/key identity. */
@@ -248,6 +464,16 @@ class UiScope internal constructor(private val root: UiRoot<*>, private val pare
     /** Compiler ABI for a reactive universal layout property. */
     fun bindStyle(site: String, element: UiNode<*>, value: () -> UiStyle) = property(site, element) {
         element.style = value()
+    }
+
+    /** Compiler ABI for a targeted reactive placement update. */
+    fun bindPlace(site: String, element: UiNode<*>, value: () -> Place) = property(site, element) {
+        element.place = value()
+    }
+
+    /** Compiler ABI for targeted reactive logical sizing. */
+    fun bindSize(site: String, element: UiNode<*>, value: () -> Size) = property(site, element) {
+        element.size = value()
     }
 
     /** Compiler ABI for a reactive subtree theme. */
@@ -324,6 +550,7 @@ class UiScope internal constructor(private val root: UiRoot<*>, private val pare
     private fun layoutChildren(node: Node<*>, action: (UiNode<*>) -> Unit) {
         if (!node.isValid) return
         when (node) {
+            is Canvas<*> -> action(node)
             is UiRoot<*> -> Unit
             is UiNode<*> -> action(node)
             else -> node.children.values.forEach { layoutChildren(it, action) }

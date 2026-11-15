@@ -544,7 +544,7 @@ class UiRuntimeTests {
                         height = UiLength.Fill,
                         padding = 2.0,
                         gap = 3.0,
-                        alignment = UiAlignment.End
+                        alignment = CrossAlign.End
                     )
                 ) {
                     left = Text("left").also { it.style = UiStyle(width = UiLength.Fraction(0.25)) }
@@ -676,7 +676,7 @@ class UiRuntimeTests {
     fun `root constraints clip child drawing and reject invalid maximums`() {
         val root = UiRoot { Text("overflow").also { it.style = UiStyle(width = UiLength.Fixed(20.0)) } }
         root.style = UiStyle(width = UiLength.Fixed(4.0), height = UiLength.Fixed(2.0))
-        root.horizontalAlignment = UiAlignment.End
+        root.horizontalAlignment = CrossAlign.End
         scenes.currScene = root
         ui.onResize(10, 4)
         ui.updateFrame()

@@ -13,20 +13,23 @@ import org.jetbrains.kotlin.ir.visitors.acceptChildrenVoid
 internal class CompilerPipeline(private val messages: DiagnosticMessages, private val registry: RuleRegistry) :
     IrGenerationExtension {
     override fun generate(moduleFragment: IrModuleFragment, pluginContext: IrPluginContext) {
-        validate(ValidationPhase.Source, moduleFragment, pluginContext)
-        if (messages.errorCount > 0) return
-        NodePropertyTransform(messages).generate(moduleFragment, pluginContext)
-        if (messages.errorCount > 0) return
-        validate(ValidationPhase.StoredState, moduleFragment, pluginContext)
-        if (messages.errorCount > 0) return
-        for (stage in listOf(
-            AppLaunchTransform(messages),
-            NodeOwnershipTransform(messages),
-            UiExpressionTransform(messages),
-            NodeConstructionTransform(messages)
-        )) {
-            stage.generate(moduleFragment, pluginContext)
-            if (messages.errorCount > 0) return
+        messages.collect {
+            validate(ValidationPhase.Source, moduleFragment, pluginContext)
+            val beforeStorage = messages.errorCount
+            NodePropertyTransform(messages).generate(moduleFragment, pluginContext)
+            // Stored-state facts require the runtime storage ABI; avoid cascading field diagnostics if it is absent.
+            if (messages.errorCount == beforeStorage) {
+                validate(ValidationPhase.StoredState, moduleFragment, pluginContext)
+            }
+            // These stages inspect separate contracts and handle unsupported expressions locally.
+            for (stage in listOf(
+                AppLaunchTransform(messages),
+                NodeOwnershipTransform(messages),
+                UiExpressionTransform(messages),
+                NodeConstructionTransform(messages)
+            )) {
+                stage.generate(moduleFragment, pluginContext)
+            }
         }
     }
 

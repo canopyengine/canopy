@@ -6,14 +6,173 @@ import io.canopy.engine.core.flows.events.signal
 import io.canopy.engine.core.managers.ManagersRegistry
 import io.canopy.engine.core.managers.SceneManager
 import io.canopy.engine.core.nodes.Node
+import io.canopy.engine.core.queries.ancestor
 import io.canopy.engine.graphics.DrawContext
 import io.canopy.engine.input.InputFocus
 import io.canopy.engine.ui.*
+import io.canopy.engine.ui.Canvas as SceneCanvas
 import io.canopy.engine.ui.components.Button
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.BeforeEach
 
 class UiCompilerIntegrationTests {
+    @Test
+    fun `button callbacks resolve local canvas delegates and restore ownership after failures`() {
+        // Arrange
+        lateinit var outer: Button<*>
+        lateinit var inner: Button<*>
+        lateinit var nestedCanvas: SceneCanvas<*>
+        val owners = mutableListOf<SceneCanvas<*>>()
+        val failure = IllegalArgumentException("action failed")
+        val root = SceneCanvas {
+            outer = Button("Resume", onClick = {
+                val canvas by ancestor<SceneCanvas<*>>()
+                owners.add(canvas)
+                assertSame(failure, assertFailsWith<IllegalArgumentException> { inner.activate() })
+                owners.add(canvas)
+            })
+            nestedCanvas = Canvas {
+                inner = Button("Nested", onClick = {
+                    val canvas by ancestor<SceneCanvas<*>>()
+                    owners.add(canvas)
+                    throw failure
+                })
+            }
+        }
+        scenes.currScene = root
+        ui.updateFrame()
+
+        // Act
+        outer.activate()
+
+        // Assert
+        assertEquals(listOf(root, nestedCanvas, root), owners)
+        val canvas by ancestor<SceneCanvas<*>>()
+        assertFailsWith<IllegalStateException> { canvas }
+    }
+
+    @Test
+    fun `unified grid keeps configuration once glyphs and keyed cell controls through reactive line changes`() {
+        // Arrange
+        val decorated = signal(owner = null, false)
+        val ids = signal(owner = null, listOf(0, 1))
+        val buttons = mutableMapOf<Int, Button<*>>()
+        lateinit var grid: io.canopy.engine.ui.components.Grid<*>
+        var configurations = 0
+        var actions = 0
+        scenes.currScene = io.canopy.engine.ui.Canvas {
+            grid = Grid(
+                columns = 2,
+                rows = 2,
+                cellSize = Size(UiLength.Fixed(8.0), UiLength.Fixed(1.0)),
+                lines = GridLines(outer = if (decorated()) LineStyle.Single else LineStyle.None),
+                block = {
+                    configurations++
+                    set(0, 0, '@')
+                }
+            ) {
+                for (id in ids()) {
+                    key(id) {
+                        cell(id, id) { buttons[id] = Button("cell:$id", onClick = { actions++ }) }
+                    }
+                }
+            }
+        }
+        ui.updateFrame()
+        val first = buttons.getValue(0)
+
+        // Act
+        decorated.update { true }
+        ids.update { listOf(1, 0) }
+        ui.updateFrame()
+        grid.clear()
+        ui.updateFrame()
+        first.activate()
+
+        // Assert
+        assertEquals(1, configurations)
+        assertSame(first, buttons[0])
+        assertEquals(LinePattern.Single, grid.lines.outer.pattern)
+        assertEquals(' ', grid[0, 0].glyph)
+        assertEquals(1, actions)
+        decorated.dispose()
+        ids.dispose()
+    }
+
+    @Test
+    fun `declarative placement sizing and grid expressions react without rebuilding content`() {
+        // Arrange
+        val expanded = signal(owner = null, false)
+        var constructions = 0
+        lateinit var text: UiNode<*>
+        lateinit var grid: UiNode<*>
+        scenes.currScene = io.canopy.engine.ui.Canvas {
+            text = Text("anchor", place = Place.At(if (expanded()) Anchor.BottomRight else Anchor.TopLeft))
+            grid = Grid(if (expanded()) 2 else 1, style = UiStyle(width = UiLength.Fixed(10.0))) {
+                constructions++
+                Text("first")
+                Text("second")
+            }
+            FlowRow(size = Size(width = UiLength.Fixed(if (expanded()) 20.0 else 10.0))) {
+                Text("flow")
+            }
+        }
+
+        // Act
+        ui.updateFrame()
+        val firstHeight = grid.bounds.height
+        expanded.update { true }
+        ui.updateFrame()
+
+        // Assert
+        assertEquals(1, constructions)
+        assertTrue(text.bounds.x > 0.0)
+        assertTrue(grid.bounds.height < firstHeight)
+        expanded.dispose()
+    }
+
+    @Test
+    fun `canvas placement and sizing stay live without replacing retained components`() {
+        // Arrange
+        val centered = signal(owner = null, false)
+        val count = signal(owner = null, 1)
+        lateinit var label: UiNode<*>
+        var clicks = 0
+        scenes.currScene = io.canopy.engine.ui.Canvas {
+            Row(
+                style = UiStyle(height = UiLength.Fixed(4.0)),
+                place = Place.At(Anchor.BottomLeft),
+                size = Size(width = UiLength.Fixed(20.0)),
+                arrange = Arrange.SpaceBetween,
+                align = CrossAlign.Center,
+                gap = 1.0
+            ) {
+                Text("count: ${count()}", size = Size.Content)
+                Button("go", size = Size.Content, onClick = { clicks++ })
+            }
+            label = Text("overlay")
+            label.place = if (centered()) Place.At(Anchor.Center) else Place.At(Anchor.TopLeft)
+            label.size = Size(width = UiLength.Fixed(if (centered()) 10.0 else 8.0))
+        }
+
+        // Act
+        ui.updateFrame()
+        val original = label
+        val before = label.bounds
+        centered.update { true }
+        count.update { 2 }
+        ui.updateFrame()
+
+        // Assert
+        assertSame(original, label)
+        assertNotEquals(before.x, label.bounds.x)
+        assertEquals(10.0, label.bounds.width)
+        assertTrue(backend.draws.any { it.text == "count: 2" })
+        assertEquals(0, clicks)
+        centered.dispose()
+        count.dispose()
+    }
+
     private class CounterCard(name: String, initial: Int, created: () -> Unit) : UiNode<CounterCard>(name) {
         var count by signal(initial)
         var increment: Button<*>? = null
@@ -133,6 +292,13 @@ class UiCompilerIntegrationTests {
         ManagersRegistry.exit()
     }
     private class RecordingBackend : UiBackend {
+        override fun drawGridLines(
+            lines: GridLines,
+            geometry: GridGeometry,
+            bounds: UiRect,
+            clip: UiRect,
+            appearance: UiAppearance,
+        ) = Unit
         data class Draw(val text: String, val bounds: UiRect)
         val draws = mutableListOf<Draw>()
         override fun begin(viewport: UiSize) {

@@ -11,11 +11,78 @@ import io.canopy.engine.core.managers.SceneManager
 import io.canopy.engine.core.managers.manager as directManager
 import io.canopy.engine.core.nodes.Behavior
 import io.canopy.engine.core.nodes.Node
+import io.canopy.engine.core.nodes.NodeLifetime
 import io.canopy.engine.core.nodes.types.empty.EmptyNode
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.BeforeEach
 
 class DependencyTests {
+    @Test
+    fun `local delegates resolve the active owner on every read and restore nested ownership`() {
+        // Arrange
+        val first = Target("first")
+        val second = Target("second")
+        val consumer = Consumer()
+        val other = Consumer("other")
+        first.addChild(consumer)
+        second.addChild(other)
+        val target by ancestor<Target>()
+
+        // Act / Assert
+        NodeLifetime.withOwner(consumer) {
+            assertSame(first, target)
+            NodeLifetime.withOwner(other) { assertSame(second, target) }
+            assertSame(first, target)
+            first.reparent(consumer, second)
+            assertSame(second, target)
+        }
+        val failure = assertFailsWith<IllegalStateException> { target }
+        assertTrue(failure.message!!.contains("target"))
+        assertTrue(failure.message!!.contains("active node callback"))
+    }
+
+    @Test
+    fun `local optional queries require an owner and preserve missing and destroyed owner rules`() {
+        // Arrange
+        val consumer = Consumer()
+        val target by ancestorOrNull<Target>()
+        val required by ancestor<Target>()
+
+        // Act / Assert
+        assertFailsWith<IllegalStateException> { target }
+        NodeLifetime.withOwner(consumer) {
+            assertNull(target)
+            assertFailsWith<NoSuchElementException> { required }
+        }
+        scenes.currScene = consumer
+        consumer.queueFree()
+        scenes.onUpdate(0f)
+        NodeLifetime.withOwner(consumer) {
+            assertFailsWith<NodeDestroyedException> { target }
+        }
+    }
+
+    @Test
+    fun `member delegates retain node and behavior owners inside another callback`() {
+        // Arrange
+        val root = Target("root")
+        val consumer = Consumer()
+        val child = Target("child")
+        val controller = Controller(consumer)
+        val detached = Controller()
+        root.addChild(consumer)
+        consumer.addChild(child)
+
+        // Act / Assert
+        NodeLifetime.withOwner(child) {
+            assertSame(root, consumer.parentTarget)
+            assertSame(child, consumer.target)
+            assertSame(root, controller.parent)
+            assertSame(child, controller.target)
+            assertNull(detached.optionalTarget)
+        }
+    }
+
     private lateinit var scenes: SceneManager
 
     @BeforeEach

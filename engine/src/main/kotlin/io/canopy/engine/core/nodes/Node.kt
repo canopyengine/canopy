@@ -230,6 +230,15 @@ abstract class Node<N : Node<N>> protected constructor(
         isVisible = false
     }
 
+    /**
+     * Flips local rendering visibility on the lifecycle thread, preserving processing and editor activation.
+     * Hidden ancestors still suppress rendering; descendant local visibility is unchanged. Works while detached
+     * and rejects destroyed nodes, like [show] and [hide]. UI nodes keep their layout space and retained state.
+     */
+    fun toggleVisibility() {
+        isVisible = !isVisible
+    }
+
     internal fun <T> withChildConstruction(block: () -> T): T {
         val previous = currentParent.get()
         currentParent.set(this)

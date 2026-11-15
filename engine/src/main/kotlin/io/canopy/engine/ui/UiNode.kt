@@ -33,18 +33,36 @@ abstract class UiNode<N : UiNode<N>> protected constructor(
     internal open val kind: UiKind get() = UiKind.Box
     internal open val contentText: String get() = ""
     internal open val actionEnabled: Boolean get() = true
-    internal open val contentMeasureKey: Any? get() = null
-    internal open val presentationKey: Any? get() = null
-    internal open fun measureContent(backend: UiBackend, available: UiSize): UiSize? = null
+    private var measurementRevision by nodeProperty(0L)
+    internal open val contentMeasureKey: Any? get() = measurementRevision
+    internal open val presentationKey: Any? get() = measurementRevision
+    internal open fun measureContent(backend: UiBackend, available: UiSize): UiSize? = measure(backend, available)
+
+    /**
+     * Natural custom content size, excluding padding, in host logical units. Return null to use built-in
+     * content measurement. Implementations use backend metrics and must be deterministic and side-effect free.
+     * Called on the lifecycle thread; drawing remains in Node.onDraw.
+     */
+    protected open fun measure(backend: UiBackend, available: UiSize): UiSize? = null
+
+    /** Invalidates cached custom measurements after content changes, on the lifecycle thread. */
+    protected fun invalidateMeasurement() {
+        measurementRevision++
+        invalidate()
+    }
     internal open fun paintContent(backend: UiBackend, clip: UiRect, appearance: UiAppearance) = Unit
     internal val root: UiRoot<*>
         get() {
             var node: Node<*>? = this
+            var outermost: UiRoot<*>? = null
             while (node != null) {
-                if (node is UiRoot<*>) return node
+                when (node) {
+                    is Canvas<*> -> outermost = node
+                    is UiRoot<*> -> return node
+                }
                 node = node.parent
             }
-            error("UI components must be attached beneath a UiRoot before layout or composition")
+            return outermost ?: error("UI components must be attached beneath a Canvas or UiRoot before composition")
         }
 
     private var storedStyle by nodeProperty(style)
@@ -57,6 +75,20 @@ abstract class UiNode<N : UiNode<N>> protected constructor(
                 storedStyle = value
                 invalidate()
             }
+        }
+
+    /** Parent-relative placement or flow participation, recomputed on the lifecycle thread. */
+    var place: Place
+        get() = style.place
+        set(value) {
+            style = style.copy(place = value)
+        }
+
+    /** Preferred logical dimensions, independent of placement and appearance. */
+    var size: Size
+        get() = Size(style.width, style.height)
+        set(value) {
+            style = style.copy(width = value.width, height = value.height)
         }
 
     /** Accessible semantic role; custom components default to a container. */
@@ -107,6 +139,7 @@ abstract class UiNode<N : UiNode<N>> protected constructor(
         internal set
     internal var measurementKey by nodeProperty<List<Any?>>(emptyList())
     internal var measured by nodeProperty(UiSize(0.0, 0.0))
+    internal var layoutClip by nodeProperty<UiRect?>(null)
     internal var content by nodeProperty<UiScope?>(null)
 
     /** Nearest explicit theme applies to this subtree; null inherits from ancestors. */

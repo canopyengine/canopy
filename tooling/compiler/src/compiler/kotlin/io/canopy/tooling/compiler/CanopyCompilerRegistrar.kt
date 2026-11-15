@@ -1,14 +1,16 @@
-@file:OptIn(org.jetbrains.kotlin.compiler.plugin.ExperimentalCompilerApi::class)
+@file:OptIn(
+    org.jetbrains.kotlin.compiler.plugin.ExperimentalCompilerApi::class,
+    org.jetbrains.kotlin.config.MessageCollectorAccess::class
+)
 
 package io.canopy.tooling.compiler
 
 import java.util.ServiceLoader
 import io.canopy.tooling.compiler.rules.RuleProvider
 import org.jetbrains.kotlin.backend.common.extensions.IrGenerationExtension
-import org.jetbrains.kotlin.cli.common.messages.MessageCollector
 import org.jetbrains.kotlin.compiler.plugin.CompilerPluginRegistrar
-import org.jetbrains.kotlin.config.CommonConfigurationKeys
 import org.jetbrains.kotlin.config.CompilerConfiguration
+import org.jetbrains.kotlin.config.messageCollector
 
 /** Installs mandatory checks and compiler-only providers before the fixed lowering pipeline. */
 class CanopyCompilerRegistrar : CompilerPluginRegistrar() {
@@ -17,9 +19,9 @@ class CanopyCompilerRegistrar : CompilerPluginRegistrar() {
 
     override fun ExtensionStorage.registerExtensions(configuration: CompilerConfiguration) {
         val messages = DiagnosticMessages(
-            configuration.get(CommonConfigurationKeys.MESSAGE_COLLECTOR_KEY, MessageCollector.NONE),
-            configuration.get(DiagnosticOptions.color) ?: false,
-            configuration.get(DiagnosticOptions.root)
+            configuration.messageCollector,
+            configuration[DiagnosticOptions.color] ?: false,
+            configuration[DiagnosticOptions.root]
         )
         val registry = try {
             val loader = this@CanopyCompilerRegistrar.javaClass.classLoader

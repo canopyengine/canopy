@@ -49,10 +49,10 @@ open class UiRoot<N : UiRoot<N>>(name: String = "UiRoot", block: N.() -> Unit = 
     var layer by nodeProperty(UiLayer.Content)
 
     /** Root vertical anchoring, including bottom overlays through End. */
-    var verticalAlignment by nodeProperty(UiAlignment.Start)
+    var verticalAlignment by nodeProperty(CrossAlign.Start)
 
     /** Root horizontal anchoring. */
-    var horizontalAlignment by nodeProperty(UiAlignment.Start)
+    var horizontalAlignment by nodeProperty(CrossAlign.Start)
 
     /** Painter order for overlays; higher values paint above lower values. */
     var zIndex by nodeProperty(0)
@@ -65,6 +65,7 @@ open class UiRoot<N : UiRoot<N>>(name: String = "UiRoot", block: N.() -> Unit = 
     private var focusLease by nodeProperty<AutoCloseable?>(null)
 
     override fun onEnterTree() {
+        if (root !== this) return
         getManager<UiManager>().mount(this)
         val scope = content
         val lease = getManager<InputFocus>().register(
@@ -177,8 +178,10 @@ open class UiRoot<N : UiRoot<N>>(name: String = "UiRoot", block: N.() -> Unit = 
 
     private fun hit(element: UiNode<*>, x: Double, y: Double): Boolean {
         var clip = element.bounds.intersect(viewportBounds)
+        element.layoutClip?.let { clip = clip.intersect(it) }
         var ancestor = if (element === this) null else element.parent
         while (ancestor != null) {
+            (ancestor as? UiNode<*>)?.layoutClip?.let { clip = clip.intersect(it) }
             if (ancestor is UiNode<*> && ancestor.style.clip) {
                 clip =
                     clip.intersect(

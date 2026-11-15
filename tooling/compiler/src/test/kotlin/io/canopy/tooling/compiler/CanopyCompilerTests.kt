@@ -57,6 +57,33 @@ class CanopyCompilerTests {
         }
     """.trimIndent()
 
+    @Test
+    fun `independent errors across validation and construction are reported in one compilation`() {
+        // Arrange
+        val source = """
+            class InvalidStorage : Node<InvalidStorage>() { lateinit var title: String }
+            class InvalidReactive : Node<InvalidReactive>() { val value = signal(1) }
+            class Outer { inner class Inner : Node<Inner>() }
+            class Constructed : Node<Constructed>()
+            val factory = ::Constructed
+        """.trimIndent()
+
+        // Act
+        compileConsumer(source) { code, output ->
+            // Assert
+            assertEquals(ExitCode.COMPILATION_ERROR, code, output)
+            listOf(
+                "CANOPY_UNSUPPORTED_NODE_PROPERTY",
+                "CANOPY_PROPERTY_DELEGATION",
+                "CANOPY_UNMANAGED_NODE_STATE",
+                "CANOPY_NODE_CONSTRUCTION_REFERENCE"
+            ).forEach { diagnostic ->
+                assertEquals(1, Regex("\\[$diagnostic]").findAll(output).count(), output)
+            }
+            assertTrue("Exception" !in output, output)
+        }
+    }
+
     private val appApi = """
         package io.canopy.engine.app
         open class App {

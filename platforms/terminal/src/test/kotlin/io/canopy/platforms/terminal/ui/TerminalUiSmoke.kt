@@ -17,7 +17,7 @@ import io.canopy.engine.ui.UiRoot
 import io.canopy.engine.ui.UiStyle
 import io.canopy.engine.ui.UiTheme
 import io.canopy.engine.ui.components.Divider
-import io.canopy.engine.ui.components.GridNode
+import io.canopy.engine.ui.components.Grid
 import io.canopy.platforms.terminal.app.terminalApp
 
 /** Real terminal smoke: responsive declarative cells, reactive text, actions, keyed list and command overlay. */
@@ -95,12 +95,12 @@ private class ColoredMap :
         )
     ) {
     private var elapsed by nodeProperty(0f)
-    private var map by nodeProperty<GridNode<*>?>(null)
+    private var map by nodeProperty<Grid<*>?>(null)
 
     override fun nodeInit() {
         super.nodeInit()
         ui {
-            map = node("grid") { GridNode(columns = 24, rows = 3) }
+            map = Grid(columns = 24, rows = 3, style = UiStyle(gap = 1.0, lineGap = 0.0), block = { empty('.') })
         }
     }
 

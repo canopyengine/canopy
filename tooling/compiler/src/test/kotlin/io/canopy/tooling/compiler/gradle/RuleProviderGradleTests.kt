@@ -126,7 +126,12 @@ class RuleProviderGradleTests {
             assertTrue("CANOPY_RULE_PROVIDER" in broken, broken)
             assertTrue("TEST_SECOND_CHECK" in broken, broken)
             assertTrue("CANOPY_UNSUPPORTED_NODE_PROPERTY" in broken, broken)
-            assertEquals(1, Regex("\\[CANOPY_RULE_PROVIDER]").findAll(broken).count(), broken)
+            // Gradle also repeats the diagnostic in its failure summary; count compiler emissions only.
+            assertEquals(
+                1,
+                broken.lineSequence().count { it.startsWith("e: [CANOPY_RULE_PROVIDER]:") },
+                broken
+            )
 
             // A subsequent compilation gets a fresh provider and reporting context.
             sources.resolve("Node.kt").delete()

@@ -2,9 +2,9 @@ import org.gradle.api.publish.maven.MavenPublication
 import org.gradle.api.publish.maven.tasks.PublishToMavenRepository
 import org.gradle.plugins.signing.SigningExtension
 
-// Shared by runtime modules and the separately hosted compiler/Gradle tooling build.
 apply(plugin = "signing")
 
+// Shared by runtime modules and the separately hosted compiler/Gradle tooling build.
 extensions.configure<PublishingExtension> {
     publications.withType<MavenPublication>().configureEach {
         pom {
@@ -40,8 +40,13 @@ extensions.configure<PublishingExtension> {
     repositories.maven {
         name = "centralStaging"
         // This is a local Maven layout, never a remote upload destination.
-        url = uri(if (rootProject.name == "canopy-compiler") file("../../build/central-repository")
-                  else rootProject.layout.buildDirectory.dir("central-repository").get().asFile)
+        url = uri(
+            if (rootProject.name == "canopy-compiler") {
+                file("../../build/central-repository")
+            } else {
+                rootProject.layout.buildDirectory.dir("central-repository").get().asFile
+            }
+        )
     }
 }
 

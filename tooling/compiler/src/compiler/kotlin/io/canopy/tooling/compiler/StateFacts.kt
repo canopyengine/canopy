@@ -13,6 +13,8 @@ import org.jetbrains.kotlin.ir.visitors.acceptChildrenVoid
 internal fun stateFacts(declaration: IrClass, messages: DiagnosticMessages): List<StateIssue> {
     val issues = mutableListOf<StateIssue>()
     declaration.declarations.filterIsInstance<IrProperty>().forEach { property ->
+        // The source storage diagnostic already explains why these fields cannot be lowered.
+        if (!property.isDelegated && property.unsupportedNodeStorage() != null) return@forEach
         val field = property.backingField
         if (field != null &&
             !field.isStatic &&

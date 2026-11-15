@@ -9,8 +9,11 @@ import com.github.ajalt.mordant.rendering.TextStyles
 import com.github.ajalt.mordant.rendering.Whitespace
 import com.github.ajalt.mordant.terminal.Terminal
 import com.github.ajalt.mordant.widgets.Text
-import io.canopy.engine.graphics.GridContent
-import io.canopy.engine.graphics.GridStyle
+import io.canopy.engine.ui.GridGeometry
+import io.canopy.engine.ui.GridLineMetrics
+import io.canopy.engine.ui.GridLines
+import io.canopy.engine.ui.LinePattern
+import io.canopy.engine.ui.LineStyle
 import io.canopy.engine.ui.UiAppearance
 import io.canopy.engine.ui.UiBackend
 import io.canopy.engine.ui.UiBorder
@@ -35,79 +38,91 @@ internal class TerminalUiBackend(private val terminal: Terminal, private val sub
 
     override fun viewport(size: UiSize) = UiSize((size.width - 1).coerceAtLeast(0.0), size.height)
 
-    override fun measureGrid(columns: Int, rows: Int, columnGap: Int) =
-        UiSize(columns.toDouble() * (columnGap.toDouble() + 1) - columnGap, rows.toDouble())
+    override fun layoutBounds(bounds: UiRect): UiRect {
+        val left = floor(bounds.x)
+        val top = floor(bounds.y)
+        return UiRect(left, top, floor(bounds.x + bounds.width) - left, floor(bounds.y + bounds.height) - top)
+    }
 
-    override fun drawGrid(grid: GridContent, bounds: UiRect, clip: UiRect, appearance: UiAppearance) {
+    override fun measureGridLines(lines: GridLines): GridLineMetrics {
+        fun width(line: LineStyle) = if (line.pattern == LinePattern.None) 0.0 else 1.0
+        return GridLineMetrics(width(lines.outer), width(lines.horizontalStyle), width(lines.verticalStyle))
+    }
+
+    override fun drawGridLines(
+        lines: GridLines,
+        geometry: GridGeometry,
+        bounds: UiRect,
+        clip: UiRect,
+        appearance: UiAppearance,
+    ) {
+        if (geometry.rows == 0) return
         val visible = bounds.intersect(clip).intersect(UiRect(0.0, 0.0, columns.toDouble(), rows.toDouble()))
-        if (visible.width <= 0 || visible.height <= 0) return
-        if (grid.gridStyle == GridStyle.Solid) {
-            drawSolidGrid(grid, bounds, visible, appearance)
-            return
-        }
-        val pitch = grid.columnGap.toDouble() + 1
-        val left = floor((visible.x - bounds.x) / pitch).toInt().coerceIn(0, grid.columns)
-        val right = ceil((visible.x + visible.width - bounds.x) / pitch).toInt().coerceIn(left, grid.columns)
-        val top = floor(visible.y - bounds.y).toInt().coerceIn(0, grid.rows)
-        val bottom = ceil(visible.y + visible.height - bounds.y).toInt().coerceIn(top, grid.rows)
-        for (y in top until bottom) {
-            for (x in left until right) {
-                val symbol = grid[x, y]
+        val width = floor(bounds.x + geometry.size.width) - bounds.x
+        val height = floor(bounds.y + geometry.size.height) - bounds.y
+        for (y in ceil(visible.y).toInt() until floor(visible.y + visible.height).toInt()) {
+            for (x in ceil(visible.x).toInt() until floor(visible.x + visible.width).toInt()) {
+                val localX = x - bounds.x
+                val localY = y - bounds.y
+                if (localX < 0 || localY < 0 || localX >= width || localY >= height) continue
+                // Select the cell owning this snapped pixel, including fractional fill allocations.
+                val column = geometry.columnAt(Math.nextDown(localX + 1.0))
+                val row = geometry.rowAt(Math.nextDown(localY + 1.0))
+                val cell = geometry.cell(column, row)
+                val outerVertical = geometry.metrics.outer > 0 &&
+                    (localX < geometry.metrics.outer || localX >= width - geometry.metrics.outer)
+                val outerHorizontal = geometry.metrics.outer > 0 &&
+                    (localY < geometry.metrics.outer || localY >= height - geometry.metrics.outer)
+                val vertical = outerVertical ||
+                    (
+                        geometry.metrics.vertical > 0 &&
+                            x >= floor(bounds.x + cell.x + cell.width) &&
+                            x < floor(bounds.x + cell.x + cell.width + geometry.metrics.vertical) &&
+                            column < geometry.columns - 1
+                        )
+                val horizontal = outerHorizontal ||
+                    (
+                        geometry.metrics.horizontal > 0 &&
+                            y >= floor(bounds.y + cell.y + cell.height) &&
+                            y < floor(bounds.y + cell.y + cell.height + geometry.metrics.horizontal) &&
+                            row < geometry.rows - 1
+                        )
+                if (!vertical && !horizontal) continue
+                val stroke = when {
+                    outerVertical || outerHorizontal -> lines.outer
+                    vertical -> lines.verticalStyle
+                    else -> lines.horizontalStyle
+                }
+                val mask = (if (horizontal && localX > 0) 1 else 0) or
+                    (if (horizontal && localX < width - 1) 2 else 0) or
+                    (if (vertical && localY > 0) 4 else 0) or
+                    (if (vertical && localY < height - 1) 8 else 0)
+                val glyph = gridLineGlyph(stroke.pattern, mask, ((floor(localX) % 2 + floor(localY) % 2) % 2).toInt())
                 drawText(
-                    symbol.glyph.toString(),
-                    UiRect(bounds.x + x * pitch, bounds.y + y, 1.0, 1.0),
+                    glyph,
+                    UiRect(x.toDouble(), y.toDouble(), 1.0, 1.0),
                     visible,
                     false,
                     false,
-                    appearance.merge(UiAppearance(foreground = symbol.color))
+                    appearance.merge(UiAppearance(foreground = stroke.color))
                 )
             }
         }
     }
 
-    private fun drawSolidGrid(grid: GridContent, bounds: UiRect, visible: UiRect, appearance: UiAppearance) {
-        val pitch = grid.columnGap.toDouble() + 2
-        val width = grid.columns.toDouble() * pitch
-        val height = grid.rows.toDouble() * 2
-        val lines = appearance.merge(UiAppearance(foreground = grid.gridColor))
-        // Walk only visible terminal cells, never the full logical grid or an unbounded gap.
-        for (y in ceil(visible.y).toInt() until floor(visible.y + visible.height).toInt()) {
-            val row = (y - bounds.y).toLong()
-            if (row < 0 || row > height) continue
-            for (x in ceil(visible.x).toInt() until floor(visible.x + visible.width).toInt()) {
-                val column = (x - bounds.x).toLong()
-                if (column < 0 || column > width) continue
-                val horizontal = row % 2L == 0L
-                val vertical = column.toDouble() % pitch == 0.0
-                val glyph = when {
-                    horizontal && vertical -> {
-                        val junctions = when {
-                            row == 0L -> "┌┬┐"
-                            row.toDouble() == height -> "└┴┘"
-                            else -> "├┼┤"
-                        }
-                        val edge = when {
-                            column == 0L -> 0
-                            column.toDouble() == width -> 2
-                            else -> 1
-                        }
-                        junctions[edge].toString()
-                    }
-                    horizontal -> "─"
-                    vertical -> "│"
-                    else -> null
-                }
-                var style = lines
-                val text = glyph ?: if (column.toDouble() % pitch == 1.0) {
-                    val symbol = grid[(column / pitch).toInt(), (row / 2).toInt()]
-                    style = appearance.merge(UiAppearance(foreground = symbol.color))
-                    symbol.glyph.toString()
-                } else {
-                    " "
-                }
-                drawText(text, UiRect(x.toDouble(), y.toDouble(), 1.0, 1.0), visible, false, false, style)
+    private fun gridLineGlyph(pattern: LinePattern, mask: Int, phase: Int): String {
+        if (pattern == LinePattern.None) return " "
+        if (pattern == LinePattern.Dotted) return if (phase % 2 == 0) "." else " "
+        val glyphs = if (pattern == LinePattern.Double) " ═══║╝╚╩║╗╔╦║╣╠╬" else " ───│┘└┴│┐┌┬│┤├┼"
+        if (pattern == LinePattern.Rounded) {
+            when (mask) {
+                10 -> return "╭"
+                9 -> return "╮"
+                6 -> return "╰"
+                5 -> return "╯"
             }
         }
+        return glyphs[mask].toString()
     }
 
     override fun measureDivider(width: Double) = UiSize(width, 1.0)

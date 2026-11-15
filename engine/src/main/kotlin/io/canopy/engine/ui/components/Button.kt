@@ -6,9 +6,12 @@ import io.canopy.engine.input.binds.InputBind
 import io.canopy.engine.input.events.InputEvent
 import io.canopy.engine.input.events.InputState
 import io.canopy.engine.input.events.MouseButtonEvent
+import io.canopy.engine.ui.Place
+import io.canopy.engine.ui.Size
 import io.canopy.engine.ui.UiKind
 import io.canopy.engine.ui.UiMouseFilter
 import io.canopy.engine.ui.UiNode
+import io.canopy.engine.ui.UiStyle
 
 /**
  * Extensible focusable action. Its label and eligibility may change without replacing its identity.
@@ -18,9 +21,11 @@ import io.canopy.engine.ui.UiNode
 open class Button<N : Button<N>>(
     text: String = "",
     name: String = "Button",
+    place: Place = Place.Auto,
+    size: Size = Size.Content,
     block: N.() -> Unit = {},
     onClick: () -> Unit = {},
-) : UiNode<N>(name, block = block) {
+) : UiNode<N>(name, UiStyle(width = size.width, height = size.height, place = place), block = block) {
     init {
         mouseFilter = UiMouseFilter.Stop
     }
@@ -56,7 +61,11 @@ open class Button<N : Button<N>>(
         }
     }
 
-    /** Invokes an enabled, visible, entered action without changing simulation pause state. */
+    /**
+     * Invokes an enabled, visible, entered action synchronously without changing simulation pause state.
+     * This button owns local node query reads and lifecycle resources during the action; nested actions restore
+     * the previous owner on return or failure. Ownership does not extend to asynchronous work.
+     */
     fun activate() {
         if (enabled && isInsideTree && isVisibleInTree) {
             untrack { NodeLifetime.withOwner(this) { action() } }

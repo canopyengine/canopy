@@ -105,7 +105,16 @@ class CanopyCompilerPlugin : KotlinCompilerPluginSupportPlugin {
             }
             val colors = DiagnosticColor.enabled(
                 mode,
-                rich = console == ConsoleOutput.Rich || console == ConsoleOutput.Verbose,
+                rich = console == ConsoleOutput.Rich ||
+                    console == ConsoleOutput.Verbose ||
+                    console == ConsoleOutput.Auto &&
+                    DiagnosticColor.terminal(
+                        project.providers.environmentVariable("TERM").orNull,
+                        project.providers.environmentVariable("COLORTERM").orNull,
+                        project.providers.environmentVariable("WT_SESSION").orNull,
+                        project.providers.environmentVariable("ANSICON").orNull,
+                        project.providers.environmentVariable("ConEmuANSI").orNull
+                    ),
                 plain = console == ConsoleOutput.Plain,
                 noColor = project.providers.environmentVariable("NO_COLOR").isPresent,
                 ci = ci,

@@ -5,11 +5,14 @@ import kotlin.reflect.KProperty
 import io.canopy.engine.core.flows.lookupContext
 import io.canopy.engine.core.nodes.Behavior
 import io.canopy.engine.core.nodes.Node
+import io.canopy.engine.core.nodes.NodeLifetime
 
 /**
  * Read-only dependency resolved against a node hierarchy or context on each game-thread read.
  * Valid detached nodes can resolve ancestors, children and context; tree/group reads require entered membership.
  * Destroyed owners reject every read, including optional reads. Behaviors resolve against their supplied node.
+ * Local delegates resolve against the active synchronous node callback's owner on each read. They require an
+ * ownership context even for optional queries; ownership does not propagate to asynchronous work or other threads.
  * Reads inside computed/effect observe structural changes, including active-tree reparenting.
  * No owner, provider or resolved value is retained. Construct through the node query factories.
  */
@@ -30,6 +33,17 @@ class NodeDependency<T> private constructor(private val kind: Kind, type: KClass
     /** Resolves against the behavior's supplied node; missing owners produce missing dependencies. */
     operator fun getValue(thisRef: Behavior<*>, property: KProperty<*>): T =
         resolve(thisRef.dependencyOwner(), property)
+
+    /**
+     * Resolves a local delegate against the active node callback owner, such as the button running onClick.
+     * Throws [IllegalStateException] when read outside a node ownership context. No owner is captured on creation.
+     */
+    operator fun getValue(thisRef: Nothing?, property: KProperty<*>): T = resolve(
+        checkNotNull(NodeLifetime.current()) {
+            "Local dependency '${property.name}' requires an active node callback or ownership context"
+        },
+        property
+    )
 
     @Suppress("UNCHECKED_CAST")
     private fun resolve(owner: Node<*>?, property: KProperty<*>): T {
