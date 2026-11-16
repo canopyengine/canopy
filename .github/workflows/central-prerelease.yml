@@ -61,7 +61,7 @@ jobs:
         run: ./gradlew stageCentralPublication -PrequireSigning=true --max-workers=2 --console=plain
       - name: Validate and package the bundle
         run: python3 tooling/central/bundle.py --version "$RELEASE_VERSION" --require-signatures --output build/central-bundle.zip
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: central-bundle-${{ inputs.version }}
           path: build/central-bundle.zip
@@ -72,7 +72,7 @@ jobs:
           CENTRAL_USERNAME: ${{ secrets.CENTRAL_USERNAME }}
           CENTRAL_PASSWORD: ${{ secrets.CENTRAL_PASSWORD }}
         run: python3 tooling/central/upload.py build/central-bundle.zip --result build/central-deployment.json
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         if: inputs.upload_for_validation
         with:
           name: central-deployment-${{ inputs.version }}
