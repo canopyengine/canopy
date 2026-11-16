@@ -29,7 +29,6 @@ open class Text<N : Text<N>>(
         set(value) {
             if (storedText != value) {
                 storedText = value
-                invalidate()
             }
         }
 }

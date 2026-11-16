@@ -3,6 +3,7 @@ package io.canopy.engine.ui
 import kotlin.math.max
 import io.canopy.engine.core.flows.events.NoArgEvent
 import io.canopy.engine.core.flows.events.untrack
+import io.canopy.engine.core.managers.getManagerOrNull
 import io.canopy.engine.core.nodes.Node
 import io.canopy.engine.core.nodes.NodeLifetime
 import io.canopy.engine.input.events.InputEvent
@@ -23,7 +24,7 @@ enum class UiMouseFilter {
  * Base for built-in and custom UI components. Shares ordinary node identity, state and lifecycle.
  * Compose children once from [nodeInit] using [ui]; Signals provide live values inside that builder.
  * Custom components arrange children as an overlay by default and may also contain ordinary nodes.
- * A containing [UiRoot] supplies host geometry, presentation and focus.
+ * A top-level [UiRoot] presents independently. Without one, the topmost UI node uses the viewport.
  */
 abstract class UiNode<N : UiNode<N>> protected constructor(
     name: String,
@@ -48,23 +49,18 @@ abstract class UiNode<N : UiNode<N>> protected constructor(
     /** Invalidates cached custom measurements after content changes, on the lifecycle thread. */
     protected fun invalidateMeasurement() {
         measurementRevision++
-        invalidate()
     }
     internal open fun paintContent(backend: UiBackend, clip: UiRect, appearance: UiAppearance) = Unit
-    internal val root: UiRoot<*>
+    internal val explicitRoot: UiRoot<*>?
         get() {
             var node: Node<*>? = this
-            var outermost: UiRoot<*>? = null
+            var outermost: UiNode<*>? = null
             while (node != null) {
-                when (node) {
-                    is Canvas<*> -> outermost = node
-                    is UiRoot<*> -> return node
-                }
+                if (node is UiNode<*>) outermost = node
                 node = node.parent
             }
-            return outermost ?: error("UI components must be attached beneath a Canvas or UiRoot before composition")
+            return outermost as? UiRoot<*>
         }
-
     private var storedStyle by nodeProperty(style)
 
     /** Sizing, arrangement and clipping in backend logical units. */
@@ -73,7 +69,6 @@ abstract class UiNode<N : UiNode<N>> protected constructor(
         set(value) {
             if (storedStyle != value) {
                 storedStyle = value
-                invalidate()
             }
         }
 
@@ -142,6 +137,13 @@ abstract class UiNode<N : UiNode<N>> protected constructor(
     internal var layoutClip by nodeProperty<UiRect?>(null)
     internal var content by nodeProperty<UiScope?>(null)
 
+    init {
+        observeActivity({
+            getManagerOrNull<UiManager>()?.ensureRoutes()
+            content?.resume()
+        }, { if (isValid) content?.suspend() })
+    }
+
     /** Nearest explicit theme applies to this subtree; null inherits from ancestors. */
     var theme by nodeProperty<UiTheme?>(null)
     internal val resolvedTheme: UiTheme
@@ -193,20 +195,9 @@ abstract class UiNode<N : UiNode<N>> protected constructor(
         check(state("compose component").initializing) { "Compose UI children once during node initialization" }
         check(content == null) { "A UI component has one composition builder" }
         markChildrenManaged()
-        val scope = UiScope(root, this)
+        val scope = UiScope(this)
         content = scope
         onDestroy { scope.dispose() }
         untrack { scope.compose(block) }
-    }
-
-    internal fun invalidate(): Unit = untrack {
-        var node: Node<*>? = this
-        while (node != null) {
-            if (node is UiRoot<*>) {
-                node.dirty = true
-                return@untrack
-            }
-            node = node.parent
-        }
     }
 }

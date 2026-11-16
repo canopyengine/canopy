@@ -1,8 +1,40 @@
 # Canvas and component layout for 0.1.0
 
 Agent-originated implementation notes prepared by Codex. This change belongs to
-the 0.1.0 development line; it does not bump `0.1.0-dev4`, publish artifacts, or
+the 0.1.0 development line; it does not change the release version, publish artifacts, or
 declare release acceptance.
+
+## Current viewport UI placement
+
+UI components can be children of an ordinary scene `Node`; a `UiRoot` or
+`Canvas` ancestor is optional. Each topmost UI component without an explicit
+root uses the host's viewport as its layout area. Ordinary grouping nodes do
+not create a new UI coordinate system, and `Node2D` transforms do not affect
+UI bounds or pointer hits. Direct constructor arguments initialize once;
+reactive UI expressions belong in a component's retained `ui {}` content.
+
+The painter draws ordinary scene content first, then rootless viewport UI in
+current scene-tree order, then top-level explicit presentations sorted by layer
+and `zIndex`. A `Canvas` defaults to the overlay layer; an explicit `UiRoot` can
+also use that layer. Pointer routing visits this order from front to back. A
+nested `Canvas` or a root reparented beneath another UI component is
+local to that component, not another global presentation. Buttons can gain
+keyboard focus in either an implicit or explicit presentation; hiding,
+detaching, or moving a focused control out of its presentation clears focus.
+Standalone `UiRoot.render()` remains supported, but a standalone rootless
+component must belong to the current scene for automatic painting.
+
+## Runtime responsibilities
+
+- `UiNode` owns component state and lifecycle; `UiScope` retains keyed children
+  and reactive bindings without introducing another presentation tree.
+- `UiLayoutEngine` measures, lays out, and paints backend-neutral rectangles.
+- `UiManager` discovers top-level presenters, schedules retained frames, and
+  tracks implicit focus; `UiRoot` adds explicit layer, alignment, and focus.
+- `UiTreeInput` traverses hits and clips. `InputFocus` orders routes and handles
+  gameplay capture; neither changes the node ownership tree.
+- `UiBackend` supplies host metrics, viewport mapping, and draw primitives;
+  native resources and event translation remain in platform adapters.
 
 ## Presentation and platform boundary
 

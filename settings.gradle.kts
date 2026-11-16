@@ -29,7 +29,7 @@ enableFeaturePreview("TYPESAFE_PROJECT_ACCESSORS")
 // Platforms
 include(
     ":platforms:headless",
-    ":platforms:terminal",
+    ":platforms:terminal"
     // Keep disabled until stale platform/adapters references are repaired.
     // ":platforms:desktop"
 )

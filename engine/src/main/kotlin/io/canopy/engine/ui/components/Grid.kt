@@ -51,7 +51,6 @@ open class Grid<N : Grid<N>>(
             require(value == null || value > 0) { "Grid rows must be positive" }
             require(value == null || cells.lastRow < value) { "Rows would exclude retained glyphs" }
             storedRows = value
-            invalidate()
         }
 
     /** Natural dimensions for each cell's content; null measures content. Lines and padding are additional. */
@@ -66,7 +65,6 @@ open class Grid<N : Grid<N>>(
         set(value) {
             require(value.isFinite() && value >= 0.0)
             storedPadding = value
-            invalidate()
         }
 
     override val columns: Int get() = storedColumns
@@ -149,7 +147,6 @@ open class Grid<N : Grid<N>>(
     /** Marks custom/legacy presentation changed without invalidating natural glyph measurements. */
     protected fun changed() {
         revision++
-        invalidate()
     }
 
     internal fun positions(children: List<UiNode<*>>): List<GridPosition> {

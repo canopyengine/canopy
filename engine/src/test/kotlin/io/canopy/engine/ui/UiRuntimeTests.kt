@@ -9,7 +9,9 @@ import io.canopy.engine.core.managers.ManagersRegistry
 import io.canopy.engine.core.managers.SceneManager
 import io.canopy.engine.core.nodes.types.empty.EmptyNode
 import io.canopy.engine.input.InputFocus
+import io.canopy.engine.ui.components.Box as BoxNode
 import io.canopy.engine.ui.components.Button
+import io.canopy.engine.ui.components.Text as TextNode
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.BeforeEach
 
@@ -72,6 +74,191 @@ class UiRuntimeTests {
         ) {
             draws += Draw(text, bounds, clip, focused, appearance)
         }
+    }
+
+    @Test
+    fun `UI nodes beneath an ordinary scene node use viewport layout without an explicit root`() {
+        lateinit var label: TextNode<*>
+        lateinit var box: BoxNode<*>
+        scenes.currScene = EmptyNode("World") {
+            label = TextNode("Ready")
+            box = BoxNode(
+                style = UiStyle(
+                    width = UiLength.Fixed(8.0),
+                    height = UiLength.Fixed(3.0),
+                    place = Place.At(Anchor.Center)
+                ),
+                content = { Text("inside") }
+            )
+        }
+
+        ui.updateFrame()
+
+        assertEquals(listOf("Ready", "inside"), backend.draws.map { it.text })
+        assertEquals(UiRect(36.0, 10.5, 8.0, 3.0), box.bounds)
+        label.text = "Updated"
+        ui.updateFrame()
+        assertEquals(listOf("Updated", "inside"), backend.draws.map { it.text })
+        ui.onResize(100, 30)
+        ui.updateFrame()
+        assertEquals(UiRect(46.0, 13.5, 8.0, 3.0), box.bounds)
+    }
+
+    @Test
+    fun `implicit presenters follow child mutations scene reentry and replacement`() {
+        val scene = EmptyNode("World")
+        scenes.currScene = scene
+        ui.updateFrame()
+        assertTrue(backend.draws.isEmpty())
+
+        val label = TextNode("direct", name = "Direct")
+        scene.addChild(label)
+        ui.updateFrame()
+        assertEquals(listOf("direct"), backend.draws.map { it.text })
+
+        scene.nodeExitTree()
+        ui.updateFrame()
+        assertTrue(backend.draws.isEmpty())
+        scene.buildTree()
+        ui.updateFrame()
+        assertEquals(listOf("direct"), backend.draws.map { it.text })
+
+        scene.removeChild(label)
+        ui.updateFrame()
+        assertTrue(backend.draws.isEmpty())
+
+        val doomed = TextNode("doomed", name = "Doomed")
+        scene.addChild(doomed)
+        ui.updateFrame()
+        assertEquals(listOf("doomed"), backend.draws.map { it.text })
+        doomed.queueFree()
+        scenes.onUpdate(0f)
+        ui.updateFrame()
+        assertTrue(backend.draws.isEmpty())
+
+        scenes.currScene = EmptyNode("Replacement") { TextNode("new") }
+        ui.updateFrame()
+        assertEquals(listOf("new"), backend.draws.map { it.text })
+    }
+
+    @Test
+    fun `implicit content paints before explicit content and canvas overlays`() {
+        scenes.currScene = EmptyNode("World") {
+            TextNode("implicit")
+            UiRoot(content = { Text("explicit") })
+            Canvas(content = { Text("overlay") })
+        }
+
+        ui.updateFrame()
+
+        assertEquals(listOf("implicit", "explicit", "overlay"), backend.draws.map { it.text })
+    }
+
+    @Test
+    fun `same-tree reparent moves UI between implicit and explicit presentation`() {
+        lateinit var world: EmptyNode<*>
+        lateinit var group: EmptyNode<*>
+        lateinit var root: UiRoot<*>
+        val scene = EmptyNode("Scene") {
+            world = EmptyNode("World")
+            root = UiRoot(content = {
+                group = node("group") { EmptyNode("Group") }
+            })
+        }
+        scenes.currScene = scene
+        root.style = root.style.copy(width = UiLength.Fixed(20.0))
+        root.horizontalAlignment = CrossAlign.End
+        val label = TextNode("moving")
+        world.addChild(label)
+        ui.updateFrame()
+        assertEquals(listOf("moving"), backend.draws.map { it.text })
+        assertEquals(0.0, label.bounds.x)
+
+        world.reparent(label, group)
+        ui.updateFrame()
+
+        assertEquals(listOf("moving"), backend.draws.map { it.text })
+        assertEquals(60.0, label.bounds.x)
+        group.reparent(label, world)
+        ui.updateFrame()
+        assertEquals(listOf("moving"), backend.draws.map { it.text })
+        assertEquals(0.0, label.bounds.x)
+    }
+
+    @Test
+    fun `implicit presentation follows scene sibling order after same-tree reparent`() {
+        lateinit var firstGroup: EmptyNode<*>
+        lateinit var secondGroup: EmptyNode<*>
+        lateinit var first: TextNode<*>
+        scenes.currScene = EmptyNode("Scene") {
+            firstGroup = EmptyNode("First") { first = TextNode("first", name = "FirstText") }
+            secondGroup = EmptyNode("Second") { TextNode("second", name = "SecondText") }
+        }
+        ui.updateFrame()
+        assertEquals(listOf("first", "second"), backend.draws.map { it.text })
+
+        firstGroup.reparent(first, secondGroup)
+        ui.updateFrame()
+        assertEquals(listOf("second", "first"), backend.draws.map { it.text })
+    }
+
+    @Test
+    fun `explicit root reparented under another presentation becomes local and paints once`() {
+        lateinit var group: EmptyNode<*>
+        lateinit var nested: UiRoot<*>
+        lateinit var button: Button<*>
+        val scene = EmptyNode("Scene") {
+            UiRoot(name = "Outer", content = {
+                group = node("Group") { EmptyNode("Group") }
+                Text("outer")
+            })
+            nested = UiRoot(name = "Inner", content = { button = Button("inner") {} })
+        }
+        scenes.currScene = scene
+        ui.updateFrame()
+        assertEquals(listOf("outer", "inner"), backend.draws.map { it.text })
+        nested.focus(button)
+        assertSame(button, nested.focusedElement)
+
+        scene.reparent(nested, group)
+        ui.updateFrame()
+        assertEquals(listOf("inner", "outer"), backend.draws.map { it.text })
+        assertNull(nested.focusedElement)
+        group.reparent(nested, scene)
+        ui.updateFrame()
+        assertEquals(listOf("outer", "inner"), backend.draws.map { it.text })
+        assertNull(nested.focusedElement)
+    }
+
+    @Test
+    fun `declarative nested root paints locally without a second presentation`() {
+        scenes.currScene = UiRoot(content = {
+            node("Nested") { UiRoot(name = "Nested", content = { Text("nested") }) }
+            Text("outer")
+        })
+
+        ui.updateFrame()
+
+        assertEquals(listOf("nested", "outer"), backend.draws.map { it.text })
+    }
+
+    @Test
+    fun `direct custom UI resumes retained bindings after reentry without calling its parent hook`() {
+        val count = signal(owner = null, 1)
+        class CounterPanel(content: UiScope.() -> Unit) : BoxNode<CounterPanel>(content = content) {
+            override fun onEnterTree() = Unit
+        }
+        val scene = EmptyNode("World") { CounterPanel { bindText("count") { "Count: ${count()}" } } }
+        scenes.currScene = scene
+        ui.updateFrame()
+        assertEquals("Count: 1", backend.draws.single().text)
+
+        scene.nodeExitTree()
+        count.update { 2 }
+        scene.buildTree()
+        ui.updateFrame()
+
+        assertEquals("Count: 2", backend.draws.single().text)
     }
 
     @Test

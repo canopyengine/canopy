@@ -8,6 +8,22 @@ import io.canopy.engine.ui.components.Grid
 import io.canopy.engine.ui.components.GridCell
 
 internal object UiLayoutEngine {
+    fun layoutViewport(element: UiNode<*>, backend: UiBackend, viewport: UiSize) {
+        val area = UiRect(0.0, 0.0, viewport.width, viewport.height)
+        val measured = measure(element, backend, viewport)
+        place(
+            element,
+            backend,
+            anchored(
+                element.style.place,
+                area,
+                measured,
+                maxWidth = element.style.maxWidth,
+                maxHeight = element.style.maxHeight
+            )
+        )
+    }
+
     fun layout(root: UiRoot<*>, backend: UiBackend, viewport: UiSize) {
         val elements = root.content?.elements().orEmpty()
         val available = UiSize(
@@ -564,11 +580,6 @@ internal object UiLayoutEngine {
             try {
                 node.drawSubtree(context) {
                     when (it) {
-                        is Canvas<*> -> {
-                            paint(it, backend, clip, focused)
-                            true
-                        }
-                        is UiRoot<*> -> true
                         is UiNode<*> -> {
                             paint(it, backend, clip, focused)
                             true

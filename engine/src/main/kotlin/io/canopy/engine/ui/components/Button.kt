@@ -1,6 +1,7 @@
 package io.canopy.engine.ui.components
 
 import io.canopy.engine.core.flows.events.untrack
+import io.canopy.engine.core.managers.getManager
 import io.canopy.engine.core.nodes.NodeLifetime
 import io.canopy.engine.input.binds.InputBind
 import io.canopy.engine.input.events.InputEvent
@@ -9,6 +10,7 @@ import io.canopy.engine.input.events.MouseButtonEvent
 import io.canopy.engine.ui.Place
 import io.canopy.engine.ui.Size
 import io.canopy.engine.ui.UiKind
+import io.canopy.engine.ui.UiManager
 import io.canopy.engine.ui.UiMouseFilter
 import io.canopy.engine.ui.UiNode
 import io.canopy.engine.ui.UiStyle
@@ -41,7 +43,6 @@ open class Button<N : Button<N>>(
         set(value) {
             if (storedText != value) {
                 storedText = value
-                invalidate()
             }
         }
 
@@ -55,7 +56,7 @@ open class Button<N : Button<N>>(
             event.state == InputState.JustPressed &&
             enabled
         ) {
-            root.focus(this)
+            getManager<UiManager>().focus(this)
             activate()
             event.consume()
         }

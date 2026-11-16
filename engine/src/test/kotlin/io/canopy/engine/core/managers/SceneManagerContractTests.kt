@@ -7,6 +7,7 @@ import kotlin.test.assertFalse
 import kotlin.test.assertSame
 import kotlin.test.assertTrue
 import io.canopy.engine.core.exceptions.NodeCallbackException
+import io.canopy.engine.core.flows.events.effect
 import io.canopy.engine.core.nodes.Node
 import io.canopy.engine.core.nodes.TreeSystem
 import io.canopy.engine.core.nodes.types.empty.EmptyNode
@@ -81,6 +82,44 @@ class SceneManagerContractTests {
         EmptyNode("child")
         EmptyNode2D("unmatched")
     }.also { scenes.currScene = it }
+
+    @Test
+    fun `hierarchy generation advances inside nested mutation before reactive publication`() {
+        val root = EmptyNode("root")
+        scenes.currScene = root
+        val publications = mutableListOf<List<String>>()
+        val observer = effect { publications += root.children.keys.toList() }
+        val initialGeneration = scenes.hierarchyGeneration
+
+        scenes.mutateHierarchy {
+            root.addChild(EmptyNode("child"))
+            assertTrue(scenes.hierarchyGeneration > initialGeneration)
+            assertEquals(1, publications.size)
+        }
+
+        assertEquals(listOf<List<String>>(emptyList(), listOf("child")), publications)
+        observer.dispose()
+    }
+
+    @Test
+    fun `hierarchy generation tracks direct exit and reentry without index changes`() {
+        val root = EmptyNode("root")
+        root.buildTree()
+        independentRoots += root
+        val indexedCount = scenes.indexedNodeCount
+        val beforeExit = scenes.hierarchyGeneration
+
+        root.nodeExitTree()
+
+        assertEquals(beforeExit + 1, scenes.hierarchyGeneration)
+        assertEquals(indexedCount, scenes.indexedNodeCount)
+
+        val beforeReentry = scenes.hierarchyGeneration
+        root.buildTree()
+
+        assertEquals(beforeReentry + 1, scenes.hierarchyGeneration)
+        assertEquals(indexedCount, scenes.indexedNodeCount)
+    }
 
     @Test
     fun `backfill keeps distinct identities with identical paths after one root is destroyed`() {

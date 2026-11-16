@@ -36,6 +36,8 @@ class SceneManager(val physicsStep: Float = 1f / 60f, private val block: SceneMa
 
     // A lazy, scene-wide dependency keeps structural observation event-driven and inexpensive when unused.
     private var hierarchyRevision: Signal<Long>? = null
+    internal var hierarchyGeneration = 0L
+        private set
     private var hierarchyDepth = 0
     private var hierarchyDirty = false
     private var publishingHierarchy = false
@@ -47,8 +49,13 @@ class SceneManager(val physicsStep: Float = 1f / 60f, private val block: SceneMa
     }
 
     internal fun hierarchyChanged() {
+        hierarchyGeneration++
         hierarchyDirty = true
         publishHierarchy()
+    }
+
+    internal fun treeEntryChanged() {
+        hierarchyGeneration++
     }
 
     @PublishedApi
@@ -207,16 +214,7 @@ class SceneManager(val physicsStep: Float = 1f / 60f, private val block: SceneMa
      * Groups
      * ============================================================ */
 
-    /**
-     * Named groups of nodes.
-     * Maps a node to its list of groups
-     */
-    private val groupsByNode = mutableMapOf<Node<*>, MutableSet<String>>()
-
-    /**
-     * Maps a group to all their nodes
-     */
-    private val groups = mutableMapOf<String, MutableSet<Node<*>>>()
+    private val sceneGroups = SceneGroups()
 
     /* ============================================================
      * Scene replacement
@@ -335,10 +333,7 @@ class SceneManager(val physicsStep: Float = 1f / 60f, private val block: SceneMa
                 hierarchyChanged()
             }
             drawingNodes.remove(node)
-            groupsByNode.remove(node)?.forEach { group ->
-                groups[group]?.remove(node)
-                if (groups[group].isNullOrEmpty()) groups.remove(group)
-            }
+            sceneGroups.unregister(node)
             systemsFor(node).toList().forEach { system -> failures.attempt { system.unregisterInternal(node) } }
         }
         failures.rethrow()
@@ -489,13 +484,12 @@ class SceneManager(val physicsStep: Float = 1f / 60f, private val block: SceneMa
      * Group management
      * ============================================================ */
 
-    internal fun queryGroup(group: String): List<Node<*>> = groups[group].orEmpty().filter { it.isInsideTree }
+    internal fun queryGroup(group: String): List<Node<*>> = sceneGroups.query(group)
 
+    /** Adds entered [node] to the scene index without changing [Node.groups]; repeat additions are ignored. */
     fun addToGroup(group: String, node: Node<*>): Unit = mutateHierarchy {
         node.requireValid("add group")
-        if (!node.isInsideTree || node in groups[group].orEmpty()) return
-        groups.computeIfAbsent(group) { linkedSetOf() }.add(node)
-        groupsByNode.computeIfAbsent(node) { linkedSetOf() }.add(group)
+        if (!node.isInsideTree || !sceneGroups.add(group, node)) return
         hierarchyChanged()
 
         log.trace("event" to "group.add", "group" to group, "nodePath" to node.path) {
@@ -503,9 +497,9 @@ class SceneManager(val physicsStep: Float = 1f / 60f, private val block: SceneMa
         }
     }
 
+    /** Removes indexed membership without changing [Node.groups]; empty groups are removed from the index. */
     fun removeFromGroup(group: String, node: Node<*>): Unit = mutateHierarchy {
-        groups[group]?.remove(node) ?: error("Node $node does not exist in group $group")
-        groupsByNode[node]?.remove(group) ?: error("Group $group does not exist")
+        sceneGroups.remove(group, node)
         hierarchyChanged()
 
         log.trace("event" to "group.remove", "group" to group, "nodePath" to node.path) {
@@ -513,35 +507,22 @@ class SceneManager(val physicsStep: Float = 1f / 60f, private val block: SceneMa
         }
     }
 
+    /** Reconciles indexed membership to [Node.groups], preserving unaffected group member order. */
     fun updateGroups(node: Node<*>): Unit = mutateHierarchy {
-        // Get or create entry
-        val oldGroups = groupsByNode.computeIfAbsent(node) { linkedSetOf() }
-
-        // Remove old entries
-        oldGroups.forEach { group ->
-            groups[group]?.remove(node)
-        }
-        oldGroups.clear()
-
-        // Add new entries
-        hierarchyChanged()
-        oldGroups.addAll(node.groups)
-        node.groups.forEach { group ->
-            groups.computeIfAbsent(group) { linkedSetOf() }.add(node)
-        }
+        if (sceneGroups.update(node, node.groups)) hierarchyChanged()
     }
 
     /**
-     * Applies [callback] to all nodes in the group.
-     * Useful for "broadcast" operations without scanning the whole tree.
+     * Applies [callback] to an ordered snapshot of the group, skipping members removed during this call.
+     * New members participate on the next call. Missing or emptied groups throw [IllegalStateException].
      */
     fun signalGroup(group: String, callback: (node: Node<*>) -> Unit) {
-        val groupNodes = groups[group] ?: error("Group $group does not exist")
+        val groupNodes = sceneGroups.snapshotForSignal(group)
         LogContext.with("group" to group) {
             log.debug("event" to "group.signal", "count" to groupNodes.size) { "Signaling group" }
-            groupNodes.toList().forEach { node ->
+            groupNodes.forEach { node ->
                 if (node.isInsideTree &&
-                    node in groups[group].orEmpty()
+                    sceneGroups.contains(group, node)
                 ) {
                     node.callback("group $group") { callback(node) }
                 }

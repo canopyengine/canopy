@@ -84,7 +84,7 @@ abstract class Node<N : Node<N>> protected constructor(
         owner.retainState(nodeId, payload)
         NodeConstruction.record(this)
         try {
-            currentParent.get()?.attach(this)
+            currentParent.get()?.let { parent -> NodeHierarchy.attach(parent, this) }
         } catch (failure: Throwable) {
             try {
                 owner.rollbackConstruction(this, setOf(this))
@@ -161,17 +161,7 @@ abstract class Node<N : Node<N>> protected constructor(
     var name: String
         get() = state("read name").name
         set(value) {
-            val s = state("rename")
-            if (s.name == value) return
-            val p = s.parent?.state("rename child")
-            s.parent?.checkChildrenMutation("rename child")
-            if (p != null && value in p.children) fail("rename", "Sibling '$value' already exists")
-            p?.children?.remove(s.name)
-            s.name = value
-            p?.children?.set(value, this)
-            p?.changed()
-            refreshPaths()
-            s.owner.hierarchyChanged()
+            NodeHierarchy.rename(this, value)
         }
 
     /** Absolute path; unavailable after destruction. Diagnostics retain its last value. */
@@ -263,20 +253,9 @@ abstract class Node<N : Node<N>> protected constructor(
         }
     }
 
-    internal fun reorderManagedChildren(order: List<Node<*>>): Unit = owningManager().mutateHierarchy {
-        checkChildrenMutation("reorder managed children")
-        val s = state("reorder managed children")
-        require(order.size == s.children.size && order.toSet() == s.children.values.toSet()) {
-            "Reordering must preserve exact child membership"
-        }
-        if (s.snapshot() == order) return
-        s.children.clear()
-        order.forEach { s.children[it.name] = it }
-        s.changed()
-        s.owner.hierarchyChanged()
-    }
+    internal fun reorderManagedChildren(order: List<Node<*>>): Unit = NodeHierarchy.reorderManagedChildren(this, order)
 
-    private fun checkChildrenMutation(operation: String) {
+    internal fun checkChildrenMutation(operation: String) {
         val s = state(operation)
         if (s.managedChildren && s.managedMutationDepth == 0) {
             fail(operation, "Children are owned by declarative composition")
@@ -325,14 +304,21 @@ abstract class Node<N : Node<N>> protected constructor(
         }
     }
 
-    /** Applies a group diff without exposing the engine's mutable membership set. */
+    /**
+     * Applies a local group diff and reconciles entered scene membership without exposing the mutable set.
+     * A change to neither local groups nor indexed membership does not notify structural observers.
+     * Existing group member order is preserved.
+     */
     fun updateGroups(block: MutableSet<String>.() -> Unit): Unit = owningManager().mutateHierarchy {
         val s = state("updateGroups")
         val result = s.groups.toMutableSet().apply(block)
-        s.groups.clear()
-        s.groups.addAll(result)
+        val changed = s.groups.toList() != result.toList()
+        if (changed) {
+            s.groups.clear()
+            s.groups.addAll(result)
+        }
         if (s.entered) s.owner.updateGroups(this)
-        s.owner.hierarchyChanged()
+        if (changed) s.owner.hierarchyChanged()
     }
 
     internal var behavior: Behavior<*>?
@@ -482,50 +468,14 @@ abstract class Node<N : Node<N>> protected constructor(
         }
     }
 
-    private fun attach(child: Node<*>): Unit = owningManager().mutateHierarchy {
-        checkChildrenMutation("attach")
-        val s = state("attach")
-        val c = child.state("attach")
-        if (s.owner !== c.owner) fail("attach", "Nodes belong to different scene managers")
-        if (c.parent != null) fail("attach", "Child already has a parent")
-        if (c.name in s.children) fail("attach", "Child '${c.name}' already exists")
-        var ancestor: Node<*>? = this
-        while (ancestor != null) {
-            if (ancestor === child) fail("attach", "Cannot create a hierarchy cycle")
-            ancestor = ancestor.state("attach").parent
-        }
-        s.children[c.name] = child
-        s.changed()
-        c.parent = this
-        c.parentState = s
-        child.refreshPaths()
-        s.owner.hierarchyChanged()
-        if (s.entered) s.owner.registerSubtree(child)
-    }
-
     /**
      * Attaches a child, or keeps an already composed child of this parent. Other-parent attachment fails.
      * Initialization defers child entry until parent configuration finishes; runtime additions enter immediately.
      */
-    fun addChild(child: Node<*>): Unit = owningManager().mutateHierarchy {
-        checkChildrenMutation("addChild")
-        val owner = state("addChild")
-        val member = child.state("addChild")
-        if (member.parent !== this) attach(child)
-        if (owner.entered && !owner.initializing && !member.prefab) child.buildTree()
-    }
+    fun addChild(child: Node<*>): Unit = NodeHierarchy.addChild(this, child)
 
     /** Immediate reusable detachment; completes despite exit or unregister failures. */
-    fun removeChild(child: Node<*>): Unit = owningManager().mutateHierarchy {
-        checkChildrenMutation("removeChild")
-        val s = state("removeChild")
-        if (child.state("removeChild").parent !== this) fail("removeChild", "Node is not a child")
-        val failures = CleanupFailures()
-        failures.attempt { child.nodeExitTree() }
-        failures.attempt { s.owner.unregisterSubtree(child) }
-        child.detachFromParent()
-        failures.rethrow()
-    }
+    fun removeChild(child: Node<*>): Unit = NodeHierarchy.removeChild(this, child)
 
     /** Removes a direct child resolved by path. */
     fun removeChild(path: String) {
@@ -623,33 +573,7 @@ abstract class Node<N : Node<N>> protected constructor(
     }
 
     /** Moves an existing child. Same-tree moves preserve lifetimes and system registrations. */
-    fun reparent(child: Node<*>, newParent: Node<*>): Unit = owningManager().mutateHierarchy {
-        val s = state("reparent")
-        val c = child.state("reparent")
-        val destination = newParent.state("reparent")
-        if (c.parent !== this) fail("reparent", "Node is not a child")
-        if (newParent === this) return
-        checkChildrenMutation("reparent")
-        newParent.checkChildrenMutation("reparent")
-        var ancestor: Node<*>? = newParent
-        while (ancestor != null) {
-            if (ancestor === child) fail("reparent", "Cannot create a hierarchy cycle")
-            ancestor = ancestor.state("reparent").parent
-        }
-        if (c.name in destination.children || s.owner !== destination.owner) fail("reparent", "Invalid destination")
-        val sameTree = s.entered && destination.entered
-        if (!sameTree) {
-            val failures = CleanupFailures()
-            failures.attempt { child.nodeExitTree() }
-            failures.attempt { s.owner.unregisterSubtree(child) }
-            child.detachFromParent()
-            newParent.addChild(child)
-            failures.rethrow()
-        } else {
-            child.detachFromParent()
-            newParent.attach(child)
-        }
-    }
+    fun reparent(child: Node<*>, newParent: Node<*>): Unit = NodeHierarchy.reparent(this, child, newParent)
 
     /** Whether an actual immediate child has exactly [type], excluding subclasses. */
     fun hasExactChildType(type: KClass<out Node<*>>) = state("hasExactChildType").snapshot().any { it::class == type }
@@ -796,6 +720,7 @@ abstract class Node<N : Node<N>> protected constructor(
         if (s.entered) return
         s.entryGeneration++
         s.entered = true
+        s.owner.treeEntryChanged()
         lifecycle = Lifecycle.Active
         if (!s.built) {
             s.built = true
@@ -863,6 +788,7 @@ abstract class Node<N : Node<N>> protected constructor(
             metadata = NodeExitMetadata(nodeId, s.name, lastPath, isFreed)
             val wasEntered = s.entered
             s.entered = false
+            if (wasEntered) s.owner.treeEntryChanged()
             if (!isFreed) lifecycle = Lifecycle.Detached
             if (wasEntered) {
                 s.activity.toList().forEach { entry ->
@@ -1024,14 +950,9 @@ abstract class Node<N : Node<N>> protected constructor(
             val childState = child.reference.get() ?: continue
             if (childState.parent === this) child.dispatchState(kind, delta, event, childState)
         }
-        if (!s.entered ||
-            isFreed ||
-            !eligible(s, s.owner.isPaused) ||
-            (kind == DispatchKind.Input && event?.isHandled == true)
-        ) {
-            return
-        }
+        if (!s.entered || isFreed || (kind == DispatchKind.Input && event?.isHandled == true)) return
         val behavior = s.behavior ?: return
+        if (!eligible(s, s.owner.isPaused)) return
         callback(phase) {
             when (kind) {
                 DispatchKind.Frame -> behavior.onUpdate(delta)

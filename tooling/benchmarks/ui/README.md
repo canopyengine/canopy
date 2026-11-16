@@ -11,6 +11,32 @@ runs occurred earlier in the session, so latency ratios are indicative rather
 than a controlled interleaved regression gate. Allocation and operation counts
 are the stronger evidence. Raw CSV retains all samples and revision/fork labels.
 
+The current shared-UI probe also measures direct rootless UI under an ordinary
+scene node, plus ordinary-scene widths of 0, 100 and 1,000 nodes with ten UI
+labels. These new cases are not represented by the historical tables below;
+compare their idle and changed-frame operation counts before optimizing.
+
+## Rootless scene optimization (2026-11-16)
+
+The same synthetic scene with ten UI labels and 1,000 ordinary nodes, but no
+ordinary `onDraw`, ran in three isolated JDK 25 forks on one host. Medians of
+15 samples per case:
+
+| Frame | Before cache/guard | Presenter cache only | Cache and draw guard |
+|---|---:|---:|---:|
+| Idle ms / bytes | 0.048 / 30,704 | 0.001 / 480 | 0.001 / 480 |
+| One label changed ms / bytes | 0.109 / 79,456 | 0.051 / 49,264 | 0.013 / 10,024 |
+
+The presenter cache avoids rescanning an unchanged scene hierarchy; structural
+changes rebuild it. The draw guard skips ordinary-scene traversal only when
+the scene has no drawables. Changed frames still evaluate and measure one
+label, paint ten, and submit one backend frame; idle frames do none of these.
+These are synthetic CPU/allocation results, not application FPS. Latency is
+host- and JIT-sensitive, so not every timing difference is necessarily caused
+by these changes.
+
+## Historical UI composition results
+
 Three JVM forks each use `-Xms512m -Xmx1g -Xss2m`. Each workload warms up for
 500 frames, then records five repetitions of 1,000 shared UI frames or 500 cell
 frames. ThreadMXBean measures allocations on the current thread. The shared UI

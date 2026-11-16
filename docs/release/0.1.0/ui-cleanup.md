@@ -79,10 +79,11 @@ For the former solid terminal layout, use content width `oldGap + 1`, zero gap,
 and single outer/internal lines. These dimensions are terminal logical units;
 graphical backends use their own metrics and pixel sizes.
 
-UI component initialization requires a Canvas/UiRoot ancestor. A Grid prefab
-can be constructed first, then attached before building its UI subtree. It is
-not an unhosted world-space grid. Configuration, retained child content and action
-callbacks remain separate.
+UI components may be attached directly beneath ordinary scene nodes and use the
+viewport for layout without a Canvas/UiRoot ancestor. A Grid prefab can be
+constructed first, then attached before building its UI subtree. It is not an
+unhosted world-space grid: ordinary Node2D transforms do not alter UI layout.
+Configuration, retained child content and action callbacks remain separate.
 
 The native terminal smoke source and external-launcher fixture in this repository
 are migrated to Grid. Other repositories and downstream consumers must migrate

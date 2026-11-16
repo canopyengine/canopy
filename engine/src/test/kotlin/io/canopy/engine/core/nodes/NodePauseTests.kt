@@ -53,6 +53,23 @@ class NodePauseTests {
     }
 
     @Test
+    fun `parent behavior attached by a child runs after that child in the same frame`() {
+        val root = EmptyNode("root")
+        val child = EmptyNode("child")
+        val callbacks = mutableListOf<String>()
+        root.addChild(child)
+        child.behavior(onUpdate = {
+            callbacks += "child"
+            root.behavior(onUpdate = { callbacks += "parent" })
+        })
+        scenes.currScene = root
+
+        scenes.onUpdate(0f)
+
+        assertEquals(listOf("child", "parent"), callbacks)
+    }
+
+    @Test
     fun `default nodes stop while explicit descendants process frame physics and input`() {
         // Arrange
         val root = RecordingNode("root", calls)

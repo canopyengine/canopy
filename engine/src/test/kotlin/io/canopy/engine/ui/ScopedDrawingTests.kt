@@ -6,8 +6,10 @@ import io.canopy.engine.core.flows.events.signal
 import io.canopy.engine.core.managers.ManagersRegistry
 import io.canopy.engine.core.managers.SceneManager
 import io.canopy.engine.core.nodes.Node
+import io.canopy.engine.core.nodes.types.empty.EmptyNode
 import io.canopy.engine.graphics.DrawContext
 import io.canopy.engine.input.InputFocus
+import io.canopy.engine.ui.components.Box as BoxNode
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.BeforeEach
 
@@ -144,6 +146,50 @@ class ScopedDrawingTests {
         assertEquals(UiRect(-1.0, -1.0, 20.0, 10.0), backend.draws[0].bounds)
         assertEquals(UiRect(1.0, 1.0, 8.0, 3.0), backend.draws[0].clip)
         assertEquals(UiRect(2.0, 2.0, 7.0, 2.0), backend.draws[1].bounds)
+    }
+
+    @Test
+    fun `ordinary world drawing precedes rootless UI and nested drawing keeps its local clip`() {
+        scenes.currScene = EmptyNode("Scene") {
+            DrawingNode("world", { it.text("world") })
+            BoxNode(
+                style = UiStyle(width = UiLength.Fixed(10.0), height = UiLength.Fixed(5.0), padding = 1.0),
+                content = {
+                    node("nested") { DrawingNode("nested", { it.text("nested") }) }
+                    Text("ui")
+                }
+            )
+        }
+
+        ui.updateFrame()
+
+        assertEquals(listOf("world", "nested", "ui"), backend.draws.map { it.text })
+        assertEquals(UiRect(1.0, 1.0, 8.0, 3.0), backend.draws[1].clip)
+    }
+
+    @Test
+    fun `onDraw reparent beneath UI paints the moved presentation once`() {
+        val scene = EmptyNode("World")
+        lateinit var destination: EmptyNode<*>
+        val host = BoxNode(name = "Host", content = {
+            destination = node("Destination") { EmptyNode("Destination") }
+        })
+        val presenter = BoxNode(name = "Presenter", content = { Text("once") })
+        var moved = false
+        val mover = DrawingNode("Mover", {
+            if (!moved) {
+                moved = true
+                scene.reparent(presenter, destination)
+            }
+        })
+        scene.addChild(host)
+        scene.addChild(presenter)
+        scene.addChild(mover)
+        scenes.currScene = scene
+
+        ui.updateFrame()
+
+        assertEquals(listOf("once"), backend.draws.map { it.text })
     }
 
     @Test

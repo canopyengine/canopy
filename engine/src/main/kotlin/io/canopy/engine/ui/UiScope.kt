@@ -14,7 +14,7 @@ import io.canopy.engine.ui.components.Text as TextNode
 /** Declarative construction receiver. The compiler lowers property expressions and structural regions independently. */
 @DeclarativeUi
 @Suppress("ktlint:standard:function-naming")
-class UiScope internal constructor(private val root: UiRoot<*>, private val parent: Node<*>) {
+class UiScope internal constructor(private val parent: Node<*>) {
     private val retained = linkedMapOf<Any, Entry>()
     private var requested = mutableListOf<Any>()
     private var counter = 0
@@ -55,7 +55,6 @@ class UiScope internal constructor(private val root: UiRoot<*>, private val pare
             retained.clear()
             requested.zip(ordered).forEach { (key, entry) -> retained[key] = entry }
             reorder()
-            root.dirty = true
         } catch (failure: Throwable) {
             val cleanup = CleanupFailures()
             cleanup.attempt { throw failure }
@@ -127,7 +126,6 @@ class UiScope internal constructor(private val root: UiRoot<*>, private val pare
                     require(
                         added == listOf(it) &&
                             untrack { it.parent === parent } &&
-                            (it !is UiRoot<*> || it is Canvas<*>) &&
                             it !is UiRegion
                     ) {
                         "A node declaration must construct exactly one fresh child in this scope"
@@ -227,13 +225,13 @@ class UiScope internal constructor(private val root: UiRoot<*>, private val pare
             "Cell ($x, $y) is outside the configured Grid dimensions"
         }
         val slot = node("cell:$x:$y") { io.canopy.engine.ui.components.GridCell(GridPosition(x, y)) {} }
-        val scope = slot.content ?: UiScope(root, slot).also { slot.content = it }
+        val scope = slot.content ?: UiScope(slot).also { slot.content = it }
         scope.compose(content)
     }
     private fun container(kind: UiKind, style: UiStyle, block: UiScope.() -> Unit): UiNode<*> {
         val element = element(slot(kind.name), kind)
         element.style = style
-        val scope = element.content ?: UiScope(root, element).also { element.content = it }
+        val scope = element.content ?: UiScope(element).also { element.content = it }
         untrack { scope.compose(block) }
         return element
     }
@@ -373,7 +371,7 @@ class UiScope internal constructor(private val root: UiRoot<*>, private val pare
     }, block) as BoxNode<*>
     private fun bindContainer(site: String, kind: UiKind, style: () -> UiStyle, block: UiScope.() -> Unit): UiNode<*> {
         val element = element(site, kind)
-        val scope = element.content ?: UiScope(root, element).also { element.content = it }
+        val scope = element.content ?: UiScope(element).also { element.content = it }
         untrack { scope.compose(block) }
         val entry = retained[site]!!
         entry.observer?.dispose()
@@ -444,7 +442,7 @@ class UiScope internal constructor(private val root: UiRoot<*>, private val pare
                 untrack { block(grid) }
             }
         }
-        val scope = grid.content ?: UiScope(root, grid).also { grid.content = it }
+        val scope = grid.content ?: UiScope(grid).also { grid.content = it }
         untrack { scope.compose(content) }
         return grid
     }
@@ -486,7 +484,6 @@ class UiScope internal constructor(private val root: UiRoot<*>, private val pare
         val next = value()
         if (element.isVisible != next) {
             element.isVisible = next
-            root.dirty = true
         }
     }
 
@@ -496,7 +493,6 @@ class UiScope internal constructor(private val root: UiRoot<*>, private val pare
         require(element is ButtonNode<*>)
         if (element.enabled != next) {
             element.enabled = next
-            root.dirty = true
         }
     }
     private fun property(site: String, element: UiNode<*>, action: () -> Unit) {
@@ -508,29 +504,18 @@ class UiScope internal constructor(private val root: UiRoot<*>, private val pare
     internal fun suspend() {
         retained.values.forEach {
             it.observer?.suspend()
-            it.scope?.suspend()
-            componentScopes(it).forEach { scope -> scope.suspend() }
         }
     }
     internal fun resume() {
         retained.values.forEach {
             it.observer?.resume()
-            it.scope?.resume()
-            componentScopes(it).forEach { scope -> scope.resume() }
         }
-    }
-    private fun componentScopes(entry: Entry): List<UiScope> = if (entry.scope == null) {
-        buildList {
-            entry.node?.let { node -> layoutChildren(node) { if (it.isValid) it.content?.let { add(it) } } }
-        }
-    } else {
-        emptyList()
     }
     private fun region(): Entry {
         val region = parent.withManagedChildrenMutation {
-            parent.withChildConstruction { UiRegion(root, "UiRegion${identities++}") }
+            parent.withChildConstruction { UiRegion("UiRegion${identities++}") }
         }
-        val scope = UiScope(root, region)
+        val scope = UiScope(region)
         region.content = scope
         enterCreated(region)
         return Entry(node = region, scope = scope)
@@ -550,17 +535,15 @@ class UiScope internal constructor(private val root: UiRoot<*>, private val pare
     private fun layoutChildren(node: Node<*>, action: (UiNode<*>) -> Unit) {
         if (!node.isValid) return
         when (node) {
-            is Canvas<*> -> action(node)
-            is UiRoot<*> -> Unit
             is UiNode<*> -> action(node)
-            else -> node.children.values.forEach { layoutChildren(it, action) }
+            else -> node.childSnapshot().forEach { layoutChildren(it, action) }
         }
     }
     private fun reorder(): Unit = untrack {
         val parentScope = when (parent) {
             is UiNode<*> -> parent.content
             is UiRegion -> parent.content
-            else -> root.content
+            else -> null
         }
         val order = parentScope?.retained?.values?.flatMap(::entryNodes).orEmpty()
         if (order.size == parent.children.size && order.all { it.isValid && it.parent === parent }) {
