@@ -5,11 +5,12 @@ import io.canopy.engine.ui.*
 /**
  * Extensible horizontal separator that fills its allocated width. Style controls color, spacing and clipping.
  * @param N Concrete node type exposed to its initialization block.
- * @param block Runs once after nodeInit, before entry callbacks; not replayed on reentry.
+ * @param name Optional explicit name; otherwise the concrete class and its sibling count determine the name.
+ * @param block Runs once after onSetup, before entry callbacks; not replayed on reentry.
  */
 open class Divider<N : Divider<N>>(
     style: UiStyle = UiStyle(width = UiLength.Fill),
-    name: String = "Divider",
+    name: String? = null,
     block: N.() -> Unit = {},
 ) : UiNode<N>(name, style, block = block) {
     override val role: String get() = "separator"

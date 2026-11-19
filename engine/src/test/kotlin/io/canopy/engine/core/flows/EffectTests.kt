@@ -207,6 +207,40 @@ class EffectTests {
     }
 
     @Test
+    fun `effect observes first run writes and converges`() {
+        val counter = signal(0)
+        val observed = mutableListOf<Int>()
+        val observer = effect {
+            val value = counter()
+            observed += value
+            if (value < 3) counter.update { value + 1 }
+        }
+
+        assertEquals(listOf(0, 1, 2, 3), observed)
+        assertEquals(3, counter())
+        observer.dispose()
+    }
+
+    @Test
+    fun `nonconvergent effect fails after bounded runs and disconnects`() {
+        val counter = signal(0)
+        var runs = 0
+
+        val failure = assertFailsWith<IllegalStateException> {
+            effect {
+                val value = counter()
+                runs++
+                counter.update { value + 1 }
+            }
+        }
+
+        assertEquals("Effect did not converge after 1024 runs", failure.message)
+        assertEquals(1024, runs)
+        counter.update { it + 1 }
+        assertEquals(1024, runs)
+    }
+
+    @Test
     fun `throwing rerun reconciles changed dependencies and restores untracked reads`() {
         val branch = signal(true)
         val first = signal(1)
@@ -261,5 +295,24 @@ class EffectTests {
         trigger.update { 1 }
         trigger.update { 2 }
         assertEquals(2, runs)
+    }
+
+    @Test
+    fun `source disconnection disposes the effect and releases other dependencies`() {
+        val source = signal(1)
+        val other = signal(2)
+        var runs = 0
+        val observer = effect {
+            source()
+            other()
+            runs++
+        }
+
+        source.clear()
+        source.update { 3 }
+        other.update { 4 }
+
+        assertEquals(1, runs)
+        observer.dispose()
     }
 }

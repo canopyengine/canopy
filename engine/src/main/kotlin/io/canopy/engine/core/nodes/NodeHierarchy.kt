@@ -6,7 +6,10 @@ import io.canopy.engine.core.CleanupFailures
 internal object NodeHierarchy {
     fun rename(node: Node<*>, value: String) {
         val nodeState = node.state("rename")
-        if (nodeState.name == value) return
+        if (nodeState.name == value) {
+            nodeState.autoName = false
+            return
+        }
         val parentState = nodeState.parent?.state("rename child")
         nodeState.parent?.checkChildrenMutation("rename child")
         if (parentState != null && value in parentState.children) {
@@ -14,6 +17,7 @@ internal object NodeHierarchy {
         }
         parentState?.children?.remove(nodeState.name)
         nodeState.name = value
+        nodeState.autoName = false
         parentState?.children?.set(value, node)
         parentState?.changed()
         node.refreshPaths()
@@ -39,12 +43,14 @@ internal object NodeHierarchy {
         val childState = child.state("attach")
         if (parentState.owner !== childState.owner) parent.fail("attach", "Nodes belong to different scene managers")
         if (childState.parent != null) parent.fail("attach", "Child already has a parent")
-        if (childState.name in parentState.children) parent.fail("attach", "Child '${childState.name}' already exists")
         var ancestor: Node<*>? = parent
         while (ancestor != null) {
             if (ancestor === child) parent.fail("attach", "Cannot create a hierarchy cycle")
             ancestor = ancestor.state("attach").parent
         }
+        val targetName = if (childState.autoName) automaticName(parentState, child) else childState.name
+        if (targetName in parentState.children) parent.fail("attach", "Child '$targetName' already exists")
+        childState.name = targetName
         parentState.children[childState.name] = child
         parentState.changed()
         childState.parent = parent
@@ -52,6 +58,17 @@ internal object NodeHierarchy {
         child.refreshPaths()
         parentState.owner.hierarchyChanged()
         if (parentState.entered) parentState.owner.registerSubtree(child)
+    }
+
+    private fun automaticName(parentState: NodeState, child: Node<*>): String {
+        val base = child.javaClass.simpleName.ifEmpty { "Node" }
+        var index = parentState.children.values.count { it.javaClass == child.javaClass }
+        var candidate = if (index == 0) base else "$base$index"
+        while (candidate in parentState.children) {
+            index++
+            candidate = "$base$index"
+        }
+        return candidate
     }
 
     fun addChild(parent: Node<*>, child: Node<*>): Unit = parent.owningManager().mutateHierarchy {
@@ -86,7 +103,9 @@ internal object NodeHierarchy {
             if (ancestor === child) parent.fail("reparent", "Cannot create a hierarchy cycle")
             ancestor = ancestor.state("reparent").parent
         }
-        if (childState.name in destinationState.children || parentState.owner !== destinationState.owner) {
+        if ((!childState.autoName && childState.name in destinationState.children) ||
+            parentState.owner !== destinationState.owner
+        ) {
             parent.fail("reparent", "Invalid destination")
         }
         val sameTree = parentState.entered && destinationState.entered

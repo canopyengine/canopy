@@ -16,8 +16,9 @@ import io.canopy.engine.math.Vector2
  * ```
  *
  * @param N concrete node type, used to preserve the node DSL receiver type.
+ * @param name Optional explicit name; otherwise the concrete class and its sibling count determine the name.
  */
-abstract class Node2D<N : Node2D<N>> protected constructor(name: String, block: N.() -> Unit = {}) :
+abstract class Node2D<N : Node2D<N>> protected constructor(name: String? = null, block: N.() -> Unit = {}) :
     Node<N>(name, block = block) {
 
     /* ============================================================

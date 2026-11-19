@@ -7,6 +7,7 @@ import io.canopy.engine.core.CleanupFailures
 import io.canopy.engine.core.exceptions.*
 import io.canopy.engine.core.flows.events.Computed
 import io.canopy.engine.core.flows.events.Effect
+import io.canopy.engine.core.flows.events.InputRuntime
 import io.canopy.engine.core.flows.events.NoArgEvent
 import io.canopy.engine.core.flows.events.OneArgEvent
 import io.canopy.engine.core.flows.events.Signal
@@ -28,11 +29,14 @@ import kotlinx.coroutines.Job
  * Without the plugin, custom stored values must use [nodeProperty]; runtime queries use the concrete
  * [io.canopy.engine.core.queries.NodeDependency] or [io.canopy.engine.core.queries.GlobalDependency] delegates.
  * Unsupported unmanaged fields are rejected by the compiler and runtime validation.
+ * Omit [name] to use the concrete class name. On attachment, existing direct children of the exact
+ * runtime class determine the numeric suffix; occupied sibling names are skipped.
+ * @param name Optional explicit name. An unnamed detached node starts with its concrete class name.
  */
 @CanopyDsl
 @Suppress("UNCHECKED_CAST")
 abstract class Node<N : Node<N>> protected constructor(
-    name: String,
+    name: String? = null,
     protected val skipOnSearch: Boolean = false,
     block: N.() -> Unit = {},
 ) {
@@ -54,10 +58,10 @@ abstract class Node<N : Node<N>> protected constructor(
         Input("input"),
     }
 
-    private var lastPath = "/$name"
+    private var lastPath = "/${name ?: javaClass.simpleName.ifEmpty { "Node" }}"
     private var lifecycle = Lifecycle.Detached
     private var queued = false
-    private var metadata = NodeExitMetadata(nodeId, name, lastPath, false)
+    private var metadata = NodeExitMetadata(nodeId, lastPath.substring(1), lastPath, false)
     private val reference: WeakReference<NodeState>
 
     companion object {
@@ -79,7 +83,7 @@ abstract class Node<N : Node<N>> protected constructor(
     init {
         NodeDefinition.validate(javaClass)
         val owner = getManager<SceneManager>()
-        val payload = NodeState(owner, name) { block(this as N) }
+        val payload = NodeState(owner, metadata.name, name == null) { block(this as N) }
         reference = WeakReference(payload)
         owner.retainState(nodeId, payload)
         NodeConstruction.record(this)
@@ -157,7 +161,7 @@ abstract class Node<N : Node<N>> protected constructor(
     /** Owning scene manager, available only while the node is valid. */
     protected val sceneManager: SceneManager get() = state("sceneManager").owner
 
-    /** Renaming updates descendant paths and all engine index keys. */
+    /** Renaming updates descendant paths and index keys. Assigning even the current name disables automatic naming. */
     var name: String
         get() = state("read name").name
         set(value) {
@@ -341,10 +345,10 @@ abstract class Node<N : Node<N>> protected constructor(
     /** Internal state slot used by native reactive delegates; no payload is retained by their facades. */
     internal fun <T> reactiveSlot(value: T): NodeProperty<T> = nodeProperty(value)
 
-    /** Persistent source lifecycle hooks; resources themselves remain owned by engine state. */
-    internal fun observeActivity(enter: () -> Unit, exit: () -> Unit): () -> Unit {
+    /** Persistent source lifecycle hooks; ready callbacks run after sibling entry and before user readiness hooks. */
+    internal fun observeActivity(enter: () -> Unit, exit: () -> Unit, ready: (() -> Unit)? = null): () -> Unit {
         val s = state("observe activity")
-        val entry = NodeActivity(enter, exit)
+        val entry = NodeActivity(enter, exit, ready)
         s.activity += entry
         val weak = WeakReference(s)
         return {
@@ -430,6 +434,10 @@ abstract class Node<N : Node<N>> protected constructor(
         return if (properties.containsKey(key)) properties[key] as T else default
     }
 
+    /** Compiler input getter ABI: raw constructor reads become tracked derived reads after installation. */
+    @JvmSynthetic
+    protected fun <T> compilerInputGet(key: String, default: T): T = InputRuntime.read(this, key, default)
+
     /**
      * Compiler storage ABI: initializes or updates a declaring-class-qualified slot in engine-owned state.
      * Values acquire no additional resource ownership or reactive behavior. Generated access uses the same
@@ -439,6 +447,19 @@ abstract class Node<N : Node<N>> protected constructor(
     @JvmSynthetic
     protected fun <T> compilerPropertySet(key: String, value: T) {
         propertyState(key, true).properties[key] = value
+    }
+
+    @JvmSynthetic
+    internal fun inputStoredValue(key: String, default: Any?): Any? {
+        val properties = propertyState(key, false).properties
+        return if (properties.containsKey(key)) properties[key] else default
+    }
+
+    @JvmSynthetic
+    internal fun installInputValue(key: String, value: Any) {
+        val properties = propertyState(key, true).properties
+        check(properties.containsKey(key)) { "Cannot install input without constructor storage: $key" }
+        properties[key] = value
     }
 
     /** Generic internal ownership boundary; facade delegates retain only immutable lookup metadata. */
@@ -471,6 +492,7 @@ abstract class Node<N : Node<N>> protected constructor(
     /**
      * Attaches a child, or keeps an already composed child of this parent. Other-parent attachment fails.
      * Initialization defers child entry until parent configuration finishes; runtime additions enter immediately.
+     * Unnamed children receive parent-local class-based names when attached.
      */
     fun addChild(child: Node<*>): Unit = NodeHierarchy.addChild(this, child)
 
@@ -572,7 +594,7 @@ abstract class Node<N : Node<N>> protected constructor(
         if (!queued) s.owner.queueFree(this)
     }
 
-    /** Moves an existing child. Same-tree moves preserve lifetimes and system registrations. */
+    /** Moves an existing child. Same-tree moves preserve lifetimes; unnamed children are renumbered for the new parent. */
     fun reparent(child: Node<*>, newParent: Node<*>): Unit = NodeHierarchy.reparent(this, child, newParent)
 
     /** Whether an actual immediate child has exactly [type], excluding subclasses. */
@@ -644,13 +666,17 @@ abstract class Node<N : Node<N>> protected constructor(
     /** Registers exclusive resource disposal on permanent destruction, not reusable detachment. */
     fun onDestroy(cleanup: () -> Unit): () -> Unit = register(cleanup, true)
 
-    /** One-time configuration hook. */
-    open fun nodeInit() {}
+    /**
+     * Configures this node once on its first tree entry, before [onEnterTree] and child entry.
+     * Runs before the constructor-provided configuration block and never repeats on reentry.
+     * Use [onEnterTree] for work that must run on every entry.
+     */
+    open fun onSetup() {}
 
     /** Custom entry hook; engine traversal is independent of this hook. */
     protected open fun onEnterTree() {}
 
-    /** Custom readiness hook, after children are ready. */
+    /** Custom readiness hook, after children are ready and receiver-owned inputs resynchronize. */
     protected open fun onReady() {}
 
     /** Custom exit hook; use [exitMetadata] when permanent destruction has invalidated gameplay access. */
@@ -730,7 +756,7 @@ abstract class Node<N : Node<N>> protected constructor(
             try {
                 nodeConstruction {
                     callback("initialize") {
-                        nodeInit()
+                        onSetup()
                         s.builder?.invoke()
                     }
                 }
@@ -763,6 +789,11 @@ abstract class Node<N : Node<N>> protected constructor(
         val generation = s.entryGeneration
         s.readyGeneration = generation
         for (child in s.snapshot()) if (child.isInsideTree) child.nodeReady()
+        if (!isInsideTree || s.entryGeneration != generation) return
+        for (entry in s.activity.toList()) {
+            if (!isInsideTree || s.entryGeneration != generation) return
+            entry.ready?.let { callback("activate ready source", it) }
+        }
         if (!isInsideTree || s.entryGeneration != generation) return
         callback("ready") {
             onReady()

@@ -423,7 +423,7 @@ class NodeLifetimeTests {
         val source = event()
         class Subscriber(source: io.canopy.engine.core.flows.events.NoArgEvent) : Node<Subscriber>("subscriber") {
             private val source by nodeProperty(source)
-            override fun nodeInit() {
+            override fun onSetup() {
                 this.source.connect {}
                 Context("scope") { provide("value") { 42 } }
             }

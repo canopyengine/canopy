@@ -88,15 +88,14 @@ class UiScope internal constructor(private val parent: Node<*>) {
         }
         val created = parent.withManagedChildrenMutation {
             parent.withChildConstruction {
-                val name = "Ui${identities++}"
                 when (kind) {
-                    UiKind.Text -> TextNode(name = name)
-                    UiKind.Button -> ButtonNode(name = name)
-                    UiKind.Row -> RowNode(name = name)
-                    UiKind.Column -> ColumnNode(name = name)
-                    UiKind.Box -> BoxNode(name = name)
-                    UiKind.FlowRow -> io.canopy.engine.ui.components.FlowRow(name = name)
-                    UiKind.Grid -> io.canopy.engine.ui.components.Grid(name = name)
+                    UiKind.Text -> TextNode()
+                    UiKind.Button -> ButtonNode()
+                    UiKind.Row -> RowNode()
+                    UiKind.Column -> ColumnNode()
+                    UiKind.Box -> BoxNode()
+                    UiKind.FlowRow -> io.canopy.engine.ui.components.FlowRow()
+                    UiKind.Grid -> io.canopy.engine.ui.components.Grid()
                 }
             }
         }
@@ -513,7 +512,7 @@ class UiScope internal constructor(private val parent: Node<*>) {
     }
     private fun region(): Entry {
         val region = parent.withManagedChildrenMutation {
-            parent.withChildConstruction { UiRegion("UiRegion${identities++}") }
+            parent.withChildConstruction { UiRegion() }
         }
         val scope = UiScope(region)
         region.content = scope
@@ -556,8 +555,5 @@ class UiScope internal constructor(private val parent: Node<*>) {
         retained.values.forEach { it.dispose() }
         retained.clear()
         requested.clear()
-    }
-    private companion object {
-        var identities = 0L
     }
 }

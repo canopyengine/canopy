@@ -15,6 +15,7 @@ internal class CompilerPipeline(private val messages: DiagnosticMessages, privat
     override fun generate(moduleFragment: IrModuleFragment, pluginContext: IrPluginContext) {
         messages.collect {
             validate(ValidationPhase.Source, moduleFragment, pluginContext)
+            NodeInputDeclarationTransform(messages).generate(moduleFragment, pluginContext)
             val beforeStorage = messages.errorCount
             NodePropertyTransform(messages).generate(moduleFragment, pluginContext)
             // Stored-state facts require the runtime storage ABI; avoid cascading field diagnostics if it is absent.
@@ -26,6 +27,7 @@ internal class CompilerPipeline(private val messages: DiagnosticMessages, privat
                 AppLaunchTransform(messages),
                 NodeOwnershipTransform(messages),
                 UiExpressionTransform(messages),
+                NodeInputCallTransform(messages),
                 NodeConstructionTransform(messages)
             )) {
                 stage.generate(moduleFragment, pluginContext)

@@ -21,13 +21,16 @@ the compiler-specific capability when resolving the compiler dependency.
 
 One compilation-local pipeline runs these ordered stages before JVM bytecode generation:
 
-1. **Source validation:** diagnose accidental non-delegated observable/reference properties and unsupported storage.
-2. **Node storage:** supported instance properties become guarded NodeState slots.
+1. **Source validation:** diagnose accidental non-delegated observable/reference properties, unsupported storage and
+   invalid constructor inputs.
+2. **Node storage:** supported instance properties become guarded NodeState slots; input getters read derived values.
 3. **Stored-state validation:** mandatory NodeState checks and providers inspect immutable declaration facts.
 4. **Ownership:** infer the listening/creating Node for implicit Canopy operations.
 5. **UI expression capture:** supported declarative expressions become reevaluable
    bindings and structural regions.
-6. **Construction protection:** supported Node constructor calls receive synchronous
+6. **Input capture:** annotated constructor arguments retain their caller expressions and install receiver-owned
+   derived values after successful construction.
+7. **Construction protection:** supported Node constructor calls receive synchronous
    rollback boundaries.
 
 The plugin generates calls to runtime helpers; it does not implement the engine loop
@@ -50,6 +53,58 @@ structural forms produce source diagnostics. Without the plugin, use the runtime
 explicit binding/structural APIs where appropriate. Refer to the
 [shared UI guide](https://github.com/canopyengine/canopy-docs/blob/main/markdown/manuals/concepts/app/declarative-ui.md)
 for supported syntax and extension contracts.
+
+## Constructor inputs
+
+`@Input` marks a read-only primary-constructor property on a supported Node. The caller uses ordinary constructor
+syntax for both static and reactive expressions:
+
+```kotlin
+import io.canopy.engine.core.flows.events.Input
+
+class HealthBar(@Input val progress: Float = 1f) : Node<HealthBar>("HealthBar")
+
+HealthBar(0.5f)
+HealthBar(player.healthPercentage)
+```
+
+The matching compiler captures each explicit input expression at the call site, evaluates it once for construction,
+then installs it in the receiving Node's guarded storage. Inputs use the existing computed dependency tracker rather
+than a separate UI binding graph. They track multiple and conditional signal reads, suppress equal derived results,
+and follow the receiving Node's lifetime. `connect` retains its change-only, no-initial-callback contract. The
+constructor property stays a Kotlin `val`; changes flow only from the source to the input.
+Input expressions may run again after source changes or a receiver's reentry, so keep them synchronous and free of
+unrelated side effects. An unchanged non-collection result does not notify value-change consumers; observable
+collection identity switches and in-place edits still notify.
+Receiver exit suspends observation; reentry resynchronizes it. Capturing an already exited source fails. If a source
+exits later while its receiver stays active, existing downstream listeners disconnect; input reads fail while the
+source is unavailable and a read after source recovery can rearm tracking. Recreate disconnected listeners.
+Never-entered sources allow construction snapshots, but off-tree writes do not publish until source entry.
+Receiver reentry resynchronizes inputs before `onReady`, after sibling sources enter; reading an input in an earlier
+`onEnterTree` may fail when its source is a later sibling still outside the tree.
+`untrack` suppresses dependency registration, not inactive-source validation inside a derived expression.
+All reactive operations require the same serialized game-thread access as signals and computed values.
+
+Literal omitted defaults and literal superclass delegation remain static. Nonliteral defaults, dynamic superclass
+delegation, secondary constructors on input owners, `@Input var`,
+non-property parameters and unsupported storage produce diagnostics rather than silently losing capture. Apply the
+compiler plugin to both the declaring module and every Kotlin consuming module; a declaration compiled without the
+plugin cannot provide the required input getter. Java, reflection and Kotlin call sites without the plugin do not
+capture expressions and are not supported for reactive construction. In particular, a Kotlin consumer built without
+the plugin can still invoke the ordinary constructor, but that input remains static; the absent plugin cannot emit a
+diagnostic. Application startup already requires the compiler plugin in its launching module; still apply it to every
+Kotlin library module that constructs reactive inputs. Synchronous input expressions cannot contain suspending calls or
+returns during immediate evaluation, including returns inside inline lambdas; evaluate those results before construction.
+
+Omitted literal defaults and literal superclass arguments have no installed derived source. They retain their static
+value, but `connect` on such a property reports that no reactive dependencies were discovered. Explicit static
+arguments are compiler-captured and keep a connectable read-only derived source.
+
+Direct `Text("Fish: $fishCount")` and `Button("Add fish: $fishCount")` use a read-only `label` input while retaining the
+legacy mutable `text` property. A manual `.text = ...` assignment overrides subsequent input display updates. Named
+constructor arguments must use `label =` instead of the former `text =`; the declarative `UiScope.Text` and
+`UiScope.Button` APIs retain their existing behavior. This is a source-compatibility change for named direct
+constructors. The companion Canopy class reference and manual still need matching updates in `canopy-docs`.
 
 ## Diagnostic presentation
 

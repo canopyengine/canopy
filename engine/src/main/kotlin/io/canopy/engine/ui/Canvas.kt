@@ -5,12 +5,13 @@ package io.canopy.engine.ui
  * [CanvasSize.Viewport] follows host geometry; fixed sizes use host logical units without scaling.
  * Nested canvases are local layout areas, not independently mounted overlays. Input passes through unless
  * an eligible control consumes it. Configuration runs once before retained [content] and tree entry.
+ * @param name Optional explicit name; otherwise the concrete class and its sibling count determine the name.
  */
 open class Canvas<N : Canvas<N>>(
     size: CanvasSize = CanvasSize.Viewport,
     anchor: Anchor = Anchor.TopLeft,
     order: Int = 0,
-    name: String = "Canvas",
+    name: String? = null,
     block: N.() -> Unit = {},
     content: UiScope.() -> Unit = {},
 ) : UiRoot<N>(name, block = {

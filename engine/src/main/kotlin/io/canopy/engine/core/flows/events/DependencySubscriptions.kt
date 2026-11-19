@@ -12,26 +12,40 @@ internal class DependencySubscriptions {
     fun reconcile(next: Set<Signal<*>>, onChange: () -> Unit, onDisconnect: (() -> Unit)?) {
         val added = next - dependencies
         val removed = dependencies - next
+        val pending = mutableMapOf<Signal<*>, EventDisconnectHandler>()
+        try {
+            for (dependency in added) {
+                val handle = NodeLifetime.withOwner(null) { dependency.connect { _ -> onChange() } }
+                pending[dependency] = handle
+                if (onDisconnect != null) {
+                    handle.onDisconnected = {
+                        if (handlers[dependency] === handle) {
+                            handlers.remove(dependency)
+                            dependencies = dependencies - dependency
+                            onDisconnect()
+                        }
+                    }
+                }
+            }
+        } catch (failure: Throwable) {
+            pending.values.forEach { handle ->
+                handle.onDisconnected = null
+                try {
+                    handle.disconnect()
+                } catch (cleanup: Throwable) {
+                    if (cleanup !== failure) failure.addSuppressed(cleanup)
+                }
+            }
+            throw failure
+        }
         for (dependency in removed) {
             handlers.remove(dependency)?.let { handle ->
                 handle.onDisconnected = null
                 handle.disconnect()
             }
         }
-        for (dependency in added) {
-            val handle = NodeLifetime.withOwner(null) { dependency.connect { _ -> onChange() } }
-            handlers[dependency] = handle
-            if (onDisconnect != null) {
-                handle.onDisconnected = {
-                    if (handlers[dependency] === handle) {
-                        handlers.remove(dependency)
-                        dependencies = dependencies - dependency
-                        onDisconnect()
-                    }
-                }
-            }
-        }
-        dependencies = next
+        handlers.putAll(pending)
+        dependencies = next.toSet()
     }
 
     fun clear() {

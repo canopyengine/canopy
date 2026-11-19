@@ -9,9 +9,12 @@ import ktx.box2d.body
 import ktx.log.logger
 import ktx.math.minus
 
-/** Node backed by an injected Box2D world. Its transform is read from the body; direct assignment is rejected. */
+/**
+ * Node backed by an injected Box2D world. Its transform is read from the body; direct assignment is rejected.
+ * @param name Optional explicit name; otherwise the concrete class and its sibling count determine the name.
+ */
 abstract class PhysicsBody2D<T : PhysicsBody2D<T>>(
-    name: String,
+    name: String? = null,
     // Specific props
     val bodyType: BodyDef.BodyType,
     // DSL

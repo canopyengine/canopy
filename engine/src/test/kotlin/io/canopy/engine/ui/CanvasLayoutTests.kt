@@ -223,7 +223,7 @@ class CanvasLayoutTests {
                 invalidateMeasurement()
             }
         override fun measure(backend: UiBackend, available: UiSize) = UiSize(contentWidth, 1.0)
-        override fun nodeInit() {
+        override fun onSetup() {
             ui { Text("x") }
         }
     }

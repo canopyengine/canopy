@@ -19,10 +19,10 @@ class NodeCompositionTests {
         }
     }
     private class Parent(private val trace: MutableList<String>) : Node<Parent>("parent") {
-        override fun nodeInit() {
-            trace += "init:start"
+        override fun onSetup() {
+            trace += "setup:start"
             addChild(Child("initial", trace))
-            trace += "init:end"
+            trace += "setup:end"
         }
         override fun onEnterTree() {
             trace += "enter:parent"
@@ -58,8 +58,8 @@ class NodeCompositionTests {
         // Assert
         assertEquals(
             listOf(
-                "init:start",
-                "init:end",
+                "setup:start",
+                "setup:end",
                 "enter:parent",
                 "enter:entered",
                 "ready:entered",

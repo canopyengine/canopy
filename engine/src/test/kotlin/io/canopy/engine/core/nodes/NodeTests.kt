@@ -212,7 +212,7 @@ class NodeTests {
         // Verifies create() can define internal structure.
         class CustomScene(name: String = "custom", block: CustomScene.() -> Unit = {}) :
             Node<CustomScene>(name, block = block) {
-            override fun nodeInit() {
+            override fun onSetup() {
                 EmptyNode("empty")
             }
         }
@@ -232,7 +232,7 @@ class NodeTests {
         // Verifies patch() can locate and mutate internally created nodes by path.
         class CustomScene(name: String = "custom", block: CustomScene.() -> Unit = {}) :
             Node<CustomScene>(name, block = block) {
-            override fun nodeInit() {
+            override fun onSetup() {
                 EmptyNode2D("empty")
             }
         }
@@ -295,7 +295,7 @@ class NodeTests {
         class CustomScene(name: String, onCalled: () -> Unit, block: CustomScene.() -> Unit = {}) :
             Node<CustomScene>(name, block = block) {
             private val onCalled by nodeProperty(onCalled)
-            override fun nodeInit() {
+            override fun onSetup() {
                 behavior(onReady = { onCalled() })
             }
         }

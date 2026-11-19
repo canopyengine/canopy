@@ -12,10 +12,11 @@ import io.canopy.engine.graphics.managers.CameraManager
 /**
  * Extensible orthographic camera node with optional target following, smoothing, zoom, and position limits.
  * @param N Concrete node type exposed to its initialization block.
- * @param block Runs once after nodeInit, before entry callbacks; not replayed on reentry.
+ * @param name Optional explicit name; otherwise the concrete class and its sibling count determine the name.
+ * @param block Runs once after onSetup, before entry callbacks; not replayed on reentry.
  */
 open class Camera2D<N : Camera2D<N>>(
-    name: String = "Camera2D",
+    name: String? = null,
     // Specific props
     active: Boolean = true,
     private var targetRef: NodeRef<*>? = null,

@@ -9,10 +9,11 @@ import io.canopy.platforms.desktop.graphics.systems.AnimationSystem
 /**
  * Extensible node that tracks animation playback position and emits change and completion events.
  * @param N Concrete node type exposed to its initialization block.
- * @param block Runs once after nodeInit, before entry callbacks; not replayed on reentry.
+ * @param name Optional explicit name; otherwise the concrete class and its sibling count determine the name.
+ * @param block Runs once after onSetup, before entry callbacks; not replayed on reentry.
  */
 @UnstableApi
-open class AnimationPlayer<N : AnimationPlayer<N>>(name: String, block: N.() -> Unit = {}) :
+open class AnimationPlayer<N : AnimationPlayer<N>>(name: String? = null, block: N.() -> Unit = {}) :
     Node<N>(
         name,
         block

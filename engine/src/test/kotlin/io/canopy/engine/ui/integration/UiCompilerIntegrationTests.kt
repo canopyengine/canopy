@@ -2,7 +2,9 @@ package io.canopy.engine.ui.integration
 
 import kotlin.test.*
 import io.canopy.engine.core.flows.events.Signal
+import io.canopy.engine.core.flows.events.computed
 import io.canopy.engine.core.flows.events.signal
+import io.canopy.engine.core.flows.events.untrack
 import io.canopy.engine.core.managers.ManagersRegistry
 import io.canopy.engine.core.managers.SceneManager
 import io.canopy.engine.core.nodes.Node
@@ -12,6 +14,7 @@ import io.canopy.engine.input.InputFocus
 import io.canopy.engine.ui.*
 import io.canopy.engine.ui.Canvas as SceneCanvas
 import io.canopy.engine.ui.components.Button
+import io.canopy.engine.ui.components.Text as TextNode
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.BeforeEach
 
@@ -179,7 +182,7 @@ class UiCompilerIntegrationTests {
         init {
             created()
         }
-        override fun nodeInit() {
+        override fun onSetup() {
             ui {
                 Column {
                     Text("Count: $count")
@@ -187,6 +190,36 @@ class UiCompilerIntegrationTests {
                     MapMarker()
                 }
             }
+        }
+    }
+
+    private class DirectLabels : Node<DirectLabels>("DirectLabels") {
+        var count by signal(1)
+        var labelNode: TextNode<*>? = null
+        var buttonNode: Button<*>? = null
+
+        override fun onSetup() {
+            labelNode = TextNode("Fish: $count", name = "fish")
+            buttonNode = Button("Add: $count", name = "add", onClick = { count += 1 })
+        }
+    }
+
+    private class Fish(name: String) : Node<Fish>(name)
+
+    private class AquariumScene : Node<AquariumScene>("Aquarium") {
+        var countEvaluations = 0
+        val fishCount by computed {
+            untrack { countEvaluations++ }
+            getChildrenOfType<Fish>().size
+        }
+        var countLabel: TextNode<*>? = null
+        var addFishButton: Button<*>? = null
+
+        override fun onSetup() {
+            countLabel = TextNode("Fish: $fishCount", name = "count")
+            addFishButton = Button("Add fish", name = "add", onClick = {
+                addChild(Fish("fish-${fishCount + 1}"))
+            })
         }
     }
 
@@ -201,7 +234,7 @@ class UiCompilerIntegrationTests {
             "Canvas",
             UiStyle(width = UiLength.Fixed(4.0), height = UiLength.Fixed(3.0), padding = 1.0)
         ) {
-        override fun nodeInit() {
+        override fun onSetup() {
             ui { Text("overlay") }
         }
         override fun onDraw(context: DrawContext) {
@@ -234,7 +267,7 @@ class UiCompilerIntegrationTests {
         private val shown: Signal<Boolean>,
         private val observed: MutableList<Int>,
     ) : UiNode<WatchingPanel>("WatchingPanel") {
-        override fun nodeInit() {
+        override fun onSetup() {
             ui {
                 if (shown()) {
                     io.canopy.engine.ui.components.Text("Watching") {
@@ -272,6 +305,122 @@ class UiCompilerIntegrationTests {
     private lateinit var scenes: SceneManager
     private lateinit var ui: UiManager
     private lateinit var backend: RecordingBackend
+
+    @Test
+    fun `direct UI constructor labels react without replacing nodes and mutable text can override them`() {
+        val scene = DirectLabels()
+        scenes.currScene = scene
+        val label = scene.labelNode!!
+        val button = scene.buttonNode!!
+        assertEquals("Fish: 1", label.label)
+        assertEquals("Add: 1", button.label)
+        ui.updateFrame()
+        assertEquals(listOf("Fish: 1", "Add: 1"), backend.draws.map { it.text })
+
+        scene.count = 2
+        ui.updateFrame()
+        assertSame(label, scene.labelNode)
+        assertSame(button, scene.buttonNode)
+        assertEquals("Fish: 2", label.label)
+        assertEquals("Add: 2", button.label)
+        assertEquals(listOf("Fish: 2", "Add: 2"), backend.draws.map { it.text })
+
+        button.activate()
+        ui.updateFrame()
+        assertEquals(3, scene.count)
+        assertEquals(listOf("Fish: 3", "Add: 3"), backend.draws.map { it.text })
+
+        label.text = "Manual fish"
+        button.text = "Manual add"
+        scene.count = 4
+        ui.updateFrame()
+        assertEquals("Fish: 4", label.label)
+        assertEquals("Add: 4", button.label)
+        assertEquals(listOf("Manual fish", "Manual add"), backend.draws.map { it.text })
+    }
+
+    @Test
+    fun `aquarium computed child count updates direct text after button adds fish without replacing the label`() {
+        val scene = AquariumScene()
+        scenes.currScene = scene
+        val label = scene.countLabel!!
+        val button = scene.addFishButton!!
+        ui.updateFrame()
+        assertEquals(0, scene.fishCount)
+        assertEquals(listOf("Fish: 0", "Add fish"), backend.draws.map { it.text })
+
+        button.activate()
+        ui.updateFrame()
+        assertEquals(1, scene.fishCount)
+        assertSame(label, scene.countLabel)
+        assertEquals("Fish: 1", label.text)
+        assertEquals(listOf("Fish: 1", "Add fish"), backend.draws.map { it.text })
+        val firstFish = scene.getChildrenOfType<Fish>().single()
+
+        button.activate()
+        ui.updateFrame()
+        assertEquals(2, scene.fishCount)
+        assertSame(label, scene.countLabel)
+        assertEquals("Fish: 2", backend.draws.first().text)
+        val secondFish = scene.getChildrenOfType<Fish>().last()
+
+        scene.removeChild(firstFish)
+        ui.updateFrame()
+        assertEquals(1, scene.fishCount)
+        assertSame(label, scene.countLabel)
+        assertEquals("Fish: 1", backend.draws.first().text)
+
+        scene.addChild(firstFish)
+        val shelter = Group {}
+        scene.addChild(shelter)
+        scene.reparent(firstFish, shelter)
+        ui.updateFrame()
+        assertEquals(1, scene.fishCount)
+        assertEquals("Fish: 1", backend.draws.first().text)
+
+        shelter.reparent(firstFish, scene)
+        ui.updateFrame()
+        assertEquals(2, scene.fishCount)
+        assertEquals("Fish: 2", backend.draws.first().text)
+
+        secondFish.queueFree()
+        scenes.onUpdate(0f)
+        ui.updateFrame()
+        assertTrue(secondFish.isFreed)
+        assertEquals(1, scene.fishCount)
+        assertSame(label, scene.countLabel)
+        assertEquals("Fish: 1", backend.draws.first().text)
+    }
+
+    @Test
+    fun `aquarium direct input resumes after scene reentry without duplicate hierarchy subscriptions`() {
+        val scene = AquariumScene()
+        scenes.currScene = scene
+        val label = scene.countLabel!!
+        val button = scene.addFishButton!!
+        ui.updateFrame()
+
+        scene.nodeExitTree()
+        scene.addChild(Fish("offline"))
+        scene.buildTree()
+        ui.updateFrame()
+        assertSame(label, scene.countLabel)
+        assertSame(button, scene.addFishButton)
+        assertEquals(1, scene.fishCount)
+        assertEquals("Fish: 1", backend.draws.first().text)
+
+        scene.nodeExitTree()
+        scene.buildTree()
+        ui.updateFrame()
+        val evaluationsBeforeAdd = scene.countEvaluations
+        button.activate()
+        ui.updateFrame()
+        assertSame(label, scene.countLabel)
+        assertSame(button, scene.addFishButton)
+        assertEquals(2, scene.fishCount)
+        assertEquals(evaluationsBeforeAdd + 1, scene.countEvaluations)
+        assertEquals("Fish: 2", backend.draws.first().text)
+    }
 
     @BeforeEach
     fun setup() {

@@ -21,7 +21,7 @@ class TerminalHostLifecycleTests {
     class Game : Node<Game>("Game") {
         var button: Button<*>? = null
         var fish by signal(1)
-        override fun nodeInit() {
+        override fun onSetup() {
             UiRoot {
                 Column {
                     Text("Fish: $fish")

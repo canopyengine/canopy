@@ -1,5 +1,6 @@
 package io.canopy.engine.ui.components
 
+import io.canopy.engine.core.flows.events.Input
 import io.canopy.engine.core.flows.events.untrack
 import io.canopy.engine.core.managers.getManager
 import io.canopy.engine.core.nodes.NodeLifetime
@@ -18,11 +19,15 @@ import io.canopy.engine.ui.UiStyle
 /**
  * Extensible focusable action. Its label and eligibility may change without replacing its identity.
  * @param N Concrete node type exposed to its initialization block.
- * @param block Runs once after nodeInit, before entry callbacks; not replayed on reentry.
+ * @param name Optional explicit name; otherwise the concrete class and its sibling count determine the name.
+ * @param label Read-only constructor input; reactive expressions update the label without replacing this node.
+ * The named constructor argument is `label` rather than the former `text`.
+ * Subclasses may delegate literal or omitted labels to this constructor, but dynamic superclass labels are unsupported.
+ * @param block Runs once after onSetup, before entry callbacks; not replayed on reentry.
  */
 open class Button<N : Button<N>>(
-    text: String = "",
-    name: String = "Button",
+    @Input val label: String = "",
+    name: String? = null,
     place: Place = Place.Auto,
     size: Size = Size.Content,
     block: N.() -> Unit = {},
@@ -35,14 +40,14 @@ open class Button<N : Button<N>>(
     internal override val contentText: String get() = text
     internal override val actionEnabled: Boolean get() = enabled
     override val role: String get() = "button"
-    private var storedText by nodeProperty(text)
+    private var textOverride by nodeProperty<String?>(null)
 
-    /** Current action label. */
+    /** Displayed action label; assignment overrides future [label] updates while retaining the mutable legacy API. */
     var text: String
-        get() = storedText
+        get() = textOverride ?: label
         set(value) {
-            if (storedText != value) {
-                storedText = value
+            if (textOverride != value) {
+                textOverride = value
             }
         }
 

@@ -1,9 +1,20 @@
 package io.canopy.engine.core.flows.events
 
+internal interface ObservableCollectionVersion {
+    val mutationRevision: Long
+}
+
 /** Standard mutable interfaces backed by owned copies. Read and mutation hooks never retain the source. */
 internal class ObservableList<E>(source: Collection<E>, private val read: () -> Unit, private val changed: () -> Unit) :
-    AbstractMutableList<E>() {
+    AbstractMutableList<E>(),
+    ObservableCollectionVersion {
     private val items = ArrayList(source)
+    override var mutationRevision = 0L
+        private set
+    private fun notifyMutation() {
+        mutationRevision++
+        changed()
+    }
     override val size: Int get() {
         read()
         return items.size
@@ -15,17 +26,17 @@ internal class ObservableList<E>(source: Collection<E>, private val read: () -> 
     override fun add(index: Int, element: E) {
         items.add(index, element)
         modCount++
-        changed()
+        notifyMutation()
     }
     override fun removeAt(index: Int): E {
         val old = items.removeAt(index)
         modCount++
-        changed()
+        notifyMutation()
         return old
     }
     override fun set(index: Int, element: E): E {
         val old = items.set(index, element)
-        if (old != element) changed()
+        if (old != element) notifyMutation()
         return old
     }
     override fun addAll(elements: Collection<E>): Boolean = addAll(items.size, elements)
@@ -33,25 +44,32 @@ internal class ObservableList<E>(source: Collection<E>, private val read: () -> 
         if (fromIndex == toIndex) return
         items.subList(fromIndex, toIndex).clear()
         modCount++
-        changed()
+        notifyMutation()
     }
     override fun addAll(index: Int, elements: Collection<E>): Boolean {
         if (!items.addAll(index, elements.toList())) return false
         modCount++
-        changed()
+        notifyMutation()
         return true
     }
     override fun clear() {
         if (items.isEmpty()) return
         items.clear()
         modCount++
-        changed()
+        notifyMutation()
     }
 }
 
 internal class ObservableSet<E>(source: Collection<E>, private val read: () -> Unit, private val changed: () -> Unit) :
-    AbstractMutableSet<E>() {
+    AbstractMutableSet<E>(),
+    ObservableCollectionVersion {
     private val items = LinkedHashSet(source)
+    override var mutationRevision = 0L
+        private set
+    private fun notifyMutation() {
+        mutationRevision++
+        changed()
+    }
     override val size: Int get() {
         read()
         return items.size
@@ -60,12 +78,12 @@ internal class ObservableSet<E>(source: Collection<E>, private val read: () -> U
         read()
         return items.contains(element)
     }
-    override fun add(element: E): Boolean = items.add(element).also { if (it) changed() }
-    override fun remove(element: E): Boolean = items.remove(element).also { if (it) changed() }
+    override fun add(element: E): Boolean = items.add(element).also { if (it) notifyMutation() }
+    override fun remove(element: E): Boolean = items.remove(element).also { if (it) notifyMutation() }
     override fun clear() {
         if (items.isEmpty()) return
         items.clear()
-        changed()
+        notifyMutation()
     }
     override fun iterator(): MutableIterator<E> {
         read()
@@ -81,25 +99,32 @@ internal class ObservableSet<E>(source: Collection<E>, private val read: () -> U
             }
             override fun remove() {
                 iterator.remove()
-                changed()
+                notifyMutation()
             }
         }
     }
 }
 
 internal class ObservableMap<K, V>(source: Map<K, V>, private val read: () -> Unit, private val changed: () -> Unit) :
-    AbstractMutableMap<K, V>() {
+    AbstractMutableMap<K, V>(),
+    ObservableCollectionVersion {
     private val items = LinkedHashMap(source)
+    override var mutationRevision = 0L
+        private set
+    private fun notifyMutation() {
+        mutationRevision++
+        changed()
+    }
     override fun put(key: K, value: V): V? {
         val present = items.containsKey(key)
         val old = items.put(key, value)
-        if (!present || old != value) changed()
+        if (!present || old != value) notifyMutation()
         return old
     }
     override fun clear() {
         if (items.isEmpty()) return
         items.clear()
-        changed()
+        notifyMutation()
     }
     override val entries: MutableSet<MutableMap.MutableEntry<K, V>> =
         object : AbstractMutableSet<MutableMap.MutableEntry<K, V>>() {
@@ -119,7 +144,7 @@ internal class ObservableMap<K, V>(source: Map<K, V>, private val read: () -> Un
                     }
                     override fun remove() {
                         iterator.remove()
-                        changed()
+                        notifyMutation()
                     }
                     override fun next(): MutableMap.MutableEntry<K, V> {
                         read()
@@ -135,7 +160,7 @@ internal class ObservableMap<K, V>(source: Map<K, V>, private val read: () -> Un
                             }
                             override fun setValue(newValue: V): V {
                                 val old = entry.setValue(newValue)
-                                if (old != newValue) changed()
+                                if (old != newValue) notifyMutation()
                                 return old
                             }
                             override fun equals(other: Any?): Boolean =

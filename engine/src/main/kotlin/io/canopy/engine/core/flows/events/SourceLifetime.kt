@@ -18,7 +18,7 @@ internal class SourceLifetime(owner: Node<*>?) {
     init {
         owner?.requireValid("create reactive source")
     }
-    fun bind(dispose: () -> Unit, suspend: () -> Unit = {}, resume: () -> Unit = {}) {
+    fun bind(dispose: () -> Unit, suspend: () -> Unit = {}, resume: () -> Unit = {}, ready: (() -> Unit)? = null) {
         cancel = owner?.get()?.onDestroy(dispose)
         var needsResume = !active
         cancelActivity = owner?.get()?.observeActivity({
@@ -29,7 +29,7 @@ internal class SourceLifetime(owner: Node<*>?) {
         }, {
             needsResume = true
             suspend()
-        })
+        }, ready)
     }
     fun check(operation: String) {
         owner?.get()?.requireValid(operation)

@@ -9,6 +9,22 @@ import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.asSharedFlow
 
+private object ScalarDispatch {
+    private const val MAX_DEPTH = 64
+    private val depth = ThreadLocal.withInitial { 0 }
+
+    fun <T> guard(block: () -> T): T {
+        val currentDepth = depth.get()
+        check(currentDepth < MAX_DEPTH) { "Scalar signal update cycle exceeded $MAX_DEPTH nested updates" }
+        depth.set(currentDepth + 1)
+        return try {
+            block()
+        } finally {
+            depth.set(currentDepth)
+        }
+    }
+}
+
 /**
  * A reactive value container that notifies observers when it changes.
  *
@@ -43,11 +59,14 @@ import kotlinx.coroutines.flow.asSharedFlow
  * 2) Flow style via [flow] — Kotlin MutableSharedFlow with replay = 1.
  *
  * ## Emission semantics
- * - Assignments only emit when `old != new`; standard mutable collection edits also emit.
+ * - Scalar assignments emit only when `old != new`; standard mutable collection edits also emit.
+ * - Derived sources emit when their returned observable collection changes identity or is edited in place.
  * - Collection factories own a shallow copy. Element fields need their own reactive state.
  * - Collection Flow values are live views, not immutable snapshots of each edit.
  * - The event listeners are notified immediately.
  * - Flow emission is non-blocking; slow collectors may skip intermediate values.
+ * - Scalar update chains stop after 64 nested updates to prevent recursive listener cycles.
+ * - Nonconvergent collection edits during publication stop after 1024 publications.
  *
  * ## Threading
  *
@@ -94,10 +113,15 @@ class Signal<T> internal constructor(
     }
 
     private var generation = 0L
+    internal var revision = 0L
+        private set
+    internal val canObserve: Boolean get() = !lifetime.disposed && lifetime.canObserve
     private var publishing = false
     private var collectionPending = false
+    internal val hasPendingCollectionPublication: Boolean get() = adapt != null && publishing && collectionPending
 
     @Volatile private var value: Any? = prepare(initial)
+    private var publishedCollectionRevision: Long? = null
 
     private fun prepare(next: T): T {
         val factory = adapt ?: return next
@@ -120,6 +144,7 @@ class Signal<T> internal constructor(
 
     private fun collectionChanged() {
         lifetime.check("mutate signal collection")
+        revision++
         if (!lifetime.active) {
             flowReplay = value
             return
@@ -128,10 +153,15 @@ class Signal<T> internal constructor(
         if (publishing) return
         publishing = true
         try {
+            var publications = 0
             while (collectionPending) {
+                check(++publications <= 1024) { "Collection signal did not converge after 1024 publications" }
                 collectionPending = false
                 publish()
             }
+        } catch (failure: Throwable) {
+            collectionPending = false
+            throw failure
         } finally {
             publishing = false
         }
@@ -151,6 +181,7 @@ class Signal<T> internal constructor(
 
     init {
         flowReplay = value
+        publishedCollectionRevision = (value as? ObservableCollectionVersion)?.mutationRevision
         lifetime.bind(::dispose, ::suspendObservation, ::resumeObservation)
     }
 
@@ -165,6 +196,7 @@ class Signal<T> internal constructor(
     operator fun setValue(thisRef: Any?, property: KProperty<*>, value: T) = update { value }
 
     private fun resumeObservation() {
+        revision++
         @Suppress("UNCHECKED_CAST")
         val current = value as T
         valueChanged.emit(current)
@@ -175,6 +207,7 @@ class Signal<T> internal constructor(
     }
 
     private fun suspendObservation() {
+        revision++
         valueChanged.clear()
         synchronized(flowLock) {
             changes?.resetReplayCache()
@@ -192,6 +225,9 @@ class Signal<T> internal constructor(
      */
     operator fun invoke(): T {
         lifetime.check("read signal")
+        check(!TrackingContext.isCapturingInput || lifetime.canObserve) {
+            "Cannot capture an inactive reactive source"
+        }
         if (lifetime.canObserve) TrackingContext.register(this)
         @Suppress("UNCHECKED_CAST")
         return value as T
@@ -209,17 +245,41 @@ class Signal<T> internal constructor(
      */
     fun update(handler: (T) -> T) {
         lifetime.check("update signal")
+        if (adapt == null) ScalarDispatch.guard { updateValue(handler) } else updateValue(handler)
+    }
+
+    private fun updateValue(handler: (T) -> T) {
         @Suppress("UNCHECKED_CAST")
         val new = handler(value as T)
         lifetime.check("update signal")
         val old = value
-        if (untrack { old != new }) {
+        val collectionIdentityChanged = adapt == null &&
+            old !== new &&
+            (old is ObservableCollectionVersion || new is ObservableCollectionVersion)
+        val changed = collectionIdentityChanged || untrack { old != new }
+        val collectionRevision = if (adapt == null && old === new) {
+            (old as? ObservableCollectionVersion)?.mutationRevision
+        } else {
+            null
+        }
+        val collectionMutation = collectionRevision != null && collectionRevision != publishedCollectionRevision
+        if (changed) {
             value = prepare(new)
+            publishedCollectionRevision = (value as? ObservableCollectionVersion)?.mutationRevision
+            revision++
             if (!lifetime.active) {
                 flowReplay = value
                 return
             }
             if (adapt == null) publish() else collectionChanged()
+        } else if (collectionMutation) {
+            publishedCollectionRevision = collectionRevision
+            revision++
+            if (!lifetime.active) {
+                flowReplay = value
+                return
+            }
+            publish()
         }
     }
 
@@ -243,12 +303,14 @@ class Signal<T> internal constructor(
     /** Removes all listeners registered via [connect]. */
     fun clear() {
         lifetime.check("clear signal")
+        revision++
         valueChanged.clear()
     }
 
     /** Permanently releases listeners, cached value and replay contents. Shared signals require explicit disposal. */
     fun dispose() = synchronized(flowLock) {
         if (!lifetime.dispose()) return@synchronized
+        revision++
         valueChanged.dispose()
         value = null
         flowReplay = null

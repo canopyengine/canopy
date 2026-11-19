@@ -77,6 +77,23 @@ class UiRuntimeTests {
     }
 
     @Test
+    fun `declarative UI names are based on each physical parent`() {
+        val root = UiRoot(content = {
+            Column {
+                Text("first")
+                Text("second")
+            }
+            Column { Text("third") }
+        })
+
+        scenes.currScene = root
+
+        assertEquals(listOf("Column", "Column1"), root.children.keys.toList())
+        assertEquals(listOf("Text", "Text1"), root.children.getValue("Column").children.keys.toList())
+        assertEquals(listOf("Text"), root.children.getValue("Column1").children.keys.toList())
+    }
+
+    @Test
     fun `UI nodes beneath an ordinary scene node use viewport layout without an explicit root`() {
         lateinit var label: TextNode<*>
         lateinit var box: BoxNode<*>
@@ -928,6 +945,108 @@ class UiRuntimeTests {
             assertEquals(removals, text.state("test cleanup registrations").removal.size)
             assertEquals(destructions, text.state("test cleanup registrations").destruction.size)
         }
+    }
+
+    @Test
+    fun `UI binding reconnects when its source reenters before the next frame`() {
+        val sourceOwner = EmptyNode("source")
+        val source = signal(owner = sourceOwner, value = 1)
+        lateinit var label: TextNode<*>
+        val root = UiRoot { label = bindText("value") { "Value: ${source()}" } }
+        val world = EmptyNode("world")
+        world.addChild(sourceOwner)
+        world.addChild(root)
+        scenes.currScene = world
+        ui.updateFrame()
+        assertEquals("Value: 1", label.text)
+
+        sourceOwner.nodeExitTree()
+        source.update { 2 }
+        sourceOwner.buildTree()
+        ui.updateFrame()
+        assertEquals("Value: 2", label.text)
+        assertEquals("Value: 2", backend.draws.single().text)
+
+        source.update { 3 }
+        ui.updateFrame()
+        assertEquals("Value: 3", label.text)
+        world.nodeExitTree()
+        ui.updateFrame()
+        world.buildTree()
+        source.update { 4 }
+        ui.updateFrame()
+        assertEquals("Value: 4", label.text)
+    }
+
+    @Test
+    fun `UI binding reports an unavailable source once and disposes instead of presenting silent stale updates`() {
+        val sourceOwner = EmptyNode("source")
+        val source = signal(owner = sourceOwner, value = 1)
+        lateinit var label: TextNode<*>
+        val root = UiRoot { label = bindText("value") { "Value: ${source()}" } }
+        val world = EmptyNode("world")
+        world.addChild(sourceOwner)
+        world.addChild(root)
+        scenes.currScene = world
+        ui.updateFrame()
+
+        sourceOwner.nodeExitTree()
+        val failure = assertFailsWith<IllegalStateException> { ui.updateFrame() }
+        assertContains(failure.message.orEmpty(), "UI reactive dependency")
+        sourceOwner.buildTree()
+        source.update { 2 }
+        ui.updateFrame()
+        assertEquals("Value: 1", label.text)
+    }
+
+    @Test
+    fun `UI binding switches away from an exited conditional source`() {
+        val enabled = signal(owner = null, value = true)
+        val sourceOwner = EmptyNode("source")
+        val source = signal(owner = sourceOwner, value = 1)
+        lateinit var label: TextNode<*>
+        val root = UiRoot { label = bindText("value") { if (enabled()) "Value: ${source()}" else "Disabled" } }
+        val world = EmptyNode("world")
+        world.addChild(sourceOwner)
+        world.addChild(root)
+        scenes.currScene = world
+        ui.updateFrame()
+
+        sourceOwner.nodeExitTree()
+        enabled.update { false }
+        ui.updateFrame()
+        assertEquals("Disabled", label.text)
+
+        sourceOwner.buildTree()
+        enabled.update { true }
+        ui.updateFrame()
+        assertEquals("Value: 1", label.text)
+    }
+
+    @Test
+    fun `UI binding observes a newly selected source changed during evaluation`() {
+        val enabled = signal(owner = null, value = false)
+        val source = signal(owner = null, value = 0)
+        lateinit var label: TextNode<*>
+        scenes.currScene = UiRoot {
+            label = bindText("value") {
+                if (!enabled()) {
+                    "Disabled"
+                } else {
+                    val value = source()
+                    if (value == 0) source.update { 1 }
+                    "Value: $value"
+                }
+            }
+        }
+        ui.updateFrame()
+        assertEquals("Disabled", label.text)
+
+        enabled.update { true }
+        ui.updateFrame()
+        assertEquals("Value: 0", label.text)
+        ui.updateFrame()
+        assertEquals("Value: 1", label.text)
     }
 
     @Test

@@ -103,7 +103,7 @@ UiNode now extends Node with the same self type, guarded state and lifecycle.
 UiRoot also extends UiNode; Row, Column, Box, Text and Button are individual
 classes in engine.ui.components. Shared layout/composition lives on UiNode;
 text/action state lives on the appropriate leaf class. UiKind is internal policy.
-Custom components override nodeInit and use one ui builder, then declare children
+Custom components override onSetup and use one ui builder, then declare children
 through ordinary constructors. The compiler retains both UiNode and ordinary Node
 constructors by source site/key. Arguments initialize once without subscribing
 the surrounding structural condition to their reads; Signals provide live values.

@@ -68,7 +68,7 @@ private class ScrollProbe : UiNode<ScrollProbe>("Scroll") {
         mouseFilter = UiMouseFilter.Stop
     }
 
-    override fun nodeInit() {
+    override fun onSetup() {
         ui { Text("Scroll: ${steps}") }
     }
 
@@ -87,8 +87,8 @@ private class AcceptanceMap : UiNode<AcceptanceMap>(
     private var elapsed = 0f
     private var map: Grid<*>? = null
 
-    override fun nodeInit() {
-        super.nodeInit()
+    override fun onSetup() {
+        super.onSetup()
         ui {
             map = Grid(columns = 12, rows = 2, block = {
                 style = UiStyle(gap = 1.0, lineGap = 0.0, appearance = UiAppearance(bold = true))
@@ -116,7 +116,7 @@ private class AcceptanceWorld : Node<AcceptanceWorld>("World") {
     private var nextRabbit = 0
     val population by computed { getChildrenOfType<AcceptanceRabbit>().size }
 
-    override fun nodeInit() {
+    override fun onSetup() {
         repeat(3) { addRabbit() }
     }
 

@@ -44,6 +44,8 @@ class CanopyCompilerTests {
             @Suppress("UNCHECKED_CAST")
             protected fun <T> compilerPropertyGet(key: String, default: T): T =
                 if (slots.containsKey(key)) slots[key] as T else default
+            protected fun <T> compilerInputGet(key: String, default: T): T =
+                io.canopy.engine.core.flows.events.InputRuntime.read(this, key, compilerPropertyGet(key, default))
             protected fun <T> compilerPropertySet(key: String, value: T) { slots[key] = value }
             protected fun <T> nodeProperty(initial: T): NodeProperty<T> = NodeProperty.create(initial)
             protected inline fun <T> compilerOwned(block: () -> T): T = block()
@@ -56,6 +58,267 @@ class CanopyCompilerTests {
             operator fun setValue(receiver: Node<*>, property: KProperty<*>, value: T) { this.value = value }
         }
     """.trimIndent()
+
+    @Test
+    fun `constructor inputs retain caller expressions and preserve construction values`() {
+        compileConsumer(
+            """
+            import io.canopy.engine.core.flows.events.Input
+            import io.canopy.engine.core.flows.events.InputRuntime
+            class Source(var value: Int)
+            class Meter(@Input val amount: Int) : Node<Meter>() {
+                val seenDuringInit = amount
+            }
+            fun verify(): Boolean {
+                InputRuntime.reset()
+                val source = Source(3)
+                var evaluations = 0
+                val meter = Meter((source.value * 2).also { evaluations++ })
+                if (meter.amount != 6 || meter.seenDuringInit != 6 || evaluations != 1) return false
+                source.value = 4
+                InputRuntime.refresh()
+                return meter.amount == 8 && evaluations == 2 && Meter::amount.get(meter) == 8
+            }
+            """.trimIndent(),
+            execute = { loader -> assertEquals(true, loader.loadClass("GameKt").getMethod("verify").invoke(null)) }
+        ) { code, output -> assertEquals(ExitCode.OK, code, output) }
+    }
+
+    @Test
+    fun `input calls preserve named argument order and static defaults`() {
+        compileConsumer(
+            """
+            import io.canopy.engine.core.flows.events.Input
+            import io.canopy.engine.core.flows.events.InputRuntime
+            val events = mutableListOf<String>()
+            class Source(var first: Int, var third: Int)
+            class Meter(@Input val first: Int = 1, val second: Int = 2, @Input val third: Int = 3) : Node<Meter>()
+            fun value(name: String, source: () -> Int): Int { events += name; return source() }
+            fun verify(): String {
+                InputRuntime.reset()
+                val source = Source(4, 6)
+                val meter = Meter(
+                    third = value("third") { source.third },
+                    second = value("second") { 5 },
+                    first = value("first") { source.first }
+                )
+                if (events != listOf("third", "second", "first")) return "order: ${'$'}events"
+                if (meter.first != 4 || meter.second != 5 || meter.third != 6) return "initial"
+                source.first = 7
+                source.third = 9
+                InputRuntime.refresh()
+                return if (meter.first == 7 && meter.third == 9 && Meter().first == 1) "ok" else "refresh"
+            }
+            """.trimIndent(),
+            execute = { loader -> assertEquals("ok", loader.loadClass("GameKt").getMethod("verify").invoke(null)) }
+        ) { code, output -> assertEquals(ExitCode.OK, code, output) }
+    }
+
+    @Test
+    fun `generic nullable inputs retain their type and failed constructors install nothing`() {
+        compileConsumer(
+            """
+            import io.canopy.engine.core.flows.events.Input
+            import io.canopy.engine.core.flows.events.InputRuntime
+            class Source(var value: String?)
+            class Box<T>(@Input val value: T?, fail: Boolean = false) : Node<Box<T>>() {
+                init { if (fail) error("construction failed") }
+            }
+            fun verify(): Boolean {
+                InputRuntime.reset()
+                val source = Source("first")
+                if (runCatching { Box(source.value, fail = true) }.isSuccess) return false
+                if (InputRuntime.installedCount() != 0) return false
+                val box = Box(source.value)
+                if (box.value != "first") return false
+                source.value = null
+                InputRuntime.refresh()
+                return box.value == null && InputRuntime.installedCount() == 1
+            }
+            """.trimIndent(),
+            execute = { loader -> assertEquals(true, loader.loadClass("GameKt").getMethod("verify").invoke(null)) }
+        ) { code, output -> assertEquals(ExitCode.OK, code, output) }
+    }
+
+    @Test
+    fun `input property remains read-only to Kotlin callers`() {
+        compileConsumer(
+            """
+            import io.canopy.engine.core.flows.events.Input
+            class Box(@Input val value: Int) : Node<Box>()
+            fun change(box: Box) { box.value = 2 }
+            """.trimIndent()
+        ) { code, output ->
+            assertEquals(ExitCode.COMPILATION_ERROR, code, output)
+            assertTrue("val cannot be reassigned" in output || "cannot be reassigned" in output, output)
+        }
+    }
+
+    @Test
+    fun `mutable inputs and reactive defaults fail with actionable diagnostics`() {
+        listOf(
+            "class Meter(@Input var amount: Int) : Node<Meter>()" to "CANOPY_INPUT_MUST_BE_VAL",
+            "var fallback = 1; class Meter(@Input val amount: Int = fallback) : Node<Meter>()" to
+                "CANOPY_INPUT_UNSUPPORTED_CONSTRUCTION",
+            "fun consume(@Input amount: Int) {}" to "CANOPY_INPUT_INVALID_TARGET",
+            "class Holder(@Input val amount: Int)" to "CANOPY_INPUT_UNSUPPORTED_OWNER",
+            "open class Base<N : Base<N>>(@Input val amount: Int) : Node<N>(); " +
+                "class Derived(value: Int) : Base<Derived>(value)" to "CANOPY_INPUT_UNSUPPORTED_CONSTRUCTION"
+        ).forEach { (declaration, expected) ->
+            compileConsumer("import io.canopy.engine.core.flows.events.Input\n$declaration") { code, output ->
+                assertEquals(ExitCode.COMPILATION_ERROR, code, output)
+                assertTrue(expected in output, output)
+            }
+        }
+    }
+
+    @Test
+    fun `input capture rejects nonlocal returns and suspending argument evaluation`() {
+        listOf(
+            "fun early(): Int { Meter(if (true) return 7 else 1); return 0 }",
+            "fun make() = Meter(run { return@run 1 })",
+            "suspend fun fetch(): Int = 1; suspend fun make() = Meter(fetch())",
+            "suspend fun fetch(): Int = 1; suspend fun make() = Meter(run { fetch() })"
+        ).forEach { declaration ->
+            compileConsumer(
+                "import io.canopy.engine.core.flows.events.Input\n" +
+                    "class Meter(@Input val amount: Int) : Node<Meter>()\n$declaration"
+            ) { code, output ->
+                assertEquals(ExitCode.COMPILATION_ERROR, code, output)
+                assertTrue("CANOPY_INPUT_UNSUPPORTED_CONSTRUCTION" in output, output)
+            }
+        }
+    }
+
+    @Test
+    fun `input capture accepts a stored suspending callback without executing it`() {
+        compileConsumer(
+            """
+            import io.canopy.engine.core.flows.events.Input
+            class Meter(@Input val action: suspend () -> Int) : Node<Meter>()
+            suspend fun fetch(): Int = 1
+            fun make() = Meter { fetch() }
+            """.trimIndent()
+        ) { code, output -> assertEquals(ExitCode.OK, code, output) }
+    }
+
+    @Test
+    fun `input declaration and construction work across compiled modules`() {
+        val directory = Files.createTempDirectory("canopy-input-modules").toFile()
+        try {
+            val apiOutput = defaultApiOutput ?: compileApi(fixtureDirectory, api, appApi).also { defaultApiOutput = it }
+            fun compile(
+                source: String,
+                name: String,
+                classpath: String,
+                withPlugin: Boolean = true,
+            ): Pair<ExitCode, String> {
+                val file = directory.resolve("$name.kt").apply { writeText(source) }
+                val output = directory.resolve(name)
+                val diagnostics = ByteArrayOutputStream()
+                val arguments = mutableListOf(
+                    "-Xverify-ir=error",
+                    "-no-stdlib",
+                    "-no-reflect",
+                    "-classpath",
+                    classpath
+                )
+                if (withPlugin) arguments += "-Xplugin=${System.getProperty("canopy.compiler.jar")}"
+                arguments += listOf("-d", output.path, file.path)
+                val result = K2JVMCompiler().exec(PrintStream(diagnostics), *arguments.toTypedArray())
+                return result to diagnostics.toString()
+            }
+            val classpath = standardLibrary + java.io.File.pathSeparator + apiOutput.path
+            val (providerCode, providerOutput) = compile(
+                """
+                import io.canopy.engine.core.nodes.Node
+                import io.canopy.engine.core.flows.events.Input
+                class Meter(@Input val amount: Int) : Node<Meter>()
+                """.trimIndent(),
+                "Provider",
+                classpath
+            )
+            assertEquals(ExitCode.OK, providerCode, providerOutput)
+            val provider = directory.resolve("Provider")
+            val (consumerCode, consumerOutput) = compile(
+                """
+                import io.canopy.engine.core.flows.events.InputRuntime
+                class Source(var value: Int)
+                fun verify(): Boolean {
+                    InputRuntime.reset()
+                    val source = Source(2)
+                    val meter = Meter(source.value * 3)
+                    source.value = 4
+                    InputRuntime.refresh()
+                    return meter.amount == 12
+                }
+                """.trimIndent(),
+                "Consumer",
+                classpath + java.io.File.pathSeparator + provider.path
+            )
+            assertEquals(ExitCode.OK, consumerCode, consumerOutput)
+            java.net.URLClassLoader(
+                arrayOf(
+                    apiOutput.toURI().toURL(),
+                    provider.toURI().toURL(),
+                    directory.resolve("Consumer").toURI().toURL()
+                ),
+                javaClass.classLoader
+            ).use { loader ->
+                assertEquals(true, loader.loadClass("ConsumerKt").getMethod("verify").invoke(null))
+            }
+            val (missingPluginCode, missingPluginOutput) = compile(
+                """
+                import io.canopy.engine.core.flows.events.InputRuntime
+                class UncapturedSource(var value: Int)
+                fun verifyUncaptured(): Boolean {
+                    InputRuntime.reset()
+                    val source = UncapturedSource(2)
+                    val meter = Meter(source.value * 3)
+                    source.value = 4
+                    InputRuntime.refresh()
+                    return meter.amount == 12
+                }
+                """.trimIndent(),
+                "MissingPluginConsumer",
+                classpath + java.io.File.pathSeparator + provider.path,
+                withPlugin = false
+            )
+            assertEquals(ExitCode.OK, missingPluginCode, missingPluginOutput)
+            java.net.URLClassLoader(
+                arrayOf(
+                    apiOutput.toURI().toURL(),
+                    provider.toURI().toURL(),
+                    directory.resolve("MissingPluginConsumer").toURI().toURL()
+                ),
+                javaClass.classLoader
+            ).use { loader ->
+                val result = loader.loadClass("MissingPluginConsumerKt")
+                    .getMethod("verifyUncaptured").invoke(null)
+                assertEquals(false, result)
+            }
+            val (rawCode, rawOutput) = compile(
+                """
+                import io.canopy.engine.core.nodes.Node
+                import io.canopy.engine.core.flows.events.Input
+                class RawMeter(@Input val amount: Int) : Node<RawMeter>()
+                """.trimIndent(),
+                "RawProvider",
+                classpath,
+                withPlugin = false
+            )
+            assertEquals(ExitCode.OK, rawCode, rawOutput)
+            val (unsupportedCode, unsupportedOutput) = compile(
+                "fun construct(value: Int) = RawMeter(value)",
+                "RawConsumer",
+                classpath + java.io.File.pathSeparator + directory.resolve("RawProvider").path
+            )
+            assertEquals(ExitCode.COMPILATION_ERROR, unsupportedCode, unsupportedOutput)
+            assertTrue("CANOPY_INPUT_INVALID_LOWERING" in unsupportedOutput, unsupportedOutput)
+        } finally {
+            directory.deleteRecursively()
+        }
+    }
 
     @Test
     fun `independent errors across validation and construction are reported in one compilation`() {
@@ -801,6 +1064,27 @@ class CanopyCompilerTests {
                 package io.canopy.engine.core.flows.events
                 import kotlin.reflect.KProperty
                 import io.canopy.engine.core.nodes.Node
+                @Target(AnnotationTarget.VALUE_PARAMETER)
+                @Retention(AnnotationRetention.BINARY)
+                annotation class Input
+                class InputCapture<T>(val evaluate: () -> T, val initialValue: T)
+                object InputRuntime {
+                    private val captures = mutableMapOf<Pair<Node<*>, String>, InputCapture<*>>()
+                    private val values = mutableMapOf<Pair<Node<*>, String>, Any?>()
+                    fun <T> capture(evaluate: () -> T) = InputCapture(evaluate, evaluate())
+                    fun <T> install(owner: Node<*>, key: String, capture: InputCapture<T>) {
+                        captures[owner to key] = capture
+                        values[owner to key] = capture.initialValue
+                    }
+                    @Suppress("UNCHECKED_CAST")
+                    fun <T> read(owner: Node<*>, key: String, default: T): T =
+                        if (values.containsKey(owner to key)) values[owner to key] as T else default
+                    fun refresh() {
+                        captures.forEach { (key, capture) -> values[key] = capture.evaluate() }
+                    }
+                    fun installedCount() = captures.size
+                    fun reset() { captures.clear(); values.clear() }
+                }
                 class Signal<T>(var value: T) {
                     operator fun provideDelegate(owner: Node<*>, property: KProperty<*>) = SignalProperty(this)
                     operator fun invoke(): T = value

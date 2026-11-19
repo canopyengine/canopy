@@ -9,10 +9,11 @@ import ktx.log.logger
 /**
  * Extensible node exposing a LibGDX sprite for RenderSystem; the supplied texture remains externally owned.
  * @param N Concrete node type exposed to its initialization block.
- * @param block Runs once after nodeInit, before entry callbacks; not replayed on reentry.
+ * @param name Optional explicit name; otherwise the concrete class and its sibling count determine the name.
+ * @param block Runs once after onSetup, before entry callbacks; not replayed on reentry.
  */
 open class Sprite2D<N : Sprite2D<N>>(
-    name: String,
+    name: String? = null,
     // Node specific props
     texture: Texture,
     // Node base props

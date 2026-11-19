@@ -14,11 +14,12 @@ import io.canopy.engine.ui.withLayout
 /**
  * Extensible container that arranges children vertically.
  * @param N Concrete node type exposed to its initialization block.
- * @param block Runs once after nodeInit, before entry callbacks; not replayed on reentry.
+ * @param name Optional explicit name; otherwise the concrete class and its sibling count determine the name.
+ * @param block Runs once after onSetup, before entry callbacks; not replayed on reentry.
  */
 open class Column<N : Column<N>>(
     style: UiStyle = UiStyle(width = UiLength.Fill),
-    name: String = "Column",
+    name: String? = null,
     block: N.() -> Unit = {},
     place: Place = style.place,
     size: Size? = null,

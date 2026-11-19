@@ -97,8 +97,8 @@ private class ColoredMap :
     private var elapsed by nodeProperty(0f)
     private var map by nodeProperty<Grid<*>?>(null)
 
-    override fun nodeInit() {
-        super.nodeInit()
+    override fun onSetup() {
+        super.onSetup()
         ui {
             map = Grid(columns = 24, rows = 3, style = UiStyle(gap = 1.0, lineGap = 0.0), block = { empty('.') })
         }

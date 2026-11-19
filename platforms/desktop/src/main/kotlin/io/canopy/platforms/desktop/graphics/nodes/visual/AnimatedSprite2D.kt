@@ -8,10 +8,11 @@ import ktx.log.logger
 /**
  * Extensible node exposing an optional texture region used as the current frame by RenderSystem.
  * @param N Concrete node type exposed to its initialization block.
- * @param block Runs once after nodeInit, before entry callbacks; not replayed on reentry.
+ * @param name Optional explicit name; otherwise the concrete class and its sibling count determine the name.
+ * @param block Runs once after onSetup, before entry callbacks; not replayed on reentry.
  */
 open class AnimatedSprite2D<N : AnimatedSprite2D<N, T>, T : TextureRegion>(
-    name: String,
+    name: String? = null,
     // Node base props
     block: N.() -> Unit = {},
 ) : Node2D<N>(

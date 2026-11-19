@@ -4,7 +4,7 @@ import java.util.Collections
 import io.canopy.engine.core.managers.SceneManager
 
 /** Engine-owned payload. Public facades reference this weakly and cannot keep it alive after destruction. */
-internal class NodeState(val owner: SceneManager, var name: String, var builder: (() -> Unit)?) {
+internal class NodeState(val owner: SceneManager, var name: String, var autoName: Boolean, var builder: (() -> Unit)?) {
     var parent: Node<*>? = null
     var parentState: NodeState? = null
     val children = linkedMapOf<String, Node<*>>()
@@ -50,10 +50,11 @@ internal class CleanupRegistration(private var callback: (() -> Unit)?) {
 /** Immutable information available to exit hooks, including after gameplay access is invalidated. */
 data class NodeExitMetadata(val nodeId: Long, val name: String, val path: String, val destroying: Boolean)
 
-/** Internal persistent entry hooks, cancelled when their source is destroyed. */
-internal class NodeActivity(var enter: (() -> Unit)?, var exit: (() -> Unit)?) {
+/** Internal persistent entry, exit and ready hooks, cancelled when their source is destroyed. */
+internal class NodeActivity(var enter: (() -> Unit)?, var exit: (() -> Unit)?, var ready: (() -> Unit)? = null) {
     fun clear() {
         enter = null
         exit = null
+        ready = null
     }
 }

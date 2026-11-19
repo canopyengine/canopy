@@ -16,7 +16,7 @@ class Aquarium : Node<Aquarium>("Aquarium") {
     val population by computed { getChildrenOfType<Fish>().size }
     private var nextFish = 0
 
-    override fun nodeInit() {
+    override fun onSetup() {
         addFish()
     }
 
@@ -96,7 +96,7 @@ source exits, clears callbacks or is disposed. Reconnect on reentry.
 ## Lifecycle and observation
 
 - Constructor arguments and configuration initialize once. Explicit `addChild` also
-  works inside `nodeInit`; automatic composition does not attach the same child twice.
+  works inside `onSetup`; automatic composition does not attach the same child twice.
 - Entry runs before readiness; readiness runs once per entry after readying children.
   Games override lifecycle hooks. App drives normal lifecycle; `buildTree` is a
   low-level standalone-driver entry point.

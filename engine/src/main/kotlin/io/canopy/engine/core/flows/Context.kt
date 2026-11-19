@@ -1,7 +1,6 @@
 package io.canopy.engine.core.flows
 
 import kotlin.reflect.KClass
-import java.util.*
 import io.canopy.engine.core.nodes.Node
 
 /**
@@ -28,7 +27,7 @@ interface ContextKey {
  *
  * Context scopes are implementation details of the DSL and are typically treated as invisible:
  * - [Node.getNode] path resolution intentionally skips these nodes so you don't have to include
- *   "__context__" segments in paths.
+ *   `Context` segments in paths.
  *
  * Use cases:
  * - Provide shared configuration to a subtree (theme, tags, services)
@@ -51,9 +50,10 @@ interface ContextKey {
  * val theme: String = player.getContext<String>(GameContextKey.THEME)
  * val debug: Boolean = player.getContext<String>("debug")
  * ```
+ * @param name Optional explicit name; otherwise the concrete class and its sibling count determine the name.
  */
 class Context(
-    name: String = "__context__" + UUID.randomUUID().toString(),
+    name: String? = null,
     provided: MutableMap<String, () -> Any?> = linkedMapOf(),
     block: Context.() -> Unit = {},
 ) : Node<Context>(name, skipOnSearch = true, block) {

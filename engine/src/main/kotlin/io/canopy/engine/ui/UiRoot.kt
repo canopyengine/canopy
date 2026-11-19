@@ -13,10 +13,11 @@ import io.canopy.engine.ui.components.Button
  * An extensible retained declarative tree initialized once. Top-level roots present independently;
  * roots beneath another UI node remain local to that presentation.
  * @param N Concrete root type exposed to its initialization block.
- * @param block Configures the root once after nodeInit, before composing content and entering the tree.
+ * @param name Optional explicit name; otherwise the concrete class and its sibling count determine the name.
+ * @param block Configures the root once after onSetup, before composing content and entering the tree.
  * @param content Retained child composition, separate from root configuration.
  */
-open class UiRoot<N : UiRoot<N>>(name: String = "UiRoot", block: N.() -> Unit = {}, content: UiScope.() -> Unit = {}) :
+open class UiRoot<N : UiRoot<N>>(name: String? = null, block: N.() -> Unit = {}, content: UiScope.() -> Unit = {}) :
     UiNode<N>(name, UiStyle(width = UiLength.Fill, height = UiLength.Fill), block = {
         block()
         if (this.content == null) ui(content)

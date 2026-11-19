@@ -7,11 +7,12 @@ import ktx.log.logger
 /**
  * Extensible node backed by a static Box2D body, synchronized during physics callbacks.
  * @param N Concrete node type exposed to its initialization block.
- * @param block Runs once after nodeInit, before entry callbacks; not replayed on reentry.
+ * @param name Optional explicit name; otherwise the concrete class and its sibling count determine the name.
+ * @param block Runs once after onSetup, before entry callbacks; not replayed on reentry.
  */
 open class StaticBody2D<N : StaticBody2D<N>>(
     // Base props
-    name: String,
+    name: String? = null,
     block: N.() -> Unit = {},
 ) : PhysicsBody2D<N>(
     name,

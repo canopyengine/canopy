@@ -9,11 +9,12 @@ import io.canopy.engine.ui.*
  * Explicit rows bound a board; null rows derive its extent from glyphs and UI cells. No node is allocated
  * for an empty/glyph-only cell. Configuration runs once before [content] and entry. All mutations belong
  * on the lifecycle thread; simulation, occupancy and collision rules remain application responsibilities.
+ * @param name Optional explicit name; otherwise the concrete class and its sibling count determine the name.
  */
 open class Grid<N : Grid<N>>(
     columns: Int = 1,
     style: UiStyle? = null,
-    name: String = "Grid",
+    name: String? = null,
     rows: Int? = null,
     place: Place = style?.place ?: Place.Auto,
     size: Size? = null,

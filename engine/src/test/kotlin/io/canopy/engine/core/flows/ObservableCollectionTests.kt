@@ -146,6 +146,23 @@ class ObservableCollectionTests {
         source.dispose()
     }
 
+    @Test
+    fun `nonconvergent collection feedback is bounded and later edits recover`() {
+        val source = signal(owner = null, value = mutableListOf<Int>())
+        val feedback = source.connect(owner = null) { values -> values.add(1) }
+
+        val failure = assertFailsWith<IllegalStateException> { source().add(1) }
+
+        assertEquals("Collection signal did not converge after 1024 publications", failure.message)
+        feedback.disconnect()
+        var publications = 0
+        val observer = source.connect(owner = null) { publications++ }
+        source().add(2)
+        assertEquals(1, publications)
+        observer.disconnect()
+        source.dispose()
+    }
+
     private class Item : Node<Item>("item") {
         var hunger by signal(1)
     }

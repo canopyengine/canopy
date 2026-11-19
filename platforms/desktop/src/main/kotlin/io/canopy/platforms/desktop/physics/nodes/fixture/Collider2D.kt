@@ -10,10 +10,11 @@ import io.canopy.engine.physics.nodes.shape.PhysicsShape2D
 /**
  * Extensible node that creates a collision fixture on its parent physics body and emits body contact events.
  * @param N Concrete node type exposed to its initialization block.
- * @param block Runs once after nodeInit, before entry callbacks; not replayed on reentry.
+ * @param name Optional explicit name; otherwise the concrete class and its sibling count determine the name.
+ * @param block Runs once after onSetup, before entry callbacks; not replayed on reentry.
  */
 open class Collider2D<N : Collider2D<N>>(
-    name: String,
+    name: String? = null,
     // Specific props
     var shape: PhysicsShape2D,
     val angle: Float = 0F,

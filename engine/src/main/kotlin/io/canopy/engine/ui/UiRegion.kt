@@ -6,12 +6,12 @@ import io.canopy.engine.core.nodes.Node
 @Target(AnnotationTarget.CLASS)
 annotation class DeclarativeUi
 
-internal class UiRegion(name: String) : Node<UiRegion>(name, skipOnSearch = true) {
+internal class UiRegion : Node<UiRegion>(skipOnSearch = true) {
     internal var content by nodeProperty<UiScope?>(null)
     init {
         observeActivity({ content?.resume() }, { if (isValid) content?.suspend() })
     }
-    override fun nodeInit() {
+    override fun onSetup() {
         markChildrenManaged()
     }
 }

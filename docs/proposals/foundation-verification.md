@@ -42,7 +42,7 @@ example. The headless source declares a custom component through `UiRoot`:
 ```kotlin
 class CounterCard : UiNode<CounterCard>("Card") {
     private val count = signal(0)
-    override fun nodeInit() {
+    override fun onSetup() {
         ui {
             Text("Count: ${count()}").also {
                 it.style = UiStyle(appearance = UiAppearance(

@@ -16,11 +16,31 @@ package io.canopy.engine.core.flows.events
  * dependency, use [untrack].
  */
 internal object TrackingContext {
+    internal class RecordedFrame : LinkedHashSet<Signal<*>>() {
+        val revisions = mutableMapOf<Signal<*>, Long>()
+
+        override fun add(signal: Signal<*>): Boolean {
+            val added = super.add(signal)
+            if (added) revisions[signal] = signal.revision
+            return added
+        }
+    }
 
     private val stack: ThreadLocal<ArrayDeque<MutableSet<Signal<*>>>> =
         ThreadLocal.withInitial { ArrayDeque() }
+    private val inputCaptureDepth: ThreadLocal<Int> = ThreadLocal.withInitial { 0 }
 
     internal val isTracking: Boolean get() = stack.get().isNotEmpty()
+    internal val isCapturingInput: Boolean get() = inputCaptureDepth.get() > 0
+
+    internal fun <T> captureInput(block: () -> T): T {
+        inputCaptureDepth.set(inputCaptureDepth.get() + 1)
+        return try {
+            block()
+        } finally {
+            inputCaptureDepth.set(inputCaptureDepth.get() - 1)
+        }
+    }
 
     /**
      * Opens a new tracking frame and returns it.
@@ -28,6 +48,12 @@ internal object TrackingContext {
      */
     internal fun push(): MutableSet<Signal<*>> {
         val frame = mutableSetOf<Signal<*>>()
+        stack.get().addLast(frame)
+        return frame
+    }
+
+    internal fun pushRecording(): RecordedFrame {
+        val frame = RecordedFrame()
         stack.get().addLast(frame)
         return frame
     }

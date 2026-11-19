@@ -28,7 +28,7 @@ class TerminalUiBootstrapTests {
     class Counter : Node<Counter>("Counter") {
         var count by signal(0)
         var button: Button<*>? = null
-        override fun nodeInit() {
+        override fun onSetup() {
             UiRoot {
                 Column {
                     Text("Fish: $count")
@@ -38,7 +38,7 @@ class TerminalUiBootstrapTests {
         }
     }
     class Other : Node<Other>("Other") {
-        override fun nodeInit() {
+        override fun onSetup() {
             UiRoot { Text("Other screen") }
         }
     }

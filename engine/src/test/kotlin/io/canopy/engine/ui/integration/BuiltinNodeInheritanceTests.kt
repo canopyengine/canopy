@@ -68,8 +68,8 @@ class BuiltinNodeInheritanceTests {
         }
     }
     private class Tank(block: Tank.() -> Unit = {}) : Grid<Tank>(columns = 2, rows = 1, name = "tank", block = block) {
-        override fun nodeInit() {
-            super.nodeInit()
+        override fun onSetup() {
+            super.onSetup()
             empty('.')
         }
     }
@@ -80,8 +80,8 @@ class BuiltinNodeInheritanceTests {
         },
     ) : Grid<N>(columns = 10, rows = 10, block = block) {
         var capacity = 6
-        override fun nodeInit() {
-            super.nodeInit()
+        override fun onSetup() {
+            super.onSetup()
             lines = GridLines(outer = LineStyle.Single.copy(color = UiColor.Rgb(0, 100, 200)))
         }
     }

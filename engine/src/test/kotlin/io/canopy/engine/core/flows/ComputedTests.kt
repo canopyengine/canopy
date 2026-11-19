@@ -28,6 +28,26 @@ class ComputedTests {
     }
 
     @Test
+    fun `initial computed read settles source writes before caching`() {
+        val source = signal(0)
+        var evaluations = 0
+        val result = computed {
+            val value = source()
+            evaluations++
+            if (value < 2) source.update { value + 1 }
+            value
+        }
+
+        assertEquals(2, result())
+        assertEquals(3, evaluations)
+        assertEquals(2, result())
+        assertEquals(3, evaluations)
+        source.update { 3 }
+        assertEquals(3, result())
+        result.dispose()
+    }
+
+    @Test
     fun `computed updates when dependency changes`() {
         val hp = signal(100)
         val isDead = computed { hp() <= 0 }
@@ -66,6 +86,98 @@ class ComputedTests {
         hp.update { 1 }
 
         assertEquals(0, callCount, "Listener should not fire when derived value stays the same")
+    }
+
+    @Test
+    fun `same observable list instance propagates edits through computed chains`() {
+        val source = signal(owner = null, value = mutableListOf(1))
+        val selected = computed(owner = null) { source() }
+        val forwarded = computed(owner = null) { selected() }
+        val selectedValues = mutableListOf<List<Int>>()
+        val forwardedValues = mutableListOf<List<Int>>()
+        val firstConnection = selected.connect(owner = null) { selectedValues += it.toList() }
+        val secondConnection = forwarded.connect(owner = null) { forwardedValues += it.toList() }
+
+        source().add(2)
+
+        assertEquals(listOf(listOf(1, 2)), selectedValues)
+        assertEquals(listOf(listOf(1, 2)), forwardedValues)
+        firstConnection.disconnect()
+        secondConnection.disconnect()
+        forwarded.dispose()
+        selected.dispose()
+        source.dispose()
+    }
+
+    @Test
+    fun `same observable set and map instances emit only for real edits`() {
+        val setSource = signal(owner = null, value = mutableSetOf(1))
+        val mapSource = signal(owner = null, value = mutableMapOf("first" to 1))
+        val selectedSet = computed(owner = null) { setSource() }
+        val selectedMap = computed(owner = null) { mapSource() }
+        var setChanges = 0
+        var mapChanges = 0
+        val setConnection = selectedSet.connect(owner = null) { setChanges++ }
+        val mapConnection = selectedMap.connect(owner = null) { mapChanges++ }
+
+        setSource().add(1)
+        mapSource()["first"] = 1
+        setSource().add(2)
+        mapSource()["second"] = 2
+
+        assertEquals(1, setChanges)
+        assertEquals(1, mapChanges)
+        setConnection.disconnect()
+        mapConnection.disconnect()
+        selectedSet.dispose()
+        selectedMap.dispose()
+        setSource.dispose()
+        mapSource.dispose()
+    }
+
+    @Test
+    fun `same arbitrary object does not emit on unrelated dependency changes`() {
+        val source = signal(owner = null, value = 0)
+        val value = Any()
+        val selected = computed(owner = null) {
+            source()
+            value
+        }
+        var changes = 0
+        val connection = selected.connect(owner = null) { changes++ }
+
+        source.update { 1 }
+
+        assertEquals(0, changes)
+        connection.disconnect()
+        selected.dispose()
+        source.dispose()
+    }
+
+    @Test
+    fun `new dynamic dependency writing during recomputation settles before publication`() {
+        val useSecond = signal(owner = null, value = false)
+        val first = signal(owner = null, value = 1)
+        val second = signal(owner = null, value = 2)
+        val selected = computed(owner = null) {
+            if (useSecond()) {
+                second().also { if (it == 2) second.update { 3 } }
+            } else {
+                first()
+            }
+        }
+        val values = mutableListOf<Int>()
+        val connection = selected.connect(owner = null) { values += it }
+
+        useSecond.update { true }
+
+        assertEquals(3, selected())
+        assertEquals(listOf(3), values)
+        connection.disconnect()
+        selected.dispose()
+        useSecond.dispose()
+        first.dispose()
+        second.dispose()
     }
 
     @Test

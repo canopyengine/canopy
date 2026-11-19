@@ -31,10 +31,10 @@ not fields of a Node that may be destroyed before a remembered factory runs agai
 A request commits after manager updates and before UI painting. The latest request
 wins; requests from entry wait for the next boundary. Cached inactive trees do not
 update, draw or receive input. Per-visit connections/jobs leave with Node activity;
-entry/readiness callbacks establish them again. nodeInit content is not rebuilt on
+entry/readiness callbacks establish them again. `onSetup` content is not rebuilt on
 return. App shutdown destroys all active/inactive roots and clears stored factories.
 
-Migrate `Screen.onEnter` construction to Node `nodeInit`; per-visit work uses Node
+Migrate `Screen.onEnter` construction to Node `onSetup`; per-visit work uses Node
 entry/readiness. Replace `screens { start(instance) }` with `initialScreen<T> { ... }`
 and old start/register/remove helpers with navigate/reload/unload. Resize logic reads
 SceneManager.sceneSize on entry and subscribes to its resize event. Prompts and other

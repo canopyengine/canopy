@@ -169,6 +169,22 @@ class SignalTests {
     }
 
     @Test
+    fun `recursive scalar listener updates fail before stack exhaustion and recover`() {
+        val value = signal(0)
+        val handle = value.connect { next -> value.update { next + 1 } }
+
+        val failure = assertFailsWith<IllegalStateException> { value.update { 1 } }
+
+        assertEquals("Scalar signal update cycle exceeded 64 nested updates", failure.message)
+        assertEquals(64, value())
+        assertEquals(listOf(0), value.flow.replayCache)
+        handle.disconnect()
+        value.update { 65 }
+        assertEquals(listOf(65), value.flow.replayCache)
+        value.dispose()
+    }
+
+    @Test
     fun `nullable late replay and held flow are cleared by disposal during callback`() {
         val value = signal<String?>("initial")
         value.update { null }

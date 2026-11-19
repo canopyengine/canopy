@@ -12,11 +12,12 @@ import io.canopy.engine.ui.withLayout
 /**
  * Extensible container that overlays children in declaration order.
  * @param N Concrete node type exposed to its initialization block.
- * @param block Runs once after nodeInit, before entry callbacks; not replayed on reentry.
+ * @param name Optional explicit name; otherwise the concrete class and its sibling count determine the name.
+ * @param block Runs once after onSetup, before entry callbacks; not replayed on reentry.
  */
 open class Box<N : Box<N>>(
     style: UiStyle = UiStyle(width = UiLength.Fill, height = UiLength.Fill),
-    name: String = "Box",
+    name: String? = null,
     block: N.() -> Unit = {},
     place: Place = style.place,
     size: Size? = null,

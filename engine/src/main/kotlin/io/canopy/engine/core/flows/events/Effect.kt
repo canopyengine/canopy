@@ -22,6 +22,8 @@ import io.canopy.engine.core.nodes.NodeLifetime
  *
  * Effects created in Node methods/callbacks infer that Node through the matching compiler.
  * They are retained until that Node exits, then disposed.
+ * If a dependency exits, clears listeners or is disposed while this effect remains active, the effect disposes
+ * and releases all dependencies. Recreate it after the source is available; source reentry does not rearm it.
  * Ownership is captured at construction; later reruns do not open a node ownership scope. Use
  * the matching compiler for Node operations, or explicit owners in standalone helper code.
  *
@@ -31,7 +33,9 @@ import io.canopy.engine.core.nodes.NodeLifetime
  *
  * If a dependency changes while the effect is running, one rerun is queued after
  * the current run. Multiple changes during the same run are coalesced; the rerun
- * observes the latest values.
+ * observes the latest values. This also applies to writes after the first read in
+ * an initial run. Nonconvergent synchronous feedback stops after 1024 runs and
+ * disposes the effect with an [IllegalStateException].
  *
  * Example:
  * ```kotlin
@@ -111,23 +115,43 @@ class Effect(block: () -> Unit) {
             return
         }
 
+        var passes = 0
         do {
             rerunRequested = false
+            if (++passes > 1024) {
+                dispose()
+                throw IllegalStateException("Effect did not converge after 1024 runs")
+            }
             running = true
-            val frame = TrackingContext.push()
+            val frame = TrackingContext.pushRecording()
+            var failure: Throwable? = null
             try {
                 NodeLifetime.withOwner(null) { action?.invoke() }
+            } catch (error: Throwable) {
+                failure = error
+                throw error
             } finally {
                 TrackingContext.pop()
                 running = false
-                updateDependencies(frame)
+                try {
+                    updateDependencies(frame)
+                    if (frame.revisions.any { (source, revision) ->
+                            source.revision != revision && !source.hasPendingCollectionPublication
+                        }
+                    ) {
+                        rerunRequested = true
+                    }
+                } catch (error: Throwable) {
+                    if (failure == null) throw error
+                    if (error !== failure) failure.addSuppressed(error)
+                }
             }
         } while (!disposed && rerunRequested)
     }
 
     private fun updateDependencies(newDeps: Set<Signal<*>>) {
         if (disposed) return
-        subscriptions.reconcile(newDeps) { if (!disposed) run() }
+        subscriptions.reconcile(newDeps, { if (!disposed) run() }, ::dispose)
     }
 }
 

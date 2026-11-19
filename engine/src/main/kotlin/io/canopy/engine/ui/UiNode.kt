@@ -22,12 +22,13 @@ enum class UiMouseFilter {
 
 /**
  * Base for built-in and custom UI components. Shares ordinary node identity, state and lifecycle.
- * Compose children once from [nodeInit] using [ui]; Signals provide live values inside that builder.
+ * Compose children once from [onSetup] using [ui]; Signals provide live values inside that builder.
  * Custom components arrange children as an overlay by default and may also contain ordinary nodes.
  * A top-level [UiRoot] presents independently. Without one, the topmost UI node uses the viewport.
+ * @param name Optional explicit name; otherwise the concrete class and its sibling count determine the name.
  */
 abstract class UiNode<N : UiNode<N>> protected constructor(
-    name: String,
+    name: String? = null,
     style: UiStyle = UiStyle(),
     block: N.() -> Unit = {},
 ) : Node<N>(name, block = block) {
@@ -186,11 +187,11 @@ abstract class UiNode<N : UiNode<N>> protected constructor(
         }
     }
 
-    override fun nodeInit() {
+    override fun onSetup() {
         markChildrenManaged()
     }
 
-    /** Builds retained children once from nodeInit or the node's initialization block. */
+    /** Builds retained children once from [onSetup] or the node's initialization block. */
     protected fun ui(block: UiScope.() -> Unit) {
         check(state("compose component").initializing) { "Compose UI children once during node initialization" }
         check(content == null) { "A UI component has one composition builder" }

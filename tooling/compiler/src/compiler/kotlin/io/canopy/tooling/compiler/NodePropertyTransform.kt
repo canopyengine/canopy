@@ -50,7 +50,11 @@ internal class NodePropertyTransform(private val messages: MessageCollector) : I
                     Slot(
                         owner,
                         property,
-                        "${ownerKey.length}:$ownerKey${property.name.asString().length}:${property.name}"
+                        "${ownerKey.length}:$ownerKey${property.name.asString().length}:${property.name}",
+                        owner.declarations.filterIsInstance<IrConstructor>().singleOrNull { it.isPrimary }
+                            ?.parameters?.any {
+                                it.name == property.name && it.hasAnnotation(inputAnnotation)
+                            } == true
                     )
             }
         }
@@ -82,12 +86,14 @@ internal class NodePropertyTransform(private val messages: MessageCollector) : I
             }
         }
         val get = node.functions.singleOrNull { compatible(it, "compilerPropertyGet", true) }
+        val inputGet = node.functions.singleOrNull { compatible(it, "compilerInputGet", true) }
         val set = node.functions.singleOrNull { compatible(it, "compilerPropertySet", false) }
-        if (get == null || set == null) {
+        if (get == null || set == null || (fields.values.any { it.input } && inputGet == null)) {
             context.report(
                 "CANOPY_NODE_PROPERTY_ABI",
                 fields.values.first().property,
-                "Automatic storage requires matching compilerPropertyGet/compilerPropertySet runtime helpers."
+                "Automatic storage requires matching compilerPropertyGet/compilerPropertySet/" +
+                    "compilerInputGet runtime helpers."
             )
             return
         }
@@ -144,7 +150,7 @@ internal class NodePropertyTransform(private val messages: MessageCollector) : I
                     DeclarationIrBuilder(pluginContext, slot.owner.symbol, expression.startOffset, expression.endOffset)
                 return builder.irCall(
                     slot.owner.functions.single {
-                        compatible(it, "compilerPropertyGet", true)
+                        compatible(it, if (slot.input) "compilerInputGet" else "compilerPropertyGet", true)
                     }.symbol,
                     expression.type
                 ).apply {
@@ -191,5 +197,9 @@ internal class NodePropertyTransform(private val messages: MessageCollector) : I
         }
     }
 
-    private data class Slot(val owner: IrClass, val property: IrProperty, val key: String)
+    private data class Slot(val owner: IrClass, val property: IrProperty, val key: String, val input: Boolean)
+
+    private companion object {
+        val inputAnnotation = FqName("io.canopy.engine.core.flows.events.Input")
+    }
 }

@@ -216,6 +216,127 @@ class PropertyConnectionTests {
         connection.disconnect()
     }
 
+    @Test
+    fun `initial property connection settles writes without invoking its listener`() {
+        class Values {
+            var source by signal(1)
+            val selected get() = source.also { if (it == 1) source = 2 }
+        }
+        val values = Values()
+        val received = mutableListOf<Int>()
+
+        val connection = (values::selected).connect(owner = null) { received += it }
+        assertEquals(emptyList<Int>(), received)
+        values.source = 3
+
+        assertEquals(listOf(3), received)
+        connection.disconnect()
+    }
+
+    @Test
+    fun `property connection settles a newly selected dependency before notification`() {
+        class Values {
+            var useSecond by signal(false)
+            var first by signal(1)
+            var second by signal(2)
+            val selected get() = if (useSecond) second.also { if (it == 2) second = 3 } else first
+        }
+        val values = Values()
+        val received = mutableListOf<Int>()
+        val connection = (values::selected).connect(owner = null) { received += it }
+
+        values.useSecond = true
+        values.first = 4
+        values.second = 5
+
+        assertEquals(listOf(3, 5), received)
+        connection.disconnect()
+    }
+
+    @Test
+    fun `equal derived results suppress callbacks while switching dependencies`() {
+        class Values {
+            var first by signal(1)
+            var second by signal(1)
+            var useFirst by signal(true)
+            val selected get() = if (useFirst) first else second
+        }
+        val source = Values()
+        val values = mutableListOf<Int>()
+        val connection = (source::selected).connect(owner = null) { values += it }
+
+        source.useFirst = false
+        source.first = 2
+        source.second = 2
+        source.useFirst = true
+        source.second = 3
+        source.first = 3
+
+        assertEquals(listOf(2, 3), values)
+        connection.disconnect()
+    }
+
+    @Test
+    fun `same-reference mutable results remain observable`() {
+        class MutableValue(var amount: Int)
+        class Values {
+            val selected = MutableValue(1)
+            var revision by signal(0)
+            val value get() = revision.let { selected }
+        }
+        val source = Values()
+        val snapshots = mutableListOf<Int>()
+        val connection = (source::value).connect(owner = null) { snapshots += it.amount }
+
+        source.selected.amount = 2
+        source.revision = 1
+        source.revision = 2
+
+        assertEquals(listOf(2, 2), snapshots)
+        connection.disconnect()
+    }
+
+    @Test
+    fun `observable collection connection ignores unrelated invalidations but reports edits`() {
+        class Values {
+            val items by signal(mutableListOf(1))
+            var unrelated by signal(0)
+            val selected get() = unrelated.let { items }
+        }
+        val values = Values()
+        val snapshots = mutableListOf<List<Int>>()
+        val connection = (values::selected).connect(owner = null) { snapshots += it.toList() }
+
+        values.unrelated = 1
+        values.items.add(2)
+
+        assertEquals(listOf(listOf(1, 2)), snapshots)
+        connection.disconnect()
+    }
+
+    @Test
+    fun `reentrant writes coalesce and suppress an equal final result`() {
+        class Values {
+            var number by signal(1)
+            val parity get() = number % 2
+        }
+        val source = Values()
+        val values = mutableListOf<Int>()
+        val connection = (source::parity).connect(owner = null) {
+            values += it
+            if (it == 0) {
+                source.number = 4
+                source.number = 5
+            }
+        }
+
+        source.number = 2
+        source.number = 7
+
+        assertEquals(listOf(0, 1), values)
+        connection.disconnect()
+    }
+
     private fun capturedListener(connection: EventDisconnectHandler): Any? =
         EventDisconnectHandler::class.java.getDeclaredField("listener").apply { isAccessible = true }.get(connection)
 }

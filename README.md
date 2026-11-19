@@ -131,7 +131,7 @@ import io.canopy.engine.math.Vector2
 import io.canopy.platforms.terminal.app.terminalApp
 
 class ExampleScreen : Node<ExampleScreen>("Example") {
-    override fun nodeInit() {
+    override fun onSetup() {
         EmptyNode2D("Moving") {
             behavior(onUpdate = { delta ->
                 position = position + Vector2(delta, 0f)
@@ -144,6 +144,19 @@ fun main() = terminalApp {
     initialScreen<ExampleScreen>()
 }.launch()
 ```
+
+Node names are optional. To expose that option on a custom node, forward a nullable
+constructor parameter to `Node`:
+
+```kotlin
+class Fish(name: String? = null) : Node<Fish>(name)
+```
+
+Under one parent, successive unnamed `Fish()` children are named `Fish`, `Fish1`,
+`Fish2`, and so on. Numbering counts existing direct children of the same concrete
+class, including explicitly named ones, and skips names already used by any sibling.
+Moving an unnamed node to another parent recalculates its name there; assigning
+`name` makes that name explicit and preserves it on later moves.
 
 Use matching integration source artifacts for this API; older published snapshots
 still use Screen controllers. See the [navigation migration notes](docs/release/0.1.0/screen-navigation.md).

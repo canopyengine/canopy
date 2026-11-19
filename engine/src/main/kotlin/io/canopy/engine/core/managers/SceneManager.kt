@@ -680,7 +680,7 @@ class SceneManager(val physicsStep: Float = 1f / 60f, private val block: SceneMa
         if (entered) return
         entered = true
         systemsByClass.values.toList().forEach { initializeSystem(it) }
-        currScene?.let { NodeLifetime.withOwner(it) { it.nodeEnterTree() } }
+        currScene?.let { NodeLifetime.withOwner(it) { it.buildTree() } }
         systemsByClass.values.toList().forEach { backfillSystem(it) }
 
         log.info("event" to "sceneManager.setup", "physicsStep" to physicsStep) { "Setup" }

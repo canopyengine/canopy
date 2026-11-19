@@ -181,8 +181,22 @@ internal class NodeConstructionTransform(private val messages: MessageCollector)
             }
 
             private val objectLiteralCalls = mutableSetOf<IrConstructorCall>()
+            private val inputCalls = mutableSetOf<IrConstructorCall>()
 
             override fun visitBlock(expression: IrBlock): IrExpression {
+                if (expression.origin == canopyInputCallOrigin) {
+                    val call = expression.statements.filterIsInstance<IrVariable>()
+                        .mapNotNull { it.initializer as? IrConstructorCall }
+                        .lastOrNull { checks.isNodeSubclass(it.symbol.owner.parentAsClass) }
+                        ?: return super.visitBlock(expression)
+                    inputCalls += call
+                    try {
+                        expression.transformChildrenVoid(this)
+                    } finally {
+                        inputCalls -= call
+                    }
+                    return protect(expression)
+                }
                 val call = expression.statements.lastOrNull() as? IrConstructorCall
                 if (expression.origin != IrStatementOrigin.OBJECT_LITERAL ||
                     call == null ||
@@ -204,6 +218,7 @@ internal class NodeConstructionTransform(private val messages: MessageCollector)
                 // Transform existing children first, then introduce a lambda without visiting the original call again.
                 expression.transformChildrenVoid(this)
                 if (expression in objectLiteralCalls ||
+                    expression in inputCalls ||
                     !checks.isNodeSubclass(expression.symbol.owner.parentAsClass)
                 ) {
                     return expression
